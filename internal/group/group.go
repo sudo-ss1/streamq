@@ -272,9 +272,12 @@ func (c *Coordinator) begin(ctx context.Context) (metadata.Snapshot, error) {
 			if err != nil {
 				return metadata.Snapshot{}, fmt.Errorf("loading coordinator state: %w (%w)", ErrNotCoordinator, err)
 			}
-			if c.store.Snapshot().ControllerEpoch != snap.ControllerEpoch {
+			// Serve from the post-barrier state, not the snapshot taken before it.
+			fresh := c.store.Snapshot()
+			if fresh.ControllerID != c.cfg.BrokerID || fresh.ControllerEpoch != snap.ControllerEpoch {
 				return metadata.Snapshot{}, fmt.Errorf("leadership changed while loading: %w", ErrNotCoordinator)
 			}
+			snap = fresh
 		}
 		if c.epoch != snap.ControllerEpoch { // a concurrent call may have loaded it meanwhile
 			c.resetLocked()

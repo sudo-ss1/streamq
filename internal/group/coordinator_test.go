@@ -796,13 +796,18 @@ type epochStore struct {
 	controller int32
 	epoch      uint64
 	barriers   int
+	onBarrier  func() // runs (without s.mu) when Barrier is called
 }
 
 // Barrier records that the coordinator waited for its FSM to catch up (M5 review G).
 func (s *epochStore) Barrier(context.Context) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.barriers++
+	hook := s.onBarrier
+	s.mu.Unlock()
+	if hook != nil {
+		hook()
+	}
 	return nil
 }
 
@@ -844,4 +849,22 @@ func TestCoordinatorClearsGroupsOnControllerEpochChange(t *testing.T) {
 	es.mu.Lock()
 	require.Equal(t, 2, es.barriers, "one load barrier per newly observed controller epoch (3, then 5)")
 	es.mu.Unlock()
+}
+
+// The call that triggers the coordinator's load barrier serves the post-barrier state: an offset
+// committed by the previous controller (applied only by the barrier) is visible immediately.
+func TestCoordinatorServesPostBarrierOffsets(t *testing.T) {
+	e := newEnv(t, testConfig())
+	createTopic(t, e.store, "t", 1)
+	es := &epochStore{Store: e.store, controller: testConfig().BrokerID, epoch: 7}
+	es.onBarrier = func() {
+		// The previous controller's last commit gets applied locally only now.
+		_, err := e.c.Commit(context.Background(), grp, "", -1, map[TopicPartition]int64{{"t", 0}: 100})
+		require.NoError(t, err)
+	}
+	c := New(testConfig(), es, e.clock, nil)
+	t.Cleanup(c.Close)
+	got, err := c.FetchOffsets(context.Background(), grp, nil)
+	require.NoError(t, err)
+	require.Equal(t, map[TopicPartition]int64{{"t", 0}: 100}, got)
 }

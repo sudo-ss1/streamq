@@ -290,7 +290,12 @@ the `integration` build tag is linted.
 
 **Decisions**: D30–D38.
 
-**Process**: plan-reviewer REVISE ×2 → APPROVE (round 3).
+**Process**:
+- plan-reviewer REVISE ×2 → APPROVE (round 3);
+- code-reviewer CHANGES REQUIRED (BLOCKER: the catch-up target used Raft's commit index while
+  brokers report applied-change indexes, so brokers could stay fenced forever after a failover)
+  and failure-reviewer CHANGES REQUIRED (same issue as MAJOR) → fixed in `bf279d0` → both APPROVE;
+- remaining MINORs fixed.
 
 **Verification**
 - `make lint test test-int` green.
@@ -312,5 +317,9 @@ the `integration` build tag is linted.
   (D15), and acks=all on RF>1 is accepted after the leader append only. RF>1 data-plane behaviour
   is untested in M5 (plan R19).
 - The broker-side liveness loop uses `time.Ticker`, not an injected clock (integration-tested
-  only).
+  only; the override is recorded in `docs/plans/M5.md`).
+- Interim: acks=all on a partition whose ISR has followers is refused with NOT_ENOUGH_REPLICAS
+  (retriable, so a default acks=all producer on an RF>1 topic retries until its delivery timeout).
+  M6 replaces this with replication and the HW purgatory.
+- The M6 plan draft landed inside the M5 fix commit `bf279d0` (no history rewrite; noted).
 - The notifier is duplicated in `local` and `raftstore` (same design).
