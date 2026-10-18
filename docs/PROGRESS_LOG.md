@@ -245,3 +245,72 @@ the `integration` build tag is linted.
   committed offsets stay in metadata.
 - `streamqctl groups lag` sends one ListOffsets to the bootstrap broker; with replication (M6)
   it must route by leader.
+
+## M5 — Metadata Raft (2026-10-18)
+
+**Built** (main session only; no implementer split, per CLAUDE.md and plan R8)
+- FSM (`internal/metadata`):
+  - broker registration (fenced until caught up; re-registration fences);
+  - fence/unfence with broker epochs;
+  - leader election (first unfenced ISR member in replica order; the last ISR member is kept;
+    offline partitions are re-elected on unfence);
+  - CreateTopic only over unfenced brokers;
+  - term-bound leader commands (`controller_epoch` checked against the Raft log term).
+- `metadata/raftstore`:
+  - hashicorp/raft with raft-boltdb, file snapshots and a TCP transport over a pre-bound listener
+    (accepted connections are tracked so Close is goroutine-clean);
+  - static bootstrap;
+  - deterministic FSM with versioned JSON snapshots and a `Restored` change carrying the snapshot;
+  - follower→controller forwarding that retries only when the command was not appended and waits
+    for local apply;
+  - leader-only `ProposeAsLeader`/`ApplyForwarded`;
+  - leadership fan-out through a Raft observer;
+  - Barrier.
+- `internal/controller`: activates on leadership after a Barrier, captures its term, gives
+  untracked brokers a grace period, fences after the session timeout (once per epoch), and
+  unfences when a heartbeat reports a processed index at or beyond the catch-up index.
+- Internal gRPC API (`StreamQInternalService`: RegisterBroker, BrokerHeartbeat, ForwardMetadata)
+  and a forwarder client.
+- Broker:
+  - monotonic `Partition.ApplyState` (leader, follower, and ISR-only updates);
+  - `resync` on Restored;
+  - a processed-index watermark reported in heartbeats.
+- Coordinator: clears in-memory groups on a controller-epoch change; commits are leader-only and
+  term-stamped.
+- Node:
+  - cluster mode: open Raft + controller + internal API, register, wait for catch-up, and only then
+    open the broker (no stray-dir deletion on a stale FSM);
+  - liveness loop with re-registration on STALE_BROKER_EPOCH;
+  - refuses to mix metadata modes (D30).
+- Server: CreateTopic over live brokers, forwarding-aware idempotence (same topic id), Metadata
+  lists live brokers, `controller_id` hints.
+- Client: Admin retries NOT_CONTROLLER.
+- Config: Raft timing keys (D32). `testnode.StartCluster` starts in-process clusters on pre-bound
+  ports.
+
+**Decisions**: D30–D38.
+
+**Process**: plan-reviewer REVISE ×2 → APPROVE (round 3).
+
+**Verification**
+- `make lint test test-int` green.
+- `TestClusterMetadataRaft` (§9) is stable over 4 race runs. It checks:
+  - topics created via each of 3 brokers are identical everywhere;
+  - the controller is killed and a new one elected, with metadata intact;
+  - the dead broker's partition is re-elected with a bumped epoch after the session timeout;
+  - the dead broker restarts with its partition data intact.
+- raftstore tests:
+  - forwarding;
+  - deterministic errors;
+  - term-bound rejection after a leadership change;
+  - failover and restart;
+  - InstallSnapshot to a lagging follower;
+  - FSM snapshot round trip.
+
+**Known limitations**
+- No data replication yet (M6). On RF>1 partitions the HW does not advance with ISR > {self}
+  (D15), and acks=all on RF>1 is accepted after the leader append only. RF>1 data-plane behaviour
+  is untested in M5 (plan R19).
+- The broker-side liveness loop uses `time.Ticker`, not an injected clock (integration-tested
+  only).
+- The notifier is duplicated in `local` and `raftstore` (same design).

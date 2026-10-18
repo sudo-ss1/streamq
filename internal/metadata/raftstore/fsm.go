@@ -49,14 +49,20 @@ func (f *fsm) Apply(l *raft.Log) any {
 	defer f.mu.Unlock()
 	defer f.advance(l.Index)
 	if unmarshalErr != nil {
+		f.notifier.publish([]metadata.Change{{Kind: metadata.Applied, Index: l.Index}})
 		return fmt.Errorf("decode metadata command: %w", metadata.ErrInvalidCommand)
 	}
 	next := f.state.Clone()
 	changes, err := next.ApplyInTerm(cmd, l.Term)
 	if err != nil {
+		// Rejected deterministically: still let subscribers see the index advance.
+		f.notifier.publish([]metadata.Change{{Kind: metadata.Applied, Index: l.Index}})
 		return err
 	}
 	f.state = next
+	if len(changes) == 0 {
+		changes = []metadata.Change{{Kind: metadata.Applied}}
+	}
 	for i := range changes {
 		changes[i].Index = l.Index
 	}

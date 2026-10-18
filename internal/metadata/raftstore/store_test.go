@@ -230,8 +230,22 @@ func TestProposeOnFollowerIsForwardedAndConverges(t *testing.T) {
 		return seen[1] == 1 && seen[2] == 1 && seen[3] == 1
 	}, 10*time.Second, 10*time.Millisecond)
 
-	// Deterministic command errors come back on followers too and leave the state unchanged.
+	// Deterministic command errors come back on followers too and leave the state unchanged, and
+	// still advance subscribers' applied index (Applied marker, D35).
+	applied := make(chan metadata.Change, 16)
+	_, unsubApplied := f.Subscribe(func(_ context.Context, ch metadata.Change) {
+		if ch.Kind == metadata.Applied {
+			applied <- ch
+		}
+	})
+	defer unsubApplied()
 	require.ErrorIs(t, f.Propose(ctx, createCmd("a")), metadata.ErrTopicExists)
+	select {
+	case ch := <-applied:
+		require.Equal(t, f.AppliedIndex(), ch.Index)
+	case <-time.After(10 * time.Second):
+		t.Fatal("no Applied marker for a rejected command")
+	}
 	// Leader-only proposals fail on a follower.
 	require.ErrorIs(t, f.ProposeAsLeader(ctx, createCmd("b")), metadata.ErrNotController)
 	require.NoError(t, c.leader().ProposeAsLeader(ctx, createCmd("b")))
@@ -306,10 +320,13 @@ func TestInstallSnapshotRestoresLaggingFollower(t *testing.T) {
 
 	c.start(lagID, nil)
 	restarted := c.store(lagID)
-	got := make(chan metadata.Change, 100)
-	_, unsub := restarted.Subscribe(func(_ context.Context, ch metadata.Change) { got <- ch })
-	defer unsub()
 	requireConverged(t, c, "u9")
+	// The follower was brought up to date by InstallSnapshot, not log replay (TrailingLogs 5): it
+	// now holds a snapshot it never took itself. (Its Restored change fires during startup, before
+	// a subscriber can attach; Restored delivery is covered by TestFSMSnapshotRoundTrip.)
+	require.Eventually(t, func() bool {
+		return restarted.raft.Stats()["last_snapshot_index"] != "0"
+	}, 10*time.Second, 10*time.Millisecond, "InstallSnapshot was used")
 	snap := restarted.Snapshot()
 	_, ok := snap.Topic("t3")
 	require.False(t, ok)

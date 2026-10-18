@@ -39,6 +39,10 @@ type Forwarder interface {
 	Forward(ctx context.Context, internalAddr string, cmd *streamqv1.MetadataCommand) (uint64, error)
 }
 
+// ErrUnknownOutcome marks a command whose fate is unknown: Raft lost leadership while committing
+// it, or the apply timed out. It may still commit (DECISIONS D33).
+var ErrUnknownOutcome = errors.New("raftstore: unknown outcome")
+
 // ErrNotAppended marks a forwarding failure where the command certainly was not appended (dial
 // failure), so it is safe to retry (DECISIONS D33).
 var ErrNotAppended = errors.New("raftstore: command not appended")
@@ -279,6 +283,9 @@ func (s *Store) Subscribe(fn func(context.Context, metadata.Change)) (metadata.S
 	unsub := s.notifier.subscribe(fn)
 	s.fsm.mu.Unlock()
 	snap.ControllerID = s.LeaderID()
+	if snap.ControllerID >= 0 {
+		snap.ControllerEpoch = s.raft.CurrentTerm()
+	}
 	return snap, unsub
 }
 
@@ -302,7 +309,7 @@ func (s *Store) applyLocal(ctx context.Context, cmd *streamqv1.MetadataCommand) 
 		if errors.Is(err, raft.ErrNotLeader) {
 			return 0, fmt.Errorf("raftstore: %w", metadata.ErrNotController)
 		}
-		return 0, fmt.Errorf("raftstore: apply: %w", err)
+		return 0, fmt.Errorf("raftstore: apply: %w: %w", ErrUnknownOutcome, err)
 	}
 	if resp, ok := f.Response().(error); ok && resp != nil {
 		return f.Index(), resp

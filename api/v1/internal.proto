@@ -38,6 +38,9 @@ message PartitionAssignment {
 
 message DeleteTopicCommand {
   string name = 1;
+  // If set, the delete applies only to the topic with this id, so a retried delete can never
+  // remove a recreated topic of the same name (DECISIONS D33).
+  string topic_id = 2;
 }
 
 // CommitOffsetsCommand records a consumer group's committed offsets (SPEC §5).

@@ -133,6 +133,9 @@ const (
 	// Restored reports that the whole state was replaced (Raft snapshot restore); subscribers
 	// must resync from Snapshot().
 	Restored
+	// Applied carries only an Index: a command was applied (or rejected deterministically)
+	// without other changes. It lets subscribers track the applied index exactly (D35).
+	Applied
 )
 
 // Change describes one applied state change, delivered to subscribers in apply order.

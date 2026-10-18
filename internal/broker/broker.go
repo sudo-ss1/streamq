@@ -222,7 +222,7 @@ func (b *Broker) onChange(ctx context.Context, ch metadata.Change) {
 		if ch.Snapshot != nil {
 			b.resync(ctx, *ch.Snapshot)
 		}
-	case metadata.OffsetsCommitted, metadata.BrokersChanged:
+	case metadata.OffsetsCommitted, metadata.BrokersChanged, metadata.Applied:
 	}
 	b.markProcessed(ch.Index)
 }

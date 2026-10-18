@@ -212,3 +212,20 @@ func TestTermBoundCommands(t *testing.T) {
 	_, err = s.ApplyInTerm(unfence(s, 1), 9)
 	require.NoError(t, err)
 }
+
+func TestDeleteWithStaleTopicIDKeepsRecreatedTopic(t *testing.T) {
+	s := clusterState(t)
+	del := func(id string) error {
+		_, err := s.Apply(&streamqv1.MetadataCommand{Version: CommandVersion, Cmd: &streamqv1.MetadataCommand_DeleteTopic{
+			DeleteTopic: &streamqv1.DeleteTopicCommand{Name: "t", TopicId: id},
+		}})
+		return err
+	}
+	require.NoError(t, del("id-t"))
+	mustApply(t, s, &streamqv1.MetadataCommand{Version: CommandVersion, Cmd: &streamqv1.MetadataCommand_CreateTopic{
+		CreateTopic: &streamqv1.CreateTopicCommand{Name: "t", TopicId: "id-new", Partitions: []*streamqv1.PartitionAssignment{{Partition: 0, Replicas: []int32{1}}}},
+	}})
+	require.ErrorIs(t, del("id-t"), ErrUnknownTopic, "a retried delete of the old topic leaves the new one")
+	require.Equal(t, "id-new", s.Topics["t"].ID)
+	require.NoError(t, del(""), "an unscoped delete still works")
+}

@@ -19,6 +19,7 @@ import (
 	"github.com/sudo-ss1/streamq/internal/config"
 	"github.com/sudo-ss1/streamq/internal/group"
 	"github.com/sudo-ss1/streamq/internal/metadata"
+	"github.com/sudo-ss1/streamq/internal/metadata/raftstore"
 	"github.com/sudo-ss1/streamq/internal/partition"
 	"github.com/sudo-ss1/streamq/internal/storage"
 )
@@ -96,7 +97,7 @@ func errorCode(err error) streamqv1.ErrorCode {
 		return streamqv1.ErrorCode_ERROR_CODE_REBALANCE_IN_PROGRESS
 	case errors.Is(err, group.ErrNotCoordinator), errors.Is(err, group.ErrCoordinatorClosed):
 		return streamqv1.ErrorCode_ERROR_CODE_NOT_COORDINATOR
-	case errors.Is(err, context.DeadlineExceeded):
+	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, raftstore.ErrUnknownOutcome):
 		return streamqv1.ErrorCode_ERROR_CODE_REQUEST_TIMED_OUT
 	default:
 		return streamqv1.ErrorCode_ERROR_CODE_UNKNOWN
@@ -185,7 +186,7 @@ func (s *Server) DeleteTopic(ctx context.Context, req *streamqv1.DeleteTopicRequ
 	cmd := &streamqv1.MetadataCommand{
 		Version:     metadata.CommandVersion,
 		TimestampMs: s.clock.Now().UnixMilli(),
-		Cmd:         &streamqv1.MetadataCommand_DeleteTopic{DeleteTopic: &streamqv1.DeleteTopicCommand{Name: req.GetName()}},
+		Cmd:         &streamqv1.MetadataCommand_DeleteTopic{DeleteTopic: &streamqv1.DeleteTopicCommand{Name: req.GetName(), TopicId: t.ID}},
 	}
 	if err := s.store.Propose(ctx, cmd); err != nil {
 		// A forwarding retry may have deleted it already (D33).

@@ -194,6 +194,12 @@ func (p *Partition) Append(ctx context.Context, b record.Batch, requestEpoch int
 	if acks == AcksAll && int32(len(p.isr)) < p.minInsync {
 		return storage.AppendInfo{}, fmt.Errorf("%w: isr %d < min.insync.replicas %d", ErrNotEnoughReplicas, len(p.isr), p.minInsync)
 	}
+	if acks == AcksAll && len(p.isr) > 1 {
+		// M5 has no follower replication or HW purgatory (M6), so an acks=all write to a
+		// partition with followers in its ISR cannot be acknowledged safely: refuse it rather
+		// than acknowledge data a failover could lose (M5 review).
+		return storage.AppendInfo{}, fmt.Errorf("%w: acks=all with followers requires replication (M6)", ErrNotEnoughReplicas)
+	}
 	info, err := p.log.Append(ctx, b, p.leaderEpoch)
 	if err != nil {
 		return storage.AppendInfo{}, err

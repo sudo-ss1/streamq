@@ -193,6 +193,9 @@ func (s *Store) Propose(ctx context.Context, cmd *streamqv1.MetadataCommand) err
 	}
 	s.state = next
 	s.applied++
+	if len(changes) == 0 {
+		changes = []metadata.Change{{Kind: metadata.Applied}}
+	}
 	for _, c := range changes {
 		c.Index = s.applied
 		s.queue = append(s.queue, queued{seq: s.nextSeq, change: c})

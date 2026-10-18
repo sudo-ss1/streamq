@@ -75,8 +75,8 @@ func (s *Server) JoinGroup(ctx context.Context, req *streamqv1.JoinGroupRequest)
 }
 
 // SyncGroup implements StreamQServiceServer.
-func (s *Server) SyncGroup(_ context.Context, req *streamqv1.SyncGroupRequest) (*streamqv1.SyncGroupResponse, error) {
-	a, err := s.groups.Sync(req.GetGroupId(), req.GetMemberId(), req.GetGenerationId())
+func (s *Server) SyncGroup(ctx context.Context, req *streamqv1.SyncGroupRequest) (*streamqv1.SyncGroupResponse, error) {
+	a, err := s.groups.Sync(ctx, req.GetGroupId(), req.GetMemberId(), req.GetGenerationId())
 	if err != nil {
 		code, msg, gerr := s.groupErr(err)
 		if gerr != nil {
@@ -88,8 +88,8 @@ func (s *Server) SyncGroup(_ context.Context, req *streamqv1.SyncGroupRequest) (
 }
 
 // Heartbeat implements StreamQServiceServer.
-func (s *Server) Heartbeat(_ context.Context, req *streamqv1.HeartbeatRequest) (*streamqv1.HeartbeatResponse, error) {
-	err := s.groups.Heartbeat(req.GetGroupId(), req.GetMemberId(), req.GetGenerationId())
+func (s *Server) Heartbeat(ctx context.Context, req *streamqv1.HeartbeatRequest) (*streamqv1.HeartbeatResponse, error) {
+	err := s.groups.Heartbeat(ctx, req.GetGroupId(), req.GetMemberId(), req.GetGenerationId())
 	code, msg, gerr := s.groupErr(err)
 	if gerr != nil {
 		return nil, gerr
@@ -98,8 +98,8 @@ func (s *Server) Heartbeat(_ context.Context, req *streamqv1.HeartbeatRequest) (
 }
 
 // LeaveGroup implements StreamQServiceServer.
-func (s *Server) LeaveGroup(_ context.Context, req *streamqv1.LeaveGroupRequest) (*streamqv1.LeaveGroupResponse, error) {
-	err := s.groups.Leave(req.GetGroupId(), req.GetMemberId())
+func (s *Server) LeaveGroup(ctx context.Context, req *streamqv1.LeaveGroupRequest) (*streamqv1.LeaveGroupResponse, error) {
+	err := s.groups.Leave(ctx, req.GetGroupId(), req.GetMemberId())
 	code, msg, gerr := s.groupErr(err)
 	if gerr != nil {
 		return nil, gerr
@@ -135,14 +135,14 @@ func (s *Server) CommitOffset(ctx context.Context, req *streamqv1.CommitOffsetRe
 }
 
 // FetchOffset implements StreamQServiceServer.
-func (s *Server) FetchOffset(_ context.Context, req *streamqv1.FetchOffsetRequest) (*streamqv1.FetchOffsetResponse, error) {
+func (s *Server) FetchOffset(ctx context.Context, req *streamqv1.FetchOffsetRequest) (*streamqv1.FetchOffsetResponse, error) {
 	var tps []group.TopicPartition
 	for _, t := range req.GetPartitions() {
 		for _, p := range t.GetPartitions() {
 			tps = append(tps, group.TopicPartition{Topic: t.GetTopic(), Partition: p})
 		}
 	}
-	offs, err := s.groups.FetchOffsets(req.GetGroupId(), tps)
+	offs, err := s.groups.FetchOffsets(ctx, req.GetGroupId(), tps)
 	if err != nil {
 		code, msg, gerr := s.groupErr(err)
 		if gerr != nil {
@@ -173,8 +173,8 @@ func compareTP(a, b group.TopicPartition) int {
 }
 
 // ListGroups implements StreamQServiceServer.
-func (s *Server) ListGroups(_ context.Context, _ *streamqv1.ListGroupsRequest) (*streamqv1.ListGroupsResponse, error) {
-	ids, err := s.groups.List()
+func (s *Server) ListGroups(ctx context.Context, _ *streamqv1.ListGroupsRequest) (*streamqv1.ListGroupsResponse, error) {
+	ids, err := s.groups.List(ctx)
 	if err != nil {
 		return &streamqv1.ListGroupsResponse{ErrorCode: s.errorCode(err), ErrorMessage: errMessage(err)}, nil
 	}
@@ -182,8 +182,8 @@ func (s *Server) ListGroups(_ context.Context, _ *streamqv1.ListGroupsRequest) (
 }
 
 // DescribeGroup implements StreamQServiceServer.
-func (s *Server) DescribeGroup(_ context.Context, req *streamqv1.DescribeGroupRequest) (*streamqv1.DescribeGroupResponse, error) {
-	d, err := s.groups.Describe(req.GetGroupId())
+func (s *Server) DescribeGroup(ctx context.Context, req *streamqv1.DescribeGroupRequest) (*streamqv1.DescribeGroupResponse, error) {
+	d, err := s.groups.Describe(ctx, req.GetGroupId())
 	if err != nil {
 		code, msg, gerr := s.groupErr(err)
 		if gerr != nil {

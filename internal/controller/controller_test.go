@@ -75,7 +75,14 @@ func (f *fakeStore) Term() uint64 {
 	return f.term
 }
 
-func (f *fakeStore) Barrier(context.Context) error { return nil }
+// Barrier mimics Raft: the new leader's no-op and the barrier entry advance the commit index but
+// are never applied to the FSM, so the applied command index stays behind it.
+func (f *fakeStore) Barrier(context.Context) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.commit += 2
+	return nil
+}
 
 func (f *fakeStore) OnLeadershipChange(fn func(bool)) func() {
 	f.mu.Lock()
@@ -247,7 +254,10 @@ func TestHeartbeatAfterControllerChangeSetsCatchUp(t *testing.T) {
 	fenced, err := c2.Heartbeat(ctx, 2, res.BrokerEpoch, 0)
 	require.NoError(t, err)
 	require.True(t, fenced)
-	fenced, err = c2.Heartbeat(ctx, 2, res.BrokerEpoch, st.CommitIndex())
+	// The broker reports the applied command index (all it can ever observe), which is below the
+	// commit index after the barrier: it must still be unfenced (no further metadata writes).
+	require.Less(t, st.Snapshot().Index, st.CommitIndex())
+	fenced, err = c2.Heartbeat(ctx, 2, res.BrokerEpoch, st.Snapshot().Index)
 	require.NoError(t, err)
 	require.False(t, fenced)
 }

@@ -279,7 +279,9 @@ for a create that succeeded (as in Kafka); Admin treats that as success after a 
 when the partition count matches. Controller commands and group offset commits are leader-only
 (`ProposeAsLeader`). They carry the Raft term their issuer activated in (`controller_epoch`), and
 the FSM rejects them if they commit in another term. A deposed controller or coordinator can never
-write.
+write. DeleteTopic carries the topic id it validated, so a retried delete never removes a recreated
+topic. An unknown outcome (leadership lost mid-commit, apply timeout) is reported as
+REQUEST_TIMED_OUT.
 
 ## D34. Fencing semantics (M5)
 

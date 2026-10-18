@@ -172,7 +172,9 @@ func TestApplyStateIsMonotonic(t *testing.T) {
 	p := newTestPartition(t)
 	require.True(t, p.ApplyState(State{Leader: 1, LeaderEpoch: 0, PartitionEpoch: 0, ISR: []int32{1, 2}, MinInsync: 2}))
 	_, err := p.Append(ctx, batch(t, 1, 1), 0, AcksAll)
-	require.NoError(t, err, "ISR {1,2} satisfies min.insync 2")
+	require.ErrorIs(t, err, ErrNotEnoughReplicas, "M5: acks=all with followers is refused until replication exists")
+	_, err = p.Append(ctx, batch(t, 1, 1), 0, AcksLeader)
+	require.NoError(t, err)
 	require.Equal(t, int64(0), p.HighWatermark(), "HW waits for the other ISR member")
 
 	// The follower is fenced: same leader epoch, higher partition epoch, smaller ISR.

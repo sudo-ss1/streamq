@@ -33,10 +33,10 @@ func TestSingleMemberGetsAllPartitions(t *testing.T) {
 	require.Equal(t, RangeAssignorName, res.Assignor)
 	require.Equal(t, Assignment{"t": {0, 1, 2, 3}}, res.Assignment)
 
-	asg, err := e.c.Sync(grp, res.MemberID, 1)
+	asg, err := e.c.Sync(context.Background(), grp, res.MemberID, 1)
 	require.NoError(t, err)
 	require.Equal(t, res.Assignment, asg)
-	require.NoError(t, e.c.Heartbeat(grp, res.MemberID, 1))
+	require.NoError(t, e.c.Heartbeat(context.Background(), grp, res.MemberID, 1))
 	require.Equal(t, StateStable, e.state(grp))
 }
 
@@ -50,7 +50,7 @@ func TestThreeMembersOneGenerationDisjointCover(t *testing.T) {
 	for _, r := range res {
 		require.Len(t, r.Assignment["t"], 2)
 	}
-	d, err := e.c.Describe(grp)
+	d, err := e.c.Describe(context.Background(), grp)
 	require.NoError(t, err)
 	require.Equal(t, StateStable, d.State)
 	require.Equal(t, int32(1), d.Generation)
@@ -66,8 +66,8 @@ func TestFourthMemberTriggersRebalance(t *testing.T) {
 	e.waitParked(grp, 1)
 	require.Equal(t, StatePreparingRebalance, e.state(grp))
 	for _, r := range res {
-		require.ErrorIs(t, e.c.Heartbeat(grp, r.MemberID, 1), ErrRebalanceInProgress)
-		_, err := e.c.Sync(grp, r.MemberID, 1)
+		require.ErrorIs(t, e.c.Heartbeat(context.Background(), grp, r.MemberID, 1), ErrRebalanceInProgress)
+		_, err := e.c.Sync(context.Background(), grp, r.MemberID, 1)
 		require.ErrorIs(t, err, ErrRebalanceInProgress)
 	}
 	// Existing members rejoin; the last rejoin completes the rebalance without any delay.
@@ -85,8 +85,8 @@ func TestFourthMemberTriggersRebalance(t *testing.T) {
 	require.Equal(t, int32(2), all[0].GenerationID)
 	requireCover(t, all, map[string]int{"t": 6})
 	for _, r := range res {
-		require.ErrorIs(t, e.c.Heartbeat(grp, r.MemberID, 1), ErrIllegalGeneration)
-		require.NoError(t, e.c.Heartbeat(grp, r.MemberID, 2))
+		require.ErrorIs(t, e.c.Heartbeat(context.Background(), grp, r.MemberID, 1), ErrIllegalGeneration)
+		require.NoError(t, e.c.Heartbeat(context.Background(), grp, r.MemberID, 2))
 	}
 }
 
@@ -103,7 +103,7 @@ func TestMemberNotRejoiningIsRemovedAtRebalanceTimeout(t *testing.T) {
 	e.waitParked(grp, 1)
 	for range 5 {
 		e.clock.Advance(500 * time.Millisecond)
-		require.ErrorIs(t, e.c.Heartbeat(grp, b.MemberID, 1), ErrRebalanceInProgress)
+		require.ErrorIs(t, e.c.Heartbeat(context.Background(), grp, b.MemberID, 1), ErrRebalanceInProgress)
 	}
 	require.False(t, pa.done())
 	e.clock.Advance(500 * time.Millisecond) // 3s: rebalance timeout
@@ -111,7 +111,7 @@ func TestMemberNotRejoiningIsRemovedAtRebalanceTimeout(t *testing.T) {
 	r := pa.result(t)
 	require.Equal(t, int32(2), r.GenerationID)
 	require.Equal(t, Assignment{"t": {0, 1, 2, 3}}, r.Assignment)
-	require.ErrorIs(t, e.c.Heartbeat(grp, b.MemberID, 1), ErrUnknownMemberID)
+	require.ErrorIs(t, e.c.Heartbeat(context.Background(), grp, b.MemberID, 1), ErrUnknownMemberID)
 }
 
 func TestSessionExpiryTriggersRebalance(t *testing.T) {
@@ -121,10 +121,10 @@ func TestSessionExpiryTriggersRebalance(t *testing.T) {
 	a, b := res[0], res[1]
 
 	e.clock.Advance(testSession / 2)
-	require.NoError(t, e.c.Heartbeat(grp, a.MemberID, 1))
+	require.NoError(t, e.c.Heartbeat(context.Background(), grp, a.MemberID, 1))
 	e.clock.Advance(testSession / 2) // b expires; a's deadline was pushed out
-	require.ErrorIs(t, e.c.Heartbeat(grp, b.MemberID, 1), ErrUnknownMemberID)
-	require.ErrorIs(t, e.c.Heartbeat(grp, a.MemberID, 1), ErrRebalanceInProgress)
+	require.ErrorIs(t, e.c.Heartbeat(context.Background(), grp, b.MemberID, 1), ErrUnknownMemberID)
+	require.ErrorIs(t, e.c.Heartbeat(context.Background(), grp, a.MemberID, 1), ErrRebalanceInProgress)
 
 	pa := e.startJoin(JoinRequest{GroupID: grp, MemberID: a.MemberID, Topics: []string{"t"}, SessionTimeout: testSession})
 	r := pa.result(t)
@@ -137,16 +137,16 @@ func TestLeave(t *testing.T) {
 	createTopic(t, e.store, "t", 2)
 	res := e.joinAll(grp, sub("t"), sub("t"))
 
-	require.NoError(t, e.c.Leave(grp, res[1].MemberID))
-	require.ErrorIs(t, e.c.Leave(grp, res[1].MemberID), ErrUnknownMemberID)
-	require.ErrorIs(t, e.c.Heartbeat(grp, res[0].MemberID, 1), ErrRebalanceInProgress)
+	require.NoError(t, e.c.Leave(context.Background(), grp, res[1].MemberID))
+	require.ErrorIs(t, e.c.Leave(context.Background(), grp, res[1].MemberID), ErrUnknownMemberID)
+	require.ErrorIs(t, e.c.Heartbeat(context.Background(), grp, res[0].MemberID, 1), ErrRebalanceInProgress)
 	r := e.startJoin(JoinRequest{GroupID: grp, MemberID: res[0].MemberID, Topics: []string{"t"}, SessionTimeout: testSession}).result(t)
 	require.Equal(t, int32(2), r.GenerationID)
 	require.Equal(t, Assignment{"t": {0, 1}}, r.Assignment)
 
-	require.NoError(t, e.c.Leave(grp, r.MemberID))
+	require.NoError(t, e.c.Leave(context.Background(), grp, r.MemberID))
 	require.Equal(t, StateEmpty, e.state(grp))
-	require.ErrorIs(t, e.c.Leave("nope", r.MemberID), ErrUnknownMemberID)
+	require.ErrorIs(t, e.c.Leave(context.Background(), "nope", r.MemberID), ErrUnknownMemberID)
 }
 
 func TestErrorCodes(t *testing.T) {
@@ -161,12 +161,12 @@ func TestErrorCodes(t *testing.T) {
 		call func() error
 		want error
 	}{
-		{"heartbeat stale generation", func() error { return e.c.Heartbeat(grp, m.MemberID, 0) }, ErrIllegalGeneration},
-		{"heartbeat future generation", func() error { return e.c.Heartbeat(grp, m.MemberID, 2) }, ErrIllegalGeneration},
-		{"heartbeat unknown member", func() error { return e.c.Heartbeat(grp, "member-x", 1) }, ErrUnknownMemberID},
-		{"heartbeat unknown group", func() error { return e.c.Heartbeat("other", m.MemberID, 1) }, ErrUnknownMemberID},
-		{"sync stale generation", func() error { _, err := e.c.Sync(grp, m.MemberID, 0); return err }, ErrIllegalGeneration},
-		{"sync unknown member", func() error { _, err := e.c.Sync(grp, "member-x", 1); return err }, ErrUnknownMemberID},
+		{"heartbeat stale generation", func() error { return e.c.Heartbeat(context.Background(), grp, m.MemberID, 0) }, ErrIllegalGeneration},
+		{"heartbeat future generation", func() error { return e.c.Heartbeat(context.Background(), grp, m.MemberID, 2) }, ErrIllegalGeneration},
+		{"heartbeat unknown member", func() error { return e.c.Heartbeat(context.Background(), grp, "member-x", 1) }, ErrUnknownMemberID},
+		{"heartbeat unknown group", func() error { return e.c.Heartbeat(context.Background(), "other", m.MemberID, 1) }, ErrUnknownMemberID},
+		{"sync stale generation", func() error { _, err := e.c.Sync(context.Background(), grp, m.MemberID, 0); return err }, ErrIllegalGeneration},
+		{"sync unknown member", func() error { _, err := e.c.Sync(context.Background(), grp, "member-x", 1); return err }, ErrUnknownMemberID},
 		{"commit stale generation", func() error { _, err := e.c.Commit(ctx, grp, m.MemberID, 0, offs); return err }, ErrIllegalGeneration},
 		{"commit unknown member", func() error { _, err := e.c.Commit(ctx, grp, "member-x", 1, offs); return err }, ErrUnknownMemberID},
 		{"standalone commit to group with members", func() error { _, err := e.c.Commit(ctx, grp, "", -1, offs); return err }, ErrUnknownMemberID},
@@ -188,8 +188,8 @@ func TestErrorCodes(t *testing.T) {
 			_, err := e.c.Join(ctx, JoinRequest{GroupID: "other", MemberID: "member-x"})
 			return err
 		}, ErrUnknownMemberID},
-		{"fetch empty group id", func() error { _, err := e.c.FetchOffsets("", nil); return err }, ErrInvalidGroup},
-		{"describe empty group id", func() error { _, err := e.c.Describe(""); return err }, ErrInvalidGroup},
+		{"fetch empty group id", func() error { _, err := e.c.FetchOffsets(context.Background(), "", nil); return err }, ErrInvalidGroup},
+		{"describe empty group id", func() error { _, err := e.c.Describe(context.Background(), ""); return err }, ErrInvalidGroup},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -207,13 +207,13 @@ func TestCommitDuringPreparingRebalance(t *testing.T) {
 	e := newEnv(t, testConfig())
 	createTopic(t, e.store, "t", 2)
 	res := e.joinAll(grp, sub("t"), sub("t"))
-	require.NoError(t, e.c.Leave(grp, res[1].MemberID))
+	require.NoError(t, e.c.Leave(context.Background(), grp, res[1].MemberID))
 	require.Equal(t, StatePreparingRebalance, e.state(grp))
 
 	perr, err := e.c.Commit(context.Background(), grp, res[0].MemberID, 1, map[TopicPartition]int64{{"t", 0}: 7, {"t", 1}: 9})
 	require.NoError(t, err)
 	require.Empty(t, perr)
-	got, err := e.c.FetchOffsets(grp, nil)
+	got, err := e.c.FetchOffsets(context.Background(), grp, nil)
 	require.NoError(t, err)
 	require.Equal(t, map[TopicPartition]int64{{"t", 0}: 7, {"t", 1}: 9}, got)
 }
@@ -226,7 +226,7 @@ func TestStandaloneCommitAndFetch(t *testing.T) {
 	perr, err := e.c.Commit(ctx, grp, "", -1, map[TopicPartition]int64{{"t", 0}: 3, {"t", 2}: 4})
 	require.NoError(t, err)
 	require.Empty(t, perr)
-	got, err := e.c.FetchOffsets(grp, []TopicPartition{{"t", 0}, {"t", 1}, {"x", 0}})
+	got, err := e.c.FetchOffsets(context.Background(), grp, []TopicPartition{{"t", 0}, {"t", 1}, {"x", 0}})
 	require.NoError(t, err)
 	require.Equal(t, map[TopicPartition]int64{{"t", 0}: 3, {"t", 1}: -1, {"x", 0}: -1}, got)
 
@@ -246,7 +246,7 @@ func TestStandaloneCommitAndFetch(t *testing.T) {
 	require.ErrorIs(t, err, metadata.ErrInvalidCommand)
 
 	// Unknown group: nothing committed.
-	got, err = e.c.FetchOffsets("other", nil)
+	got, err = e.c.FetchOffsets(context.Background(), "other", nil)
 	require.NoError(t, err)
 	require.Empty(t, got)
 }
@@ -264,10 +264,10 @@ func TestCommittedOffsetsSurviveRestart(t *testing.T) {
 	// New coordinator, same store.
 	c2 := New(cfg, e.store, e.clock, nil)
 	t.Cleanup(c2.Close)
-	got, err := c2.FetchOffsets(grp, nil)
+	got, err := c2.FetchOffsets(context.Background(), grp, nil)
 	require.NoError(t, err)
 	require.Equal(t, map[TopicPartition]int64{{"t", 0}: 11, {"t", 1}: 12}, got)
-	require.ErrorIs(t, c2.Heartbeat(grp, m.MemberID, 1), ErrUnknownMemberID)
+	require.ErrorIs(t, c2.Heartbeat(context.Background(), grp, m.MemberID, 1), ErrUnknownMemberID)
 	c2.Close()
 
 	// Reopened store from the same directory.
@@ -275,7 +275,7 @@ func TestCommittedOffsetsSurviveRestart(t *testing.T) {
 	s2 := openStore(t, e.dir)
 	c3 := New(cfg, s2, e.clock, nil)
 	t.Cleanup(c3.Close)
-	got, err = c3.FetchOffsets(grp, []TopicPartition{{"t", 1}})
+	got, err = c3.FetchOffsets(context.Background(), grp, []TopicPartition{{"t", 1}})
 	require.NoError(t, err)
 	require.Equal(t, map[TopicPartition]int64{{"t", 1}: 12}, got)
 }
@@ -287,7 +287,7 @@ func TestTopicDeletionDropsOffsets(t *testing.T) {
 	_, err := e.c.Commit(context.Background(), grp, "", -1, map[TopicPartition]int64{{"t", 0}: 1, {"u", 0}: 2})
 	require.NoError(t, err)
 	deleteTopic(t, e.store, "t")
-	got, err := e.c.FetchOffsets(grp, []TopicPartition{{"t", 0}, {"u", 0}})
+	got, err := e.c.FetchOffsets(context.Background(), grp, []TopicPartition{{"t", 0}, {"u", 0}})
 	require.NoError(t, err)
 	require.Equal(t, map[TopicPartition]int64{{"t", 0}: -1, {"u", 0}: 2}, got)
 }
@@ -302,17 +302,17 @@ func TestBeginShutdownFailsParkedAndNewCalls(t *testing.T) {
 	require.ErrorIs(t, p.wait(t).err, ErrCoordinatorClosed)
 	_, err := e.c.Join(context.Background(), JoinRequest{GroupID: grp})
 	require.ErrorIs(t, err, ErrCoordinatorClosed)
-	require.ErrorIs(t, e.c.Heartbeat(grp, "m", 0), ErrCoordinatorClosed)
-	_, err = e.c.Sync(grp, "m", 0)
+	require.ErrorIs(t, e.c.Heartbeat(context.Background(), grp, "m", 0), ErrCoordinatorClosed)
+	_, err = e.c.Sync(context.Background(), grp, "m", 0)
 	require.ErrorIs(t, err, ErrCoordinatorClosed)
-	require.ErrorIs(t, e.c.Leave(grp, "m"), ErrCoordinatorClosed)
+	require.ErrorIs(t, e.c.Leave(context.Background(), grp, "m"), ErrCoordinatorClosed)
 	_, err = e.c.Commit(context.Background(), grp, "", -1, nil)
 	require.ErrorIs(t, err, ErrCoordinatorClosed)
-	_, err = e.c.FetchOffsets(grp, nil)
+	_, err = e.c.FetchOffsets(context.Background(), grp, nil)
 	require.ErrorIs(t, err, ErrCoordinatorClosed)
-	_, err = e.c.List()
+	_, err = e.c.List(context.Background())
 	require.ErrorIs(t, err, ErrCoordinatorClosed)
-	_, err = e.c.Describe(grp)
+	_, err = e.c.Describe(context.Background(), grp)
 	require.ErrorIs(t, err, ErrCoordinatorClosed)
 
 	e.c.Close()
@@ -341,7 +341,7 @@ func TestParkedMembersSurviveLongRebalance(t *testing.T) {
 	e.waitParked(grp, 1)
 	for range 8 { // 4s, four session timeouts; b keeps its own session alive by heartbeating
 		e.clock.Advance(testSession / 2)
-		require.ErrorIs(t, e.c.Heartbeat(grp, b.MemberID, 1), ErrRebalanceInProgress)
+		require.ErrorIs(t, e.c.Heartbeat(context.Background(), grp, b.MemberID, 1), ErrRebalanceInProgress)
 	}
 	pb := e.startJoin(JoinRequest{GroupID: grp, MemberID: b.MemberID, Topics: []string{"t"}, SessionTimeout: testSession})
 	ra, rb := pa.result(t), pb.result(t)
@@ -350,8 +350,8 @@ func TestParkedMembersSurviveLongRebalance(t *testing.T) {
 
 	// Deadlines restart at completion: both are alive just under a session later.
 	e.clock.Advance(testSession - time.Millisecond)
-	require.NoError(t, e.c.Heartbeat(grp, a.MemberID, 2))
-	require.NoError(t, e.c.Heartbeat(grp, b.MemberID, 2))
+	require.NoError(t, e.c.Heartbeat(context.Background(), grp, a.MemberID, 2))
+	require.NoError(t, e.c.Heartbeat(context.Background(), grp, b.MemberID, 2))
 }
 
 // R3: an abandoned Join removes the member it created.
@@ -382,7 +382,7 @@ func TestAbandonedInitialJoinEmptiesGroup(t *testing.T) {
 	p.cancel()
 	require.ErrorIs(t, p.wait(t).err, context.Canceled)
 	require.Equal(t, StateEmpty, e.state(grp))
-	ids, err := e.c.List()
+	ids, err := e.c.List(context.Background())
 	require.NoError(t, err)
 	require.Empty(t, ids)
 	e.clock.Advance(time.Hour) // stale timers are harmless
@@ -398,18 +398,18 @@ func TestAbandonedExistingMemberJoinUnparks(t *testing.T) {
 	pa := e.startJoin(JoinRequest{GroupID: grp, MemberID: a.MemberID, Topics: []string{"t", "u"}, SessionTimeout: testSession})
 	e.waitParked(grp, 1)
 	e.clock.Advance(3 * testSession / 4)
-	require.ErrorIs(t, e.c.Heartbeat(grp, b.MemberID, 1), ErrRebalanceInProgress)
+	require.ErrorIs(t, e.c.Heartbeat(context.Background(), grp, b.MemberID, 1), ErrRebalanceInProgress)
 	pa.cancel()
 	require.ErrorIs(t, pa.wait(t).err, context.Canceled)
 	_, members := e.parked(grp)
 	require.Equal(t, 2, members)
 
 	e.clock.Advance(testSession - time.Millisecond)
-	require.ErrorIs(t, e.c.Heartbeat(grp, b.MemberID, 1), ErrRebalanceInProgress)
+	require.ErrorIs(t, e.c.Heartbeat(context.Background(), grp, b.MemberID, 1), ErrRebalanceInProgress)
 	e.clock.Advance(time.Millisecond) // a's deadline: cancel time + session
 	_, members = e.parked(grp)
 	require.Equal(t, 1, members)
-	require.ErrorIs(t, e.c.Heartbeat(grp, a.MemberID, 1), ErrUnknownMemberID)
+	require.ErrorIs(t, e.c.Heartbeat(context.Background(), grp, a.MemberID, 1), ErrUnknownMemberID)
 }
 
 // R6: a topic created after the group stabilised is assigned through a rebalance.
@@ -422,7 +422,7 @@ func TestTopicCreatedAfterStableIsAssigned(t *testing.T) {
 	createTopic(t, e.store, "other", 1) // not subscribed: no rebalance
 	createTopic(t, e.store, "u", 3)
 	require.Eventually(t, func() bool {
-		return errors.Is(e.c.Heartbeat(grp, a.MemberID, 1), ErrRebalanceInProgress)
+		return errors.Is(e.c.Heartbeat(context.Background(), grp, a.MemberID, 1), ErrRebalanceInProgress)
 	}, 5*time.Second, time.Millisecond)
 	r := e.startJoin(JoinRequest{GroupID: grp, MemberID: a.MemberID, Topics: []string{"t", "u"}, SessionTimeout: testSession}).result(t)
 	require.Equal(t, int32(2), r.GenerationID)
@@ -430,7 +430,7 @@ func TestTopicCreatedAfterStableIsAssigned(t *testing.T) {
 
 	deleteTopic(t, e.store, "u")
 	require.Eventually(t, func() bool {
-		return errors.Is(e.c.Heartbeat(grp, a.MemberID, 2), ErrRebalanceInProgress)
+		return errors.Is(e.c.Heartbeat(context.Background(), grp, a.MemberID, 2), ErrRebalanceInProgress)
 	}, 5*time.Second, time.Millisecond)
 	r = e.startJoin(JoinRequest{GroupID: grp, MemberID: a.MemberID, Topics: []string{"t", "u"}, SessionTimeout: testSession}).result(t)
 	require.Equal(t, Assignment{"t": {0, 1}}, r.Assignment)
@@ -452,7 +452,7 @@ func TestCommitWithDeletedTopicPersistsOthers(t *testing.T) {
 	for _, tp := range []TopicPartition{{"u", 0}, {"t", 9}, {"t", -1}} {
 		require.ErrorIs(t, perr[tp], metadata.ErrUnknownTopic, tp)
 	}
-	got, err := e.c.FetchOffsets(grp, nil)
+	got, err := e.c.FetchOffsets(context.Background(), grp, nil)
 	require.NoError(t, err)
 	require.Equal(t, map[TopicPartition]int64{{"t", 0}: 5}, got)
 
@@ -480,7 +480,7 @@ func TestCommitRetriesOnUnknownTopic(t *testing.T) {
 	require.NoError(t, err)
 	require.ErrorIs(t, perr[TopicPartition{"u", 0}], metadata.ErrUnknownTopic)
 	require.Equal(t, 2, fs.proposals())
-	got, err := c.FetchOffsets(grp, nil)
+	got, err := c.FetchOffsets(context.Background(), grp, nil)
 	require.NoError(t, err)
 	require.Equal(t, map[TopicPartition]int64{{"t", 0}: 1}, got)
 }
@@ -501,7 +501,7 @@ func TestNonParkedMemberExpiresDuringRebalance(t *testing.T) {
 	r := pa.result(t)
 	require.Equal(t, int32(2), r.GenerationID)
 	require.Equal(t, Assignment{"t": {0, 1}}, r.Assignment)
-	require.ErrorIs(t, e.c.Heartbeat(grp, b.MemberID, 1), ErrUnknownMemberID)
+	require.ErrorIs(t, e.c.Heartbeat(context.Background(), grp, b.MemberID, 1), ErrUnknownMemberID)
 }
 
 // M6: the initial delay restarts per new joiner, but PreparingRebalance is capped at the
@@ -618,17 +618,17 @@ func TestNotCoordinator(t *testing.T) {
 	t.Cleanup(c.Close)
 	_, err := c.Join(context.Background(), JoinRequest{GroupID: grp})
 	require.ErrorIs(t, err, ErrNotCoordinator)
-	require.ErrorIs(t, c.Heartbeat(grp, "m", 1), ErrNotCoordinator)
-	_, err = c.Sync(grp, "m", 1)
+	require.ErrorIs(t, c.Heartbeat(context.Background(), grp, "m", 1), ErrNotCoordinator)
+	_, err = c.Sync(context.Background(), grp, "m", 1)
 	require.ErrorIs(t, err, ErrNotCoordinator)
-	require.ErrorIs(t, c.Leave(grp, "m"), ErrNotCoordinator)
+	require.ErrorIs(t, c.Leave(context.Background(), grp, "m"), ErrNotCoordinator)
 	_, err = c.Commit(context.Background(), grp, "", -1, nil)
 	require.ErrorIs(t, err, ErrNotCoordinator)
-	_, err = c.FetchOffsets(grp, nil)
+	_, err = c.FetchOffsets(context.Background(), grp, nil)
 	require.ErrorIs(t, err, ErrNotCoordinator)
-	_, err = c.List()
+	_, err = c.List(context.Background())
 	require.ErrorIs(t, err, ErrNotCoordinator)
-	_, err = c.Describe(grp)
+	_, err = c.Describe(context.Background(), grp)
 	require.ErrorIs(t, err, ErrNotCoordinator)
 }
 
@@ -640,16 +640,16 @@ func TestListAndDescribe(t *testing.T) {
 	require.NoError(t, err)
 	m := e.joinAll("live", sub("t"))[0]
 
-	ids, err := e.c.List()
+	ids, err := e.c.List(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, []string{"live", "offsets-only"}, ids)
 
-	d, err := e.c.Describe("offsets-only")
+	d, err := e.c.Describe(context.Background(), "offsets-only")
 	require.NoError(t, err)
 	require.Equal(t, GroupDescription{GroupID: "offsets-only", State: StateEmpty,
 		Committed: map[TopicPartition]int64{{"t", 1}: 4}}, d)
 
-	d, err = e.c.Describe("live")
+	d, err = e.c.Describe(context.Background(), "live")
 	require.NoError(t, err)
 	require.Equal(t, GroupDescription{
 		GroupID: "live", State: StateStable, Generation: 1, Assignor: RangeAssignorName,
@@ -657,7 +657,7 @@ func TestListAndDescribe(t *testing.T) {
 		Committed: map[TopicPartition]int64{},
 	}, d)
 
-	d, err = e.c.Describe("unknown")
+	d, err = e.c.Describe(context.Background(), "unknown")
 	require.NoError(t, err)
 	require.Equal(t, StateEmpty, d.State)
 	require.Empty(t, d.Members)
@@ -688,7 +688,7 @@ func TestLeaveWhileParked(t *testing.T) {
 	res := e.joinAll(grp, sub("t"), sub("t"))
 	p := e.startJoin(JoinRequest{GroupID: grp, MemberID: res[0].MemberID, Topics: []string{"t", "u"}, SessionTimeout: testSession})
 	e.waitParked(grp, 1)
-	require.NoError(t, e.c.Leave(grp, res[0].MemberID))
+	require.NoError(t, e.c.Leave(context.Background(), grp, res[0].MemberID))
 	require.ErrorIs(t, p.wait(t).err, ErrUnknownMemberID)
 }
 
@@ -795,6 +795,15 @@ type epochStore struct {
 	mu         sync.Mutex
 	controller int32
 	epoch      uint64
+	barriers   int
+}
+
+// Barrier records that the coordinator waited for its FSM to catch up (M5 review G).
+func (s *epochStore) Barrier(context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.barriers++
+	return nil
 }
 
 func (s *epochStore) set(controller int32, epoch uint64) {
@@ -821,15 +830,18 @@ func TestCoordinatorClearsGroupsOnControllerEpochChange(t *testing.T) {
 	t.Cleanup(c.Close)
 	e2 := &env{t: t, c: c, store: e.store, clock: e.clock}
 	m := e2.joinAll(grp, sub("t"))[0]
-	d, err := c.Describe(grp)
+	d, err := c.Describe(context.Background(), grp)
 	require.NoError(t, err)
 	require.Len(t, d.Members, 1)
 
 	es.set(99, 3) // leadership moved away
-	require.ErrorIs(t, c.Heartbeat(grp, m.MemberID, m.GenerationID), ErrNotCoordinator)
+	require.ErrorIs(t, c.Heartbeat(context.Background(), grp, m.MemberID, m.GenerationID), ErrNotCoordinator)
 	es.set(testConfig().BrokerID, 5) // regained in a later term
-	require.ErrorIs(t, c.Heartbeat(grp, m.MemberID, m.GenerationID), ErrUnknownMemberID, "old membership is gone")
-	d, err = c.Describe(grp)
+	require.ErrorIs(t, c.Heartbeat(context.Background(), grp, m.MemberID, m.GenerationID), ErrUnknownMemberID, "old membership is gone")
+	d, err = c.Describe(context.Background(), grp)
 	require.NoError(t, err)
 	require.Empty(t, d.Members)
+	es.mu.Lock()
+	require.Equal(t, 2, es.barriers, "one load barrier per newly observed controller epoch (3, then 5)")
+	es.mu.Unlock()
 }

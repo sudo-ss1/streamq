@@ -237,7 +237,7 @@ func (e *env) waitParked(groupID string, n int) {
 }
 
 func (e *env) state(groupID string) string {
-	d, err := e.c.Describe(groupID)
+	d, err := e.c.Describe(context.Background(), groupID)
 	require.NoError(e.t, err)
 	return d.State
 }

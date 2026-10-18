@@ -29,7 +29,6 @@ type Store interface {
 	// ApplyForwarded applies cmd on this node if it is the leader (never forwarding) and returns
 	// the entry's index.
 	ApplyForwarded(ctx context.Context, cmd *streamqv1.MetadataCommand) (uint64, error)
-	CommitIndex() uint64
 	IsLeader() bool
 	Term() uint64
 	Barrier(ctx context.Context) error
@@ -41,6 +40,10 @@ type Clock interface {
 	Now() time.Time
 	NewTicker(d time.Duration) (<-chan time.Time, func())
 }
+
+// storeCallTimeout bounds each Raft call (barrier, apply) so a node shutting down — or a leader
+// that lost quorum — never blocks the controller loop for long.
+const storeCallTimeout = 5 * time.Second
 
 // SystemClock is the real clock.
 type SystemClock struct{}
@@ -127,7 +130,10 @@ func (c *Controller) step(ctx context.Context) {
 	if !active || myTerm != term {
 		c.deactivate()
 		// Apply everything committed by earlier leaders before acting (plan R5).
-		if err := c.store.Barrier(ctx); err != nil {
+		bctx, cancel := context.WithTimeout(ctx, storeCallTimeout)
+		err := c.store.Barrier(bctx)
+		cancel()
+		if err != nil {
 			c.logger.Warn("barrier before activation failed", slog.Any("error", err))
 			return
 		}
@@ -193,7 +199,10 @@ func (c *Controller) checkLiveness(ctx context.Context) {
 		c.logger.Warn("fencing broker after missed heartbeats", slog.Int("fenced_broker", int(b.ID)), slog.Int64("broker_epoch", b.Epoch))
 		cmd := &streamqv1.MetadataCommand{Version: metadata.CommandVersion, TimestampMs: now.UnixMilli(), ControllerEpoch: term,
 			Cmd: &streamqv1.MetadataCommand_FenceBroker{FenceBroker: &streamqv1.FenceBrokerCommand{BrokerId: b.ID, BrokerEpoch: b.Epoch}}}
-		if _, err := c.store.ApplyForwarded(ctx, cmd); err != nil {
+		actx, cancel := context.WithTimeout(ctx, storeCallTimeout)
+		_, err := c.store.ApplyForwarded(actx, cmd)
+		cancel()
+		if err != nil {
 			c.logger.Warn("fence failed", slog.Int("fenced_broker", int(b.ID)), slog.Any("error", err))
 			c.mu.Lock()
 			if st, ok := c.brokers[b.ID]; ok && st.epoch == b.Epoch {
@@ -275,8 +284,11 @@ func (c *Controller) Heartbeat(ctx context.Context, brokerID int32, brokerEpoch 
 	st.lastHeartbeat = now
 	st.fenceSent = st.fenceSent && b.Fenced
 	if b.Fenced && !st.hasCatchUp {
-		// Registered under a previous controller: catch up to everything committed so far.
-		st.catchUp, st.hasCatchUp = c.store.CommitIndex(), true
+		// Registered under a previous controller: catch up to every command applied so far (after
+		// this controller's activation barrier). This is the FSM's applied command index, which
+		// brokers can actually reach — never Raft's commit index, which also counts no-op and
+		// barrier entries the FSM never sees.
+		st.catchUp, st.hasCatchUp = c.store.Snapshot().Index, true
 	}
 	unfence := b.Fenced && processedIndex >= st.catchUp
 	c.mu.Unlock()

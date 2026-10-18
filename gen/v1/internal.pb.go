@@ -318,8 +318,11 @@ func (x *PartitionAssignment) GetReplicas() []int32 {
 }
 
 type DeleteTopicCommand struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// If set, the delete applies only to the topic with this id, so a retried delete can never
+	// remove a recreated topic of the same name (DECISIONS D33).
+	TopicId       string `protobuf:"bytes,2,opt,name=topic_id,json=topicId,proto3" json:"topic_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -357,6 +360,13 @@ func (*DeleteTopicCommand) Descriptor() ([]byte, []int) {
 func (x *DeleteTopicCommand) GetName() string {
 	if x != nil {
 		return x.Name
+	}
+	return ""
+}
+
+func (x *DeleteTopicCommand) GetTopicId() string {
+	if x != nil {
+		return x.TopicId
 	}
 	return ""
 }
@@ -1010,9 +1020,10 @@ const file_v1_internal_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"O\n" +
 	"\x13PartitionAssignment\x12\x1c\n" +
 	"\tpartition\x18\x01 \x01(\x05R\tpartition\x12\x1a\n" +
-	"\breplicas\x18\x02 \x03(\x05R\breplicas\"(\n" +
+	"\breplicas\x18\x02 \x03(\x05R\breplicas\"C\n" +
 	"\x12DeleteTopicCommand\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\"e\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x19\n" +
+	"\btopic_id\x18\x02 \x01(\tR\atopicId\"e\n" +
 	"\x14CommitOffsetsCommand\x12\x19\n" +
 	"\bgroup_id\x18\x01 \x01(\tR\agroupId\x122\n" +
 	"\aoffsets\x18\x02 \x03(\v2\x18.streamq.v1.OffsetCommitR\aoffsets\"\x81\x01\n" +

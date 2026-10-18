@@ -128,6 +128,9 @@ func (f *Forwarder) Forward(ctx context.Context, addr string, cmd *streamqv1.Met
 			// and deletes are idempotent at the handler level (same topic id, DECISIONS D33).
 			return 0, fmt.Errorf("%w: %w", raftstore.ErrNotAppended, err)
 		}
+		if status.Code(err) == codes.DeadlineExceeded {
+			return 0, fmt.Errorf("forward to controller: %w: %w", context.DeadlineExceeded, err)
+		}
 		return 0, fmt.Errorf("forward to controller: %w", err)
 	}
 	return resp.GetIndex(), sentinelFor(resp.GetErrorCode(), resp.GetErrorMessage())
@@ -145,6 +148,9 @@ func (f *Forwarder) Close() error {
 	return errors.Join(errs...)
 }
 
+// errForwardFailed reports an unexpected error code from the controller.
+var errForwardFailed = errors.New("forwarded command failed")
+
 // sentinelFor maps a forwarded command's error code back to the metadata sentinel.
 func sentinelFor(code streamqv1.ErrorCode, msg string) error {
 	var base error
@@ -161,8 +167,10 @@ func sentinelFor(code streamqv1.ErrorCode, msg string) error {
 		base = metadata.ErrInvalidReplicationFactor
 	case streamqv1.ErrorCode_ERROR_CODE_INVALID_TOPIC:
 		base = metadata.ErrInvalidTopic
+	case streamqv1.ErrorCode_ERROR_CODE_REQUEST_TIMED_OUT:
+		base = raftstore.ErrUnknownOutcome
 	default:
-		base = metadata.ErrInvalidCommand
+		base = errForwardFailed
 	}
 	return fmt.Errorf("controller: %s: %w", msg, base)
 }

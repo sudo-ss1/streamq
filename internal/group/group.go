@@ -242,7 +242,7 @@ func New(cfg Config, store metadata.Store, clock Clock, logger *slog.Logger) *Co
 
 // begin rejects calls after shutdown and on a broker that is not the coordinator (R11), and
 // returns the snapshot it checked. It must not be called with mu held.
-func (c *Coordinator) begin() (metadata.Snapshot, error) {
+func (c *Coordinator) begin(ctx context.Context) (metadata.Snapshot, error) {
 	c.mu.Lock()
 	closed := c.closed
 	c.mu.Unlock()
@@ -260,13 +260,39 @@ func (c *Coordinator) begin() (metadata.Snapshot, error) {
 		return metadata.Snapshot{}, fmt.Errorf("controller is broker %d: %w", snap.ControllerID, ErrNotCoordinator)
 	}
 	if snap.ControllerEpoch != c.epoch {
-		// Leadership was regained in a new term: membership from an earlier term is stale.
-		c.resetLocked()
-		c.epoch = snap.ControllerEpoch
+		// A new term: membership from an earlier term is stale, and the FSM must first apply every
+		// committed entry (e.g. the previous coordinator's last commits) before offsets are served
+		// (Kafka's coordinator load). Until then answer NOT_COORDINATOR, which clients retry.
+		if b, ok := c.store.(barrierer); ok {
+			c.mu.Unlock()
+			bctx, cancel := context.WithTimeout(ctx, barrierTimeout)
+			err := b.Barrier(bctx)
+			cancel()
+			c.mu.Lock()
+			if err != nil {
+				return metadata.Snapshot{}, fmt.Errorf("loading coordinator state: %w (%w)", ErrNotCoordinator, err)
+			}
+			if c.store.Snapshot().ControllerEpoch != snap.ControllerEpoch {
+				return metadata.Snapshot{}, fmt.Errorf("leadership changed while loading: %w", ErrNotCoordinator)
+			}
+		}
+		if c.epoch != snap.ControllerEpoch { // a concurrent call may have loaded it meanwhile
+			c.resetLocked()
+			c.epoch = snap.ControllerEpoch
+		}
 	}
 	snap.ControllerEpoch = c.epoch
 	return snap, nil
 }
+
+// barrierer is implemented by stores whose followers may lag (Raft): Barrier returns once every
+// committed entry is applied locally.
+type barrierer interface {
+	Barrier(ctx context.Context) error
+}
+
+// barrierTimeout bounds the coordinator's load barrier.
+const barrierTimeout = 5 * time.Second
 
 // resetLocked drops every in-memory group, failing parked joins with ErrNotCoordinator. Timer
 // callbacks of dropped groups see a different (or missing) group and do nothing. Caller holds mu.
@@ -311,7 +337,7 @@ func (c *Coordinator) Join(ctx context.Context, req JoinRequest) (JoinResult, er
 	if rebalance <= 0 {
 		rebalance = c.cfg.DefaultRebalanceTimeout
 	}
-	if _, err := c.begin(); err != nil {
+	if _, err := c.begin(ctx); err != nil {
 		return JoinResult{}, err
 	}
 
@@ -413,8 +439,8 @@ func (c *Coordinator) abandon(g *group, m *member, w *joinWaiter) {
 }
 
 // Sync returns the member's assignment for generation gen.
-func (c *Coordinator) Sync(groupID, memberID string, gen int32) (Assignment, error) {
-	if _, err := c.begin(); err != nil {
+func (c *Coordinator) Sync(ctx context.Context, groupID, memberID string, gen int32) (Assignment, error) {
+	if _, err := c.begin(ctx); err != nil {
 		return nil, err
 	}
 	c.mu.Lock()
@@ -433,8 +459,8 @@ func (c *Coordinator) Sync(groupID, memberID string, gen int32) (Assignment, err
 }
 
 // Heartbeat refreshes a member's session.
-func (c *Coordinator) Heartbeat(groupID, memberID string, gen int32) error {
-	if _, err := c.begin(); err != nil {
+func (c *Coordinator) Heartbeat(ctx context.Context, groupID, memberID string, gen int32) error {
+	if _, err := c.begin(ctx); err != nil {
 		return err
 	}
 	c.mu.Lock()
@@ -469,8 +495,8 @@ func (c *Coordinator) lookup(groupID, memberID string, gen int32) (*group, *memb
 }
 
 // Leave removes a member.
-func (c *Coordinator) Leave(groupID, memberID string) error {
-	if _, err := c.begin(); err != nil {
+func (c *Coordinator) Leave(ctx context.Context, groupID, memberID string) error {
+	if _, err := c.begin(ctx); err != nil {
 		return err
 	}
 	c.mu.Lock()
@@ -494,7 +520,7 @@ func (c *Coordinator) Commit(ctx context.Context, groupID, memberID string, gen 
 	if groupID == "" {
 		return nil, fmt.Errorf("commit: empty group id: %w", ErrInvalidGroup)
 	}
-	begun, err := c.begin()
+	begun, err := c.begin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -570,11 +596,11 @@ func (c *Coordinator) checkCommit(groupID, memberID string, gen int32) error {
 
 // FetchOffsets returns committed offsets for tps (all committed partitions if tps is empty);
 // partitions without a commit map to -1.
-func (c *Coordinator) FetchOffsets(groupID string, tps []TopicPartition) (map[TopicPartition]int64, error) {
+func (c *Coordinator) FetchOffsets(ctx context.Context, groupID string, tps []TopicPartition) (map[TopicPartition]int64, error) {
 	if groupID == "" {
 		return nil, fmt.Errorf("fetch offsets: empty group id: %w", ErrInvalidGroup)
 	}
-	snap, err := c.begin()
+	snap, err := c.begin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -604,8 +630,8 @@ func committed(snap metadata.Snapshot, groupID string) map[TopicPartition]int64 
 }
 
 // List returns every known group id (with members or with committed offsets), sorted.
-func (c *Coordinator) List() ([]string, error) {
-	snap, err := c.begin()
+func (c *Coordinator) List(ctx context.Context) ([]string, error) {
+	snap, err := c.begin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -628,11 +654,11 @@ func (c *Coordinator) List() ([]string, error) {
 }
 
 // Describe describes a group.
-func (c *Coordinator) Describe(groupID string) (GroupDescription, error) {
+func (c *Coordinator) Describe(ctx context.Context, groupID string) (GroupDescription, error) {
 	if groupID == "" {
 		return GroupDescription{}, fmt.Errorf("describe: empty group id: %w", ErrInvalidGroup)
 	}
-	snap, err := c.begin()
+	snap, err := c.begin(ctx)
 	if err != nil {
 		return GroupDescription{}, err
 	}

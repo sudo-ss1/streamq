@@ -233,6 +233,9 @@ func (n *Node) abort(ctx context.Context) {
 
 func (n *Node) stopBackground() {
 	if n.bg == nil {
+		if n.internalLis != nil && n.internal == nil {
+			_ = n.internalLis.Close() // startCluster failed before the internal server took it over
+		}
 		return
 	}
 	n.bgCancel()

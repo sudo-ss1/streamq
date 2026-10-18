@@ -226,8 +226,8 @@ func (s *State) applyDelete(c *streamqv1.DeleteTopicCommand) ([]Change, error) {
 	}
 	name := c.GetName()
 	t, ok := s.Topics[name]
-	if !ok {
-		return nil, fmt.Errorf("delete topic %q: %w", name, ErrUnknownTopic)
+	if !ok || (c.GetTopicId() != "" && c.GetTopicId() != t.ID) {
+		return nil, fmt.Errorf("delete topic %q (id %q): %w", name, c.GetTopicId(), ErrUnknownTopic)
 	}
 	delete(s.Topics, name)
 	for g, offs := range s.Groups {

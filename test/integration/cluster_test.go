@@ -82,6 +82,7 @@ func TestClusterMetadataRaft(t *testing.T) {
 	// Produce (acks=1) to a partition led by a broker that will be restarted later, so the
 	// restart must keep its partition data (plan R1: no stray deletion on a stale FSM).
 	before := metadataOf(t, c.Addr(1), "topic-1")
+	before3 := metadataOf(t, c.Addr(1), topics...)
 	controller := before.GetControllerId()
 	var victimTP storage.TopicPartition
 	victimLeader := int32(-1)
@@ -116,11 +117,24 @@ func TestClusterMetadataRaft(t *testing.T) {
 		newController = resp.GetControllerId()
 		return newController >= 0 && newController != controller
 	}, 20*time.Second, 50*time.Millisecond, "a new controller is elected")
-	for _, id := range survivors {
-		got := metadataOf(t, c.Addr(id), topics...)
+	// Metadata intact: topic configs and replica sets unchanged on every survivor (leaders and
+	// epochs may change with the failover).
+	identity := func(resp *streamqv1.MetadataResponse) string {
+		var out []string
 		for _, topic := range topics {
-			require.Len(t, partitionsOf(got, topic), 3, "metadata intact on broker %d", id)
+			for _, p := range partitionsOf(resp, topic) {
+				out = append(out, fmt.Sprint(topic, p.GetPartition(), p.GetReplicas()))
+			}
 		}
+		for _, tm := range resp.GetTopics() {
+			out = append(out, fmt.Sprint(tm.GetName(), tm.GetConfigs()))
+		}
+		return fmt.Sprint(out)
+	}
+	want := identity(metadataOf(t, c.Addr(survivors[0]), topics...))
+	require.Equal(t, want, identity(before3), "replica sets and configs survive the failover")
+	for _, id := range survivors {
+		require.Equal(t, want, identity(metadataOf(t, c.Addr(id), topics...)), "metadata intact on broker %d", id)
 	}
 	resp, err := dial(t, c.Addr(survivors[1])).CreateTopic(testCtx(t), &streamqv1.CreateTopicRequest{Name: "after-failover", Partitions: 2, ReplicationFactor: 2})
 	require.NoError(t, err)
