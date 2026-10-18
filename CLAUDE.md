@@ -90,6 +90,8 @@ docs/SPEC.md  docs/DECISIONS.md
 ## Commands
 
 ```
+make tools      # install pinned buf/golangci-lint/protoc plugins into .tools/bin
+make fmt        # golangci-lint fmt (gofmt + goimports)
 make gen        # buf generate
 make build      # ./bin/streamq-broker, ./bin/streamqctl
 make test       # go test -race -count=1 ./...
@@ -110,6 +112,8 @@ make chaos      # chaos scripts against the compose cluster
 - Wrap errors with `fmt.Errorf("...: %w", err)`. Each package exposes sentinel errors
   (e.g. `storage.ErrOffsetOutOfRange`). Map them to API `ErrorCode`s **only** in `internal/server`.
 - No global mutable state; no `init()` side effects.
+- Prometheus metrics live in a struct that owns its own `prometheus.Registry` and is passed to
+  the components that need it — never package-level metric vars or the default registry.
 - Every goroutine has an owner and a shutdown path (context cancel + `errgroup`/`WaitGroup`).
   Tests use `goleak.VerifyTestMain`.
 - Narrowest possible locks. Any file taking more than one lock documents lock ordering at the top.
