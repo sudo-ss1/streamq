@@ -33,13 +33,13 @@ func (c *fakeClock) Advance(d time.Duration) {
 }
 
 // buildBatch builds a non-idempotent batch with one record per value, all with timestamp ts.
-func buildBatch(t testing.TB, ts int64, values ...[]byte) record.Batch {
-	t.Helper()
+func buildBatch(tb testing.TB, ts int64, values ...[]byte) record.Batch {
+	tb.Helper()
 	b := record.NewBuilder(record.BuilderOptions{ProducerID: record.NoProducerID, BaseSequence: record.NoSequence})
 	for _, v := range values {
 		b.Append(ts, nil, v, nil)
 	}
 	batch, err := b.Build()
-	require.NoError(t, err)
+	require.NoError(tb, err)
 	return batch
 }

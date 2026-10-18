@@ -54,6 +54,12 @@ linters:
       - path: ^internal/storage/
         linters: [gosec]
         text: G304
+      # Tests use context.Background in helpers and math/rand for workload generation (D8).
+      - path: _test\.go$
+        linters: [contextcheck]
+      - path: _test\.go$
+        linters: [gosec]
+        text: G404
 
 issues:
   max-issues-per-linter: 0

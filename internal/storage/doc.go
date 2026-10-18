@@ -7,6 +7,7 @@
 // segment's atomically published size, and never read past it. Index lookups hold the index's
 // read lock only for the binary search, so an index is never unmapped under a reader.
 //
-// Lock ordering: Manager.mu → Log.mu → index mu (offsetIndex.mu / timeIndex.mu).
+// Lock ordering: Manager.mu → Log.mu → {Manager.pendingMu, index mu (offsetIndex.mu /
+// timeIndex.mu)}; pendingMu and the index locks are leaves.
 // Log.Flush releases Log.mu before calling fsync.
 package storage

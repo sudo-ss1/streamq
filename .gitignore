@@ -12,3 +12,4 @@ coverage.*
 .idea/
 .vscode/
 .DS_Store
+/.claude/worktrees/

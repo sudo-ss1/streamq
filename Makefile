@@ -67,10 +67,10 @@ fmt: $(GOLANGCI_STAMP)
 	golangci-lint fmt
 
 fuzz:
-	@echo "fuzz: not implemented until M1"
+	go test ./internal/record -run='^$$' -fuzz=FuzzValidate -fuzztime=30s
 
 bench:
-	@echo "bench: not implemented until M1"
+	go test -run='^$$' -bench=. -benchmem ./internal/storage/...
 
 cluster-up cluster-down:
 	@echo "$@: not implemented until M8"
