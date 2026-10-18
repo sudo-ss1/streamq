@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -134,6 +135,51 @@ func TestManagerConcurrentGetOrCreate(t *testing.T) {
 			first = l
 		}
 		require.Same(t, first, l)
+	}
+	require.NoError(t, m.Close(ctx))
+}
+
+func TestManagerDeleteLog(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	m, err := OpenManager(ctx, DefaultManagerConfig(dir), newFakeClock(), discardLogger())
+	require.NoError(t, err)
+	tp := TopicPartition{Topic: "t", Partition: 0}
+	other := TopicPartition{Topic: "t", Partition: 1}
+	l, err := m.GetOrCreateLog(ctx, tp, smallConfig())
+	require.NoError(t, err)
+	lo, err := m.GetOrCreateLog(ctx, other, smallConfig())
+	require.NoError(t, err)
+	appendRecords(t, l, 5, 1)
+	appendRecords(t, lo, 2, 1)
+	require.NoError(t, l.Flush(ctx))
+	require.NoError(t, lo.Flush(ctx))
+	require.NoError(t, m.CheckpointRecoveryPoints(ctx))
+
+	require.NoError(t, m.DeleteLog(ctx, tp, "abc"))
+	_, ok := m.Log(tp)
+	require.False(t, ok)
+	rps, err := ReadOffsetCheckpoint(ctx, filepath.Join(dir, RecoveryPointCheckpointFile))
+	require.NoError(t, err)
+	require.Equal(t, map[TopicPartition]int64{other: 2}, rps, "deleted partition's recovery point is dropped")
+	dirs, err := m.PartitionDirs()
+	require.NoError(t, err)
+	require.Equal(t, []TopicPartition{other}, dirs)
+
+	// Deleting a partition with no log and no dir is a no-op; a recreated one starts empty.
+	require.NoError(t, m.DeleteLog(ctx, TopicPartition{Topic: "none", Partition: 0}, "x"))
+	l, err = m.GetOrCreateLog(ctx, tp, smallConfig())
+	require.NoError(t, err)
+	require.Equal(t, int64(0), l.LogEndOffset())
+	require.NoError(t, m.Close(ctx))
+
+	// Renamed dirs are removed at the next open.
+	m, err = OpenManager(ctx, DefaultManagerConfig(dir), newFakeClock(), discardLogger())
+	require.NoError(t, err)
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	for _, e := range entries {
+		require.NotContains(t, e.Name(), ".delete")
 	}
 	require.NoError(t, m.Close(ctx))
 }

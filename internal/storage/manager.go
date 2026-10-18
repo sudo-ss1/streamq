@@ -2,6 +2,8 @@ package storage
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -14,6 +16,9 @@ import (
 
 // RecoveryPointCheckpointFile is the per-data-dir file holding each partition's recovery point.
 const RecoveryPointCheckpointFile = "recovery-point-offset-checkpoint"
+
+// deleteDirSuffix marks a partition directory scheduled for background removal.
+const deleteDirSuffix = ".delete"
 
 // ManagerConfig configures a Manager.
 type ManagerConfig struct {
@@ -80,6 +85,9 @@ func OpenManager(ctx context.Context, cfg ManagerConfig, clock Clock, logger *sl
 	if err := removeDeletedFiles(cfg.DataDir); err != nil {
 		return nil, err
 	}
+	if err := removeDeletedDirs(ctx, cfg.DataDir); err != nil {
+		return nil, err
+	}
 	return &Manager{
 		logs:           map[TopicPartition]*Log{},
 		opening:        map[TopicPartition]chan struct{}{},
@@ -121,6 +129,94 @@ func removeDeletedFiles(dataDir string) error {
 		return fmt.Errorf("remove leftover deleted segments: %w", err)
 	}
 	return nil
+}
+
+// removeDeletedDirs removes partition directories renamed with deleteDirSuffix.
+func removeDeletedDirs(ctx context.Context, dataDir string) error {
+	dirs, err := os.ReadDir(dataDir)
+	if err != nil {
+		return fmt.Errorf("read data dir: %w", err)
+	}
+	var errs []error
+	for _, d := range dirs {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if d.IsDir() && strings.HasSuffix(d.Name(), deleteDirSuffix) {
+			if err := os.RemoveAll(filepath.Join(dataDir, d.Name())); err != nil {
+				errs = append(errs, err)
+			}
+		}
+	}
+	if err := errors.Join(errs...); err != nil {
+		return fmt.Errorf("remove deleted partition dirs: %w", err)
+	}
+	return nil
+}
+
+// PartitionDirs returns the partitions that have a directory in the data dir, open or not.
+func (m *Manager) PartitionDirs() ([]TopicPartition, error) {
+	dirs, err := os.ReadDir(m.cfg.DataDir)
+	if err != nil {
+		return nil, fmt.Errorf("read data dir: %w", err)
+	}
+	var out []TopicPartition
+	for _, d := range dirs {
+		if tp, ok := ParseDirName(d.Name()); ok && d.IsDir() {
+			out = append(out, tp)
+		}
+	}
+	return out, nil
+}
+
+// DeleteLog removes partition tp, whether or not its log is open: it closes the log, forgets the
+// partition's recovery point and rewrites the checkpoint (so a recreated partition never inherits
+// it), then renames the directory to "<dir>.<tag>.<random>.delete" for background removal
+// (DECISIONS D17). A missing directory is not an error.
+func (m *Manager) DeleteLog(ctx context.Context, tp TopicPartition, tag string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	m.mu.Lock()
+	if m.closed {
+		m.mu.Unlock()
+		return ErrClosed
+	}
+	if _, busy := m.opening[tp]; busy {
+		m.mu.Unlock()
+		return fmt.Errorf("delete log %s: open in progress", tp)
+	}
+	l := m.logs[tp]
+	delete(m.logs, tp)
+	delete(m.recoveryPoints, tp)
+	m.mu.Unlock()
+
+	var errs []error
+	if l != nil {
+		if err := l.Close(); err != nil && !errors.Is(err, ErrClosed) {
+			errs = append(errs, fmt.Errorf("close log: %w", err))
+		}
+	}
+	if err := m.CheckpointRecoveryPoints(ctx); err != nil {
+		return errors.Join(append(errs, err)...)
+	}
+	dir := filepath.Join(m.cfg.DataDir, tp.DirName())
+	var rnd [4]byte
+	if _, err := rand.Read(rnd[:]); err != nil {
+		return fmt.Errorf("random suffix: %w", err)
+	}
+	target := fmt.Sprintf("%s.%s.%s%s", dir, tag, hex.EncodeToString(rnd[:]), deleteDirSuffix)
+	if err := os.Rename(dir, target); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return errors.Join(errs...)
+		}
+		return errors.Join(append(errs, fmt.Errorf("rename partition dir: %w", err))...)
+	}
+	if err := syncDir(m.cfg.DataDir); err != nil {
+		errs = append(errs, err)
+	}
+	m.logger.Info("deleted partition", slog.String("topic", tp.Topic), slog.Int("partition", int(tp.Partition)))
+	return errors.Join(errs...)
 }
 
 // GetOrCreateLog returns the open log for tp, opening (and recovering) or creating it with cfg
@@ -289,7 +385,7 @@ func (m *Manager) Run(ctx context.Context) error {
 		case <-retention.C:
 			err = m.RunRetention(ctx, m.clock.Now(), nil)
 		case <-checkpoint.C:
-			err = m.CheckpointRecoveryPoints(ctx)
+			err = errors.Join(m.CheckpointRecoveryPoints(ctx), removeDeletedDirs(ctx, m.cfg.DataDir))
 		}
 		if err != nil && ctx.Err() == nil {
 			m.logger.Error("storage background pass failed", slog.Any("error", err))
