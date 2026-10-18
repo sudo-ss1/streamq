@@ -120,7 +120,7 @@ and offsets are carried by `VerifyFinal`, so a check that finishes in millisecon
 
 ## Run details
 
-- git SHA: `ecc170da804625b51ea515d5dff382bb8d5f9ca2-dirty`
+- git SHA: `ecc170da804625b51ea515d5dff382bb8d5f9ca2-dirty` (the only uncommitted change during the run was `docs/plans/M9.md`; the code is exactly `ecc170d`)
 - image: `streamq:chaos` `sha256:b4fe12a6bdb62e18d5273aac58111375adede8768c6c9dcbc95564eaa1d01b64`
 - seed: `144549489` (rerun: `go run ./test/chaos/cmd/chaos ... -seed 144549489 -scenarios <name>`)
 - environment: 13th Gen Intel(R) Core(TM) i5-1345U, 6 CPUs, RAM 8134792 kB, kernel 6.18.54.1-microsoft-standard-WSL2, Docker 29.5.2, Compose 5.1.4, go1.27.2
