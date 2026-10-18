@@ -14,9 +14,9 @@ plan is `docs/plans/M9.md`; the decisions are D56–D58.
   monotonic or reflect completed acks; acknowledged offsets in real-time order; durability
   checked separately by `VerifyFinal`.
 
-The run below (seed 144549489) was made by the main session on merged `main` after the M9 review
-fixes. The earlier main-session run 20261018T223753Z (seed 101242816) also passed on pre-fix
-`main`, and the run detailed below shows the same inbound-isolation pattern. Earlier runs from the
+The run below (seed 835244600) was made by the main session on merged `main` after all M9
+review fixes. Earlier main-session runs on pre-fix code also passed: seeds 101242816 and
+144549489. The run detailed below shows the same inbound-isolation pattern. Earlier runs from the
 implementer's worktree, with seeds 1, 2, 3, 216491142 and 786830496, also passed. They count
 only as supporting evidence (plan R18).
 
@@ -120,25 +120,25 @@ and offsets are carried by `VerifyFinal`, so a check that finishes in millisecon
 
 ## Run details
 
-- git SHA: `ecc170da804625b51ea515d5dff382bb8d5f9ca2-dirty` (the only uncommitted change during the run was `docs/plans/M9.md`; the code is exactly `ecc170d`)
+- git SHA: `016d47235aa23a97d940b695a85d8fce6310d6d9`
 - image: `streamq:chaos` `sha256:b4fe12a6bdb62e18d5273aac58111375adede8768c6c9dcbc95564eaa1d01b64`
-- seed: `144549489` (rerun: `go run ./test/chaos/cmd/chaos ... -seed 144549489 -scenarios <name>`)
+- seed: `835244600` (rerun: `go run ./test/chaos/cmd/chaos ... -seed 835244600 -scenarios <name>`)
 - environment: 13th Gen Intel(R) Core(TM) i5-1345U, 6 CPUs, RAM 8134792 kB, kernel 6.18.54.1-microsoft-standard-WSL2, Docker 29.5.2, Compose 5.1.4, go1.27.2
 
 | scenario | status | lin acked | lin unknown (in final / pruned) | lin definite | lin reads (failed) | anomalies | porcupine | bulk acked | bulk failed (present) | bulk lost | recovery | lin unavailable |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| kill9-random | PASS | 2531 | 642 (12 / 630) | 0 | 1061 (250) | 0 | Ok (0.0s) | 30270 | 0 (0) | 0 | 5.6s | 37.9s |
-| kill9-controller | PASS | 1866 | 515 (0 / 515) | 0 | 812 (220) | 0 | Ok (0.0s) | 21286 | 0 (0) | 0 | 3.6s | 23.5s |
-| inbound-isolation | PASS | 1289 | 60 (49 / 11) | 0 | 606 (1) | 0 | Ok (0.0s) | 23581 | 0 (0) | 0 | 5.7s | 59.1s |
-| pause-leader | PASS | 1237 | 13 (0 / 13) | 0 | 544 (3) | 0 | Ok (0.0s) | 19038 | 0 (0) | 0 | 1.6s | 26.6s |
-| latency | PASS | 1238 | 0 (0 / 0) | 0 | 514 (0) | 0 | Ok (0.0s) | 11860 | 2094 (0) | 0 | 0.0s | 0.0s |
-| full-disk | PASS | 1247 | 924 (0 / 924) | 0 | 788 (89) | 0 | Ok (0.0s) | 16845 | 2905 (0) | 0 | 6.2s | 39.2s |
+| kill9-random | PASS | 2528 | 428 (16 / 412) | 0 | 1105 (168) | 0 | Ok (0.0s) | 29776 | 0 (0) | 0 | 4.1s | 35.5s |
+| kill9-controller | PASS | 1673 | 183 (20 / 163) | 0 | 738 (75) | 0 | Ok (0.0s) | 20395 | 0 (0) | 0 | 3.1s | 26.5s |
+| inbound-isolation | PASS | 1390 | 56 (44 / 12) | 0 | 601 (0) | 0 | Ok (0.0s) | 24719 | 0 (0) | 0 | 3.7s | 55.7s |
+| pause-leader | PASS | 1346 | 13 (1 / 12) | 0 | 600 (3) | 0 | Ok (0.0s) | 20136 | 0 (0) | 0 | 1.6s | 25.8s |
+| latency | PASS | 1240 | 0 (0 / 0) | 0 | 474 (1) | 0 | Ok (0.0s) | 11839 | 2112 (0) | 0 | 0.0s | 0.0s |
+| full-disk | PASS | 1078 | 941 (0 / 941) | 0 | 808 (103) | 0 | Ok (0.0s) | 16129 | 2899 (0) | 0 | 3.7s | 40.5s |
 
 ### kill9-random: PASS
 
 **Faults injected.** 4 rounds: after 10–20 s, SIGKILL a random broker other than the previous round's (docker compose kill -s SIGKILL), start it again after 5–10 s.
 
-Results file `20261018T225953Z-kill9-random.json`, broker logs `20261018T225953Z-kill9-random.log`, schedule seed 3892314252683645170, workload 121.1s, total 127.7s.
+Results file `20261018T231458Z-kill9-random.json`, broker logs `20261018T231458Z-kill9-random.log`, schedule seed 18380825945804430729, workload 119.2s, total 126.6s.
 
 **Invariants checked.**
 - lin: no read integrity anomaly (gap, offset going backwards, CRC/decode failure, no progress below the HW)
@@ -149,29 +149,29 @@ Results file `20261018T225953Z-kill9-random.json`, broker logs `20261018T225953Z
 
 **Fault timeline** (seconds since the workloads started):
 
-- 21.3s kill -9 broker1: round 1: random broker; lin before: leader 3 epoch 0 isr [3 1 2] (from broker 1)
-- 29.3s start broker1: lin while down: leader 3 epoch 0 isr [3 1 2] (from broker 2)
-- 43.4s kill -9 broker3: round 2: random broker; lin before: leader 3 epoch 0 isr [3 1 2] (from broker 1)
-- 52.1s start broker3: lin while down: leader 3 epoch 0 isr [3 1 2] (from broker 1)
-- 69.0s kill -9 broker1: round 3: random broker; lin before: leader 1 epoch 1 isr [3 1 2] (from broker 1)
-- 77.4s start broker1: lin while down: leader 1 epoch 1 isr [3 1 2] (from broker 2)
-- 96.0s kill -9 broker3: round 4: random broker; lin before: leader 3 epoch 2 isr [3 1 2] (from broker 1)
-- 105.4s start broker3: lin while down: leader 3 epoch 2 isr [3 1 2] (from broker 1)
+- 17.8s kill -9 broker1: round 1: random broker; lin before: leader 3 epoch 0 isr [3 1 2] (from broker 1)
+- 25.9s start broker1: lin while down: leader 3 epoch 0 isr [3 1 2] (from broker 2)
+- 45.5s kill -9 broker3: round 2: random broker; lin before: leader 3 epoch 0 isr [3 1 2] (from broker 1)
+- 54.3s start broker3: lin while down: leader 3 epoch 0 isr [3 1 2] (from broker 1)
+- 72.3s kill -9 broker2: round 3: random broker; lin before: leader 1 epoch 1 isr [3 1 2] (from broker 1)
+- 80.3s start broker2: lin while down: leader 1 epoch 1 isr [3 1 2] (from broker 1)
+- 96.9s kill -9 broker1: round 4: random broker; lin before: leader 1 epoch 1 isr [3 1 2] (from broker 1)
+- 105.1s start broker1: lin while down: leader 1 epoch 1 isr [3 1 2] (from broker 2)
 
-**Safety.** lin: acked 2531, unknown 642 (in final 12, pruned 630), definite 0, reads 1061, failed reads 250, no-leader 0, anomalies 0; final log 2543 entries (sentinel at 2542); VerifyFinal ok; porcupine Ok in 0.0s.
-bulk: produced 30270, acked 30270 (present once 30270), failed 0 (present 0), rejected by the producer 0, lost 0, duplicates 0, phantoms 0, per-key order violations 0, offset mismatches 0, final records 30270.
+**Safety.** lin: acked 2528, unknown 428 (in final 16, pruned 412), definite 0, reads 1105, failed reads 168, no-leader 0, anomalies 0; final log 2544 entries (sentinel at 2543); VerifyFinal ok; porcupine Ok in 0.0s.
+bulk: produced 29776, acked 29776 (present once 29776), failed 0 (present 0), rejected by the producer 0, lost 0, duplicates 0, phantoms 0, per-key order violations 0, offset mismatches 0, final records 29776.
 No violations.
 
-**Availability.** healthy after healing: true (5.6s after the last heal). lin appends acked 20.9/s, bulk 249.9/s. Windows of ≥ 2s without an acked lin append: 21.1–31.0, 43.2–52.0, 68.8–77.8, 95.8–106.0 (total 37.9s).
+**Availability.** healthy after healing: true (4.1s after the last heal). lin appends acked 21.2/s, bulk 249.7/s. Windows of ≥ 2s without an acked lin append: 17.6–25.9, 45.3–55.1, 72.1–80.8, 96.6–105.3 (total 35.5s).
 
 **Observations.**
-- 3 of 4 rounds killed the lin leader
+- 2 of 4 rounds killed the lin leader
 
 ### kill9-controller: PASS
 
 **Faults injected.** 3 rounds: after 10–20 s, SIGKILL the current controller (majority answer of Metadata.controller_id), start it again after 5–10 s.
 
-Results file `20261018T225953Z-kill9-controller.json`, broker logs `20261018T225953Z-kill9-controller.log`, schedule seed 4215100743954923807, workload 85.2s, total 92.1s.
+Results file `20261018T231458Z-kill9-controller.json`, broker logs `20261018T231458Z-kill9-controller.log`, schedule seed 239863908227008166, workload 81.6s, total 88.3s.
 
 **Invariants checked.**
 - lin: no read integrity anomaly (gap, offset going backwards, CRC/decode failure, no progress below the HW)
@@ -182,21 +182,21 @@ Results file `20261018T225953Z-kill9-controller.json`, broker logs `20261018T225
 
 **Fault timeline** (seconds since the workloads started):
 
-- 22.1s kill -9 broker3: round 1: controller; lin before: leader 3 epoch 0 isr [3 1 2] (from broker 1)
-- 29.9s start broker3: lin while down: leader 3 epoch 0 isr [3 1 2] (from broker 1)
-- 45.3s kill -9 broker1: round 2: controller; lin before: leader 1 epoch 1 isr [3 1 2] (from broker 1)
-- 51.5s start broker1: lin while down: leader 1 epoch 1 isr [3 1 2] (from broker 2)
-- 64.5s kill -9 broker3: round 3: controller; lin before: leader 3 epoch 2 isr [3 1 2] (from broker 1)
-- 71.5s start broker3: lin while down: leader 3 epoch 2 isr [3 1 2] (from broker 1)
+- 17.3s kill -9 broker2: round 1: controller; lin before: leader 3 epoch 0 isr [3 1 2] (from broker 1)
+- 25.5s start broker2: lin while down: leader 3 epoch 0 isr [3 1 2] (from broker 1)
+- 39.2s kill -9 broker1: round 2: controller; lin before: leader 3 epoch 0 isr [3 1 2] (from broker 1)
+- 48.4s start broker1: lin while down: leader 3 epoch 0 isr [3 1 2] (from broker 2)
+- 61.5s kill -9 broker3: round 3: controller; lin before: leader 3 epoch 0 isr [3 1 2] (from broker 1)
+- 68.4s start broker3: lin while down: leader 3 epoch 0 isr [3 1 2] (from broker 1)
 
-**Safety.** lin: acked 1866, unknown 515 (in final 0, pruned 515), definite 0, reads 812, failed reads 220, no-leader 0, anomalies 0; final log 1866 entries (sentinel at 1865); VerifyFinal ok; porcupine Ok in 0.0s.
-bulk: produced 21286, acked 21286 (present once 21286), failed 0 (present 0), rejected by the producer 0, lost 0, duplicates 0, phantoms 0, per-key order violations 0, offset mismatches 0, final records 21286.
+**Safety.** lin: acked 1673, unknown 183 (in final 20, pruned 163), definite 0, reads 738, failed reads 75, no-leader 0, anomalies 0; final log 1693 entries (sentinel at 1692); VerifyFinal ok; porcupine Ok in 0.0s.
+bulk: produced 20395, acked 20395 (present once 20395), failed 0 (present 0), rejected by the producer 0, lost 0, duplicates 0, phantoms 0, per-key order violations 0, offset mismatches 0, final records 20395.
 No violations.
 
-**Availability.** healthy after healing: true (3.6s after the last heal). lin appends acked 21.9/s, bulk 249.8/s. Windows of ≥ 2s without an acked lin append: 21.9–30.4, 45.1–52.1, 64.3–72.3 (total 23.5s).
+**Availability.** healthy after healing: true (3.1s after the last heal). lin appends acked 20.5/s, bulk 249.9/s. Windows of ≥ 2s without an acked lin append: 17.1–26.2, 39.0–49.0, 61.3–68.7 (total 26.5s).
 
 **Observations.**
-- round 1: controller 3 killed; controller now 1
+- round 1: controller 2 killed; controller now 1
 - round 2: controller 1 killed; controller now 3
 - round 3: controller 3 killed; controller now 1
 
@@ -204,7 +204,7 @@ No violations.
 
 **Faults injected.** 3 rounds: after 10–15 s, disable both toxiproxy proxies in front of the lin leader (brokerN_internal, brokerN_raft) for 15 s, then re-enable them. This is an inbound-only cut: peers cannot open connections to the leader's internal/Raft ports (existing ones are closed), but the leader's own outbound connections to its peers' proxies still work, and its client port stays reachable.
 
-Results file `20261018T225953Z-inbound-isolation.json`, broker logs `20261018T225953Z-inbound-isolation.log`, schedule seed 4139041544782029965, workload 101.8s, total 108.7s.
+Results file `20261018T231458Z-inbound-isolation.json`, broker logs `20261018T231458Z-inbound-isolation.log`, schedule seed 16094261746073192690, workload 101.1s, total 112.6s.
 
 **Invariants checked.**
 - lin: no read integrity anomaly (gap, offset going backwards, CRC/decode failure, no progress below the HW)
@@ -215,21 +215,21 @@ Results file `20261018T225953Z-inbound-isolation.json`, broker logs `20261018T22
 
 **Fault timeline** (seconds since the workloads started):
 
-- 15.8s isolate inbound broker3: round 1: proxies [broker3_internal broker3_raft] disabled; controller 2; lin before: leader 3 epoch 0 isr [3 1 2] (from broker 1)
-- 30.8s heal broker3: proxies re-enabled; lin at end of isolation: leader -1 epoch 1 isr [3] (from broker 1)
-- 41.8s isolate inbound broker3: round 2: proxies [broker3_internal broker3_raft] disabled; controller 3; lin before: leader 3 epoch 2 isr [3 1] (from broker 1)
-- 56.8s heal broker3: proxies re-enabled; lin at end of isolation: leader -1 epoch 3 isr [3] (from broker 1)
-- 71.1s isolate inbound broker3: round 3: proxies [broker3_internal broker3_raft] disabled; controller 3; lin before: leader 3 epoch 4 isr [3 1 2] (from broker 1)
-- 86.1s heal broker3: proxies re-enabled; lin at end of isolation: leader -1 epoch 5 isr [3] (from broker 1)
+- 15.4s isolate inbound broker3: round 1: proxies [broker3_internal broker3_raft] disabled; controller 1; lin before: leader 3 epoch 0 isr [3 1 2] (from broker 1)
+- 30.4s heal broker3: proxies re-enabled; lin at end of isolation: leader -1 epoch 1 isr [3] (from broker 1)
+- 42.9s isolate inbound broker3: round 2: proxies [broker3_internal broker3_raft] disabled; controller 3; lin before: leader 3 epoch 2 isr [3 1 2] (from broker 1)
+- 57.9s heal broker3: proxies re-enabled; lin at end of isolation: leader -1 epoch 3 isr [3] (from broker 1)
+- 72.4s isolate inbound broker3: round 3: proxies [broker3_internal broker3_raft] disabled; controller 3; lin before: leader 3 epoch 4 isr [3 1 2] (from broker 1)
+- 87.4s heal broker3: proxies re-enabled; lin at end of isolation: leader -1 epoch 5 isr [3] (from broker 1)
 
-**Safety.** lin: acked 1289, unknown 60 (in final 49, pruned 11), definite 0, reads 606, failed reads 1, no-leader 812, anomalies 0; final log 1338 entries (sentinel at 1337); VerifyFinal ok; porcupine Ok in 0.0s.
-bulk: produced 23581, acked 23581 (present once 23581), failed 0 (present 0), rejected by the producer 0, lost 0, duplicates 0, phantoms 0, per-key order violations 0, offset mismatches 0, final records 23581.
+**Safety.** lin: acked 1390, unknown 56 (in final 44, pruned 12), definite 0, reads 601, failed reads 0, no-leader 761, anomalies 0; final log 1434 entries (sentinel at 1433); VerifyFinal ok; porcupine Ok in 0.0s.
+bulk: produced 24719, acked 24719 (present once 24719), failed 0 (present 0), rejected by the producer 0, lost 0, duplicates 0, phantoms 0, per-key order violations 0, offset mismatches 0, final records 24719.
 No violations.
 
-**Availability.** healthy after healing: true (5.7s after the last heal). lin appends acked 12.7/s, bulk 231.6/s. Windows of ≥ 2s without an acked lin append: 15.7–35.1, 41.8–61.3, 71.1–91.3 (total 59.1s).
+**Availability.** healthy after healing: true (3.7s after the last heal). lin appends acked 13.7/s, bulk 244.4/s. Windows of ≥ 2s without an acked lin append: 15.4–36.8, 42.8–60.7, 72.4–88.8 (total 55.7s).
 
 **Observations.**
-- round 1: isolated lin leader 3 (epoch 0, controller 2); after 15 s: leader -1 epoch 1 isr [3]
+- round 1: isolated lin leader 3 (epoch 0, controller 1); after 15 s: leader -1 epoch 1 isr [3]
 - round 2: isolated lin leader 3 (epoch 2, controller 3); after 15 s: leader -1 epoch 3 isr [3]
 - round 3: isolated lin leader 3 (epoch 4, controller 3); after 15 s: leader -1 epoch 5 isr [3]
 
@@ -237,7 +237,7 @@ No violations.
 
 **Faults injected.** 2 rounds: after 10–15 s, docker compose pause the lin leader for 20 s (> 9 s broker session timeout), then unpause it (a GC-pause style zombie; its sockets stay open but nothing answers). A round in which the lin leader epoch did not change is 'fault not exercised'.
 
-Results file `20261018T225953Z-pause-leader.json`, broker logs `20261018T225953Z-pause-leader.log`, schedule seed 1834630117172750433, workload 81.1s, total 88.1s.
+Results file `20261018T231458Z-pause-leader.json`, broker logs `20261018T231458Z-pause-leader.log`, schedule seed 16323141810293535992, workload 85.5s, total 91.9s.
 
 **Invariants checked.**
 - lin: no read integrity anomaly (gap, offset going backwards, CRC/decode failure, no progress below the HW)
@@ -249,27 +249,27 @@ Results file `20261018T225953Z-pause-leader.json`, broker logs `20261018T225953Z
 
 **Fault timeline** (seconds since the workloads started):
 
-- 15.8s pause broker3: round 1: controller 2; lin before: leader 3 epoch 0 isr [3 1 2] (from broker 1)
-- 36.9s unpause broker3: lin at end of pause: leader 1 epoch 1 isr [1 2] (from broker 1)
-- 48.4s pause broker1: round 2: controller 2; lin before: leader 1 epoch 1 isr [3 1 2] (from broker 1)
-- 69.6s unpause broker1: lin at end of pause: leader 3 epoch 2 isr [3 2] (from broker 2)
+- 19.0s pause broker3: round 1: controller 3; lin before: leader 3 epoch 0 isr [3 1 2] (from broker 1)
+- 40.1s unpause broker3: lin at end of pause: leader 1 epoch 1 isr [1 2] (from broker 1)
+- 52.8s pause broker1: round 2: controller 1; lin before: leader 1 epoch 1 isr [3 1 2] (from broker 1)
+- 74.0s unpause broker1: lin at end of pause: leader 3 epoch 2 isr [3 2] (from broker 2)
 
-**Safety.** lin: acked 1237, unknown 13 (in final 0, pruned 13), definite 0, reads 544, failed reads 3, no-leader 0, anomalies 0; final log 1237 entries (sentinel at 1236); VerifyFinal ok; porcupine Ok in 0.0s.
-bulk: produced 19038, acked 19038 (present once 19038), failed 0 (present 0), rejected by the producer 1, lost 0, duplicates 0, phantoms 0, per-key order violations 0, offset mismatches 0, final records 19038.
+**Safety.** lin: acked 1346, unknown 13 (in final 1, pruned 12), definite 0, reads 600, failed reads 3, no-leader 0, anomalies 0; final log 1347 entries (sentinel at 1346); VerifyFinal ok; porcupine Ok in 0.0s.
+bulk: produced 20136, acked 20136 (present once 20136), failed 0 (present 0), rejected by the producer 1, lost 0, duplicates 0, phantoms 0, per-key order violations 0, offset mismatches 0, final records 20136.
 bulk producer errors: rejected: unknown topic or partition ×1.
 No violations.
 
-**Availability.** healthy after healing: true (1.6s after the last heal). lin appends acked 15.3/s, bulk 234.7/s. Windows of ≥ 2s without an acked lin append: 15.7–29.0, 48.4–61.7 (total 26.6s).
+**Availability.** healthy after healing: true (1.6s after the last heal). lin appends acked 15.7/s, bulk 235.4/s. Windows of ≥ 2s without an acked lin append: 18.9–32.3, 52.8–65.2 (total 25.8s).
 
 **Observations.**
-- round 1: paused lin leader 3 (epoch 0, controller 2); leadership moved to 1 at epoch 1 during the pause
-- round 2: paused lin leader 1 (epoch 1, controller 2); leadership moved to 3 at epoch 2 during the pause
+- round 1: paused lin leader 3 (epoch 0, controller 3); leadership moved to 1 at epoch 1 during the pause
+- round 2: paused lin leader 1 (epoch 1, controller 1); leadership moved to 3 at epoch 2 during the pause
 
 ### latency: PASS
 
 **Faults injected.** after 10 s, on all 6 broker-to-broker proxies for 60 s: latency toxic (downstream, 200 ms ± 100 ms jitter) and slicer toxic (upstream: TCP data cut into ~1 KiB ± 512 B fragments with 50 µs delay between them, i.e. fragmentation plus delay); then all toxics removed.
 
-Results file `20261018T225953Z-latency.json`, broker logs `20261018T225953Z-latency.log`, schedule seed 8324641108583723957, workload 85.0s, total 91.7s.
+Results file `20261018T231458Z-latency.json`, broker logs `20261018T231458Z-latency.log`, schedule seed 11005672247281837298, workload 85.0s, total 91.9s.
 
 **Invariants checked.**
 - lin: no read integrity anomaly (gap, offset going backwards, CRC/decode failure, no progress below the HW)
@@ -283,26 +283,26 @@ Results file `20261018T225953Z-latency.json`, broker logs `20261018T225953Z-late
 - 15.0s add toxics all: latency downstream 200±100 ms; slicer upstream 1024±512 B, 50 µs
 - 75.0s remove toxics all: toxiproxy reset
 
-**Safety.** lin: acked 1238, unknown 0 (in final 0, pruned 0), definite 0, reads 514, failed reads 0, no-leader 0, anomalies 0; final log 1238 entries (sentinel at 1237); VerifyFinal ok; porcupine Ok in 0.0s.
-bulk: produced 13954, acked 11860 (present once 11860), failed 2094 (present 0), rejected by the producer 0, lost 0, duplicates 0, phantoms 0, per-key order violations 0, offset mismatches 0, final records 11860.
-bulk producer errors: request timed out ×2094.
+**Safety.** lin: acked 1240, unknown 0 (in final 0, pruned 0), definite 0, reads 474, failed reads 1, no-leader 0, anomalies 0; final log 1240 entries (sentinel at 1239); VerifyFinal ok; porcupine Ok in 0.0s.
+bulk: produced 13951, acked 11839 (present once 11839), failed 2112 (present 0), rejected by the producer 0, lost 0, duplicates 0, phantoms 0, per-key order violations 0, offset mismatches 0, final records 11839.
+bulk producer errors: request timed out ×2112.
 No violations.
 
-**Availability.** healthy after healing: true (0.0s after the last heal). lin appends acked 14.6/s, bulk 139.5/s. Windows of ≥ 2s without an acked lin append: none (total 0.0s).
+**Availability.** healthy after healing: true (0.0s after the last heal). lin appends acked 14.6/s, bulk 139.2/s. Windows of ≥ 2s without an acked lin append: none (total 0.0s).
 
 **Observations.**
-- latency +10s: lin leader 3 epoch 0 isr [3 1 2] (from broker 1); controller 3
-- latency +20s: lin leader 3 epoch 0 isr [3 1 2] (from broker 1); controller 3
-- latency +30s: lin leader 3 epoch 0 isr [3 1 2] (from broker 1); controller 3
-- latency +40s: lin leader 3 epoch 0 isr [3 1 2] (from broker 1); controller 3
-- latency +50s: lin leader 3 epoch 0 isr [3 1 2] (from broker 1); controller 3
-- latency +60s: lin leader 3 epoch 0 isr [3 1 2] (from broker 1); controller 3
+- latency +10s: lin leader 3 epoch 0 isr [3 1 2] (from broker 1); controller 2
+- latency +20s: lin leader 3 epoch 0 isr [3 1 2] (from broker 1); controller 2
+- latency +30s: lin leader 3 epoch 0 isr [3 1 2] (from broker 1); controller 2
+- latency +40s: lin leader 3 epoch 0 isr [3 1 2] (from broker 1); controller 2
+- latency +50s: lin leader 3 epoch 0 isr [3 1 2] (from broker 1); controller 2
+- latency +60s: lin leader 3 epoch 0 isr [3 1 2] (from broker 1); controller 2
 
 ### full-disk: PASS
 
 **Faults injected.** broker3's log dir is a 64 MiB tmpfs volume (Raft state on a separate volume). After 15 s the volume is filled with busybox dd until ENOSPC and held full for 30 s; healing replaces the disk: SIGKILL broker3, wait (bounded) until it is fenced and out of every ISR, remove and recreate the log volume, start broker3 empty.
 
-Results file `20261018T225953Z-full-disk.json`, broker logs `20261018T225953Z-full-disk.log`, schedule seed 13750836670029556062, workload 79.0s, total 85.7s.
+Results file `20261018T231458Z-full-disk.json`, broker logs `20261018T231458Z-full-disk.log`, schedule seed 9680667983441191715, workload 76.1s, total 87.6s.
 
 **Invariants checked.**
 - lin: no read integrity anomaly (gap, offset going backwards, CRC/decode failure, no progress below the HW)
@@ -315,17 +315,17 @@ Results file `20261018T225953Z-full-disk.json`, broker logs `20261018T225953Z-fu
 
 **Fault timeline** (seconds since the workloads started):
 
-- 20.8s fill disk broker3: dd until ENOSPC; 66580480 bytes (63.5MB) copied, 0.018227 seconds, 3.4GB/s; df: tmpfs                    65536     65536         0 100% /d
-- 51.8s kill -9 broker3: disk replacement starts; container was running exit=0 oom=false
-- 61.3s fenced broker3: broker3 not live and out of every ISR
-- 62.7s replace disk broker3: container removed, log volume recreated empty, broker3 started
+- 20.9s fill disk broker3: dd until ENOSPC; 66584576 bytes (63.5MB) copied, 0.030737 seconds, 2.0GB/s; df: tmpfs                    65536     65536         0 100% /d
+- 51.7s kill -9 broker3: disk replacement starts; container was running exit=0 oom=false
+- 61.2s fenced broker3: broker3 not live and out of every ISR
+- 62.4s replace disk broker3: container removed, log volume recreated empty, broker3 started
 
-**Safety.** lin: acked 1247, unknown 924 (in final 0, pruned 924), definite 0, reads 788, failed reads 89, no-leader 0, anomalies 0; final log 1247 entries (sentinel at 1246); VerifyFinal ok; porcupine Ok in 0.0s.
-bulk: produced 19750, acked 16845 (present once 16845), failed 2905 (present 0), rejected by the producer 0, lost 0, duplicates 0, phantoms 0, per-key order violations 0, offset mismatches 0, final records 16845.
-bulk producer errors: unknown server error ×2905.
+**Safety.** lin: acked 1078, unknown 941 (in final 0, pruned 941), definite 0, reads 808, failed reads 103, no-leader 0, anomalies 0; final log 1078 entries (sentinel at 1077); VerifyFinal ok; porcupine Ok in 0.0s.
+bulk: produced 19028, acked 16129 (present once 16129), failed 2899 (present 0), rejected by the producer 0, lost 0, duplicates 0, phantoms 0, per-key order violations 0, offset mismatches 0, final records 16129.
+bulk producer errors: unknown server error ×2899.
 No violations.
 
-**Availability.** healthy after healing: true (6.2s after the last heal). lin appends acked 15.8/s, bulk 213.2/s. Windows of ≥ 2s without an acked lin append: 21.8–61.0 (total 39.2s).
+**Availability.** healthy after healing: true (3.7s after the last heal). lin appends acked 14.2/s, bulk 211.9/s. Windows of ≥ 2s without an acked lin append: 20.5–61.0 (total 40.5s).
 
 **Observations.**
 - disk full +5s: broker3 container running exit=0 oom=false; partitions led by broker3: [bulk-1 bulk-4 lin-0]; lin leader 3 epoch 0 isr [3 1 2] (from broker 1)
@@ -334,6 +334,6 @@ No violations.
 - disk full +20s: broker3 container running exit=0 oom=false; partitions led by broker3: [bulk-1 bulk-4 lin-0]; lin leader 3 epoch 0 isr [3 1 2] (from broker 1)
 - disk full +25s: broker3 container running exit=0 oom=false; partitions led by broker3: [bulk-1 bulk-4 lin-0]; lin leader 3 epoch 0 isr [3 1 2] (from broker 1)
 - disk full +30s: broker3 container running exit=0 oom=false; partitions led by broker3: [bulk-1 bulk-4 lin-0]; lin leader 3 epoch 0 isr [3 1 2] (from broker 1)
-- while full (20.8–51.4s): bulk acks on partitions not led by broker3 at fill time: 4860 (map[0:972 2:1296 3:1296 5:1296]); broker3 led [1 4]
+- while full (20.9–51.4s): bulk acks on partitions not led by broker3 at fill time: 4857 (map[0:971 2:1296 3:1295 5:1295]); broker3 led [1 4]
 - before healing, broker3 container: running exit=0 oom=false
-- broker3 log before the replacement (20261018T225953Z-full-disk-broker3-before-replacement.log): 2987 WARN/ERROR lines, 22 mentioning ENOSPC; first: broker3-1  | 2026-10-18T23:09:32.103203755Z {"time":"2026-10-18T23:09:32.103042727Z","level":"ERROR","msg":"log failed; rejecting further writes","broker_id":3,"topic":"bulk","partition":3,"error":"write batch: write /var/lib/streamq/bulk-3/00000000000000000000.log: no space left on device"}
+- broker3 log before the replacement (20261018T231458Z-full-disk-broker3-before-replacement.log): 3002 WARN/ERROR lines, 22 mentioning ENOSPC; first: broker3-1  | 2026-10-18T23:24:32.395214619Z {"time":"2026-10-18T23:24:32.394616123Z","level":"ERROR","msg":"log failed; rejecting further writes","broker_id":3,"topic":"bulk","partition":3,"error":"write batch: write /var/lib/streamq/bulk-3/00000000000000000000.log: no space left on device"}

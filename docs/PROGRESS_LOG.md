@@ -537,3 +537,66 @@ the `integration` build tag is linted.
 - `want_shutdown` heartbeat flag not implemented. A heartbeat already in flight to a newly
   elected controller can briefly unfence a stopping broker (D53).
 - Clients inside the compose network are unsupported; brokers advertise `localhost` (D54).
+
+## M9 — Correctness & chaos (2026-10-19)
+
+**Built**
+- `test/linearizability` (main session; the contract):
+  - a porcupine log model for one partition: deterministic, unknown appends open-ended, prefix
+    reads (D56);
+  - a Recorder of single-attempt acks=all appends and whole-partition reads through a
+    `LeaderFunc`;
+  - `ReadAll`, with integrity anomalies for gaps, overlapping or backward batches, CRC/decode
+    failures, and no progress below the broker's own HW;
+  - `VerifyFinal` (acked offsets, reads are prefixes, no phantoms or duplicates);
+  - `Prepare` (pin unknowns to their final offsets, drop the rest) and `Check`, with a 60 s
+    timeout where a timeout fails (D58);
+  - the in-process test: 3 nodes, 8 faults paced by operations, at least one real leader change,
+    ≥ 1000 operations. It runs in `make test-int` and is seeded (`STREAMQ_LIN_SEED`).
+- `test/chaos` (implementer package B, merged):
+  - a Docker Compose chaos runner (`make chaos`, project `streamq-chaos`, image `streamq:chaos`);
+  - 6 scenarios: kill9-random, kill9-controller, inbound-isolation, pause-leader, latency and
+    full-disk (tmpfs logs, Raft on its own volume, disk-replacement healing);
+  - the `lin` and `bulk` (idempotent producer) workloads;
+  - per-scenario JSON results;
+  - NOT_EXERCISED / INCONCLUSIVE / UNHEALTHY / ERROR statuses, and work floors.
+- `test/chaos/REPORT.md` (the §9 acceptance item): written by the main session from a
+  `make chaos` run on merged main.
+
+**Decisions**: D56 (model), D57 (full disk), D58 (checking budget), D59 (accepted: inbound-only
+isolation can take the cluster down).
+
+**Process**
+- plan-reviewer: REVISE ×2, then APPROVE (round 3).
+- Round 1:
+  - code-reviewer: CHANGES REQUIRED (the REPORT misread the inbound-isolation outage);
+  - failure-reviewer: CHANGES REQUIRED (ReadAll hid overlapping offsets; scenarios could pass
+    without their fault).
+- Fixes, then round 2: both APPROVE.
+- Details are in `docs/plans/M9.md`.
+
+**Verification**
+- `make lint test test-int` green. The in-process linearizability test runs about 3,000–5,500
+  operations with no anomalies.
+- `make chaos` passed all 6 scenarios in every main-session run (seeds 101242816, 144549489 and
+  835244600), plus five worktree runs:
+  - no lost acked records, duplicates, reordering, phantoms or anomalies;
+  - every history linearizable under the D56 model.
+
+**Known limitations / deferred MINORs**
+- **Availability (D59):** inbound-only isolation of any broker lets it win the controller
+  election and fence everyone. Follow-ups: controller step-down when it hears no heartbeats,
+  broker-side detection, KIP-966-style eligible leader replicas.
+- **acks=all stalls** for about 8–10 s after a follower crash (session timeout and lag),
+  Kafka-like.
+- **No log-dir failure handling (D57):** a full disk leaves its broker as a failing leader until
+  the disk is replaced.
+- **Not exercised:** power-loss durability (kill -9 keeps the page cache) and true symmetric
+  partitions.
+- **Harness heuristics:**
+  - the inbound-isolation exercise check can count a stale-view ISR difference;
+  - the kill9-controller check reads once after the restart;
+  - the in-process leader-change count uses the first answering broker rather than an epoch
+    check;
+  - read anomalies carry no broker id;
+  - OFFSET_OUT_OF_RANGE below a seen HW is a no-effect read.
