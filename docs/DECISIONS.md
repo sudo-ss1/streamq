@@ -515,3 +515,44 @@ broker's JSON slog handler.
 The per-request error debug log planned in M8 §1 is deferred. Request errors are visible through
 `streamq_requests_total{code}` and `streamq_partition_errors_total`, and `metrics.New` takes no
 logger (contract). This is recorded as an override in `docs/plans/M8.md`.
+
+## D56. Linearizability model (M9)
+
+- **Model:** porcupine with a deterministic log model on one partition. An acked append at offset
+  `o` requires the log to have `o` entries. An unknown append always applies, with `Return = ∞`,
+  so it can linearize at the end, which means "never".
+- **Reads:** prefix-checked, because Kafka consumer reads are not linearizable reads. A deposed
+  leader or a lagging HW may serve a shorter committed prefix. Reads check order and phantoms.
+- **Durability:** checked by the offsets plus a settled final read (`VerifyFinal`): every acked
+  `(v, o)` has `final[o] == v`, every read is a prefix of `final`, and there are no phantoms or
+  duplicates.
+- **Outcome classification:** definite failures are CORRUPT_MESSAGE, MESSAGE_TOO_LARGE and
+  INVALID_TIMESTAMP, all validation errors before any write. Everything else is unknown,
+  including NOT_LEADER, NOT_ENOUGH_REPLICAS and UNKNOWN_TOPIC_OR_PARTITION, which can occur after
+  a write (`storage.ErrClosed`). A misclassified definite failure would surface as a phantom in
+  VerifyFinal.
+- **Check order:** VerifyFinal runs first. Unknown appends present in the final log are then
+  pinned to their final offsets, the remaining unknown appends are pruned, and porcupine checks
+  the result.
+- **Read integrity anomalies** (gaps, offsets going backwards, CRC or decode failures, no progress
+  below the HW) fail the run; other read failures have no effect.
+- **Crash coverage:** in-process faults are graceful (D53); crash coverage comes from the Docker
+  chaos runner.
+
+## D57. Full-disk behaviour (M9)
+
+- **No log-dir failure handling:** on ENOSPC the broker's log is marked failed (sticky) and its
+  partitions return errors. The broker may also crash with SIGBUS on a memory-mapped index. Both
+  are acceptable, documented outcomes; Kafka behaves the same way without a JBOD failure policy.
+- **Healing is a disk replacement:** stop the broker, wait until it is fenced and absent from every
+  ISR, then start it empty.
+- **Raft state:** the chaos override keeps Raft state on a separate volume, so only partition logs
+  hit ENOSPC and the replacement does not wipe the Raft voter.
+
+## D58. Linearizability checking budget (M9)
+
+- **Pruning:** unknown appends that appear in no read and not in the final log are pruned before
+  the check.
+- **Pacing:** clients back off 50–200 ms after errors.
+- **Budget:** porcupine runs with a 60 s timeout. A timeout (porcupine `Unknown`) fails the run as
+  inconclusive. A single partition keeps the search tractable.
