@@ -3,8 +3,8 @@
 // tracks their heartbeats, fences brokers that miss the session timeout and unfences brokers
 // once they have caught up on metadata (DECISIONS D34, D35).
 //
-// Lock ordering: Controller.mu is a leaf; Store calls (Raft applies, barriers) are never made
-// while holding it.
+// Lock ordering: Controller.allocMu → Store calls; Controller.mu is a leaf, and Store calls (Raft
+// applies, barriers) are never made while holding it. allocMu is never taken under mu.
 package controller
 
 import (
@@ -79,6 +79,8 @@ type Controller struct {
 	clock  Clock
 	logger *slog.Logger
 	wake   chan struct{}
+
+	allocMu sync.Mutex // serializes producer-ID allocations from apply through read (M7 plan R13)
 
 	mu      sync.Mutex
 	active  bool
@@ -330,4 +332,31 @@ func (c *Controller) AlterISR(ctx context.Context, req AlterISRRequest) error {
 	}
 	c.logger.Info("isr changed", slog.String("topic", req.Topic), slog.Int("partition", int(req.Partition)), slog.Any("isr", req.NewISR))
 	return nil
+}
+
+// AllocateProducerIDs reserves a block of metadata.ProducerIDBlockSize producer IDs for a broker
+// and returns its first ID (SPEC §6, DECISIONS D51). The block start is read back from this node's
+// FSM after the apply, under allocMu; if this node's Raft term moved past the term the command was
+// issued in, a later controller may have allocated for the broker in between, so it answers
+// ErrNotController instead (the block is wasted, never reused; M7 plan R13).
+func (c *Controller) AllocateProducerIDs(ctx context.Context, brokerID int32, brokerEpoch int64) (int64, error) {
+	c.allocMu.Lock()
+	defer c.allocMu.Unlock()
+	term, err := c.activeTerm()
+	if err != nil {
+		return 0, err
+	}
+	if b, ok := c.store.Snapshot().Broker(brokerID); !ok || b.Epoch != brokerEpoch {
+		return 0, fmt.Errorf("broker %d epoch %d: %w", brokerID, brokerEpoch, ErrStaleBrokerEpoch)
+	}
+	cmd := &streamqv1.MetadataCommand{Version: metadata.CommandVersion, TimestampMs: c.clock.Now().UnixMilli(), ControllerEpoch: term,
+		Cmd: &streamqv1.MetadataCommand_AllocateProducerIds{AllocateProducerIds: &streamqv1.AllocateProducerIDsCommand{BrokerId: brokerID}}}
+	if _, err := c.store.ApplyForwarded(ctx, cmd); err != nil {
+		return 0, fmt.Errorf("allocate producer ids for broker %d: %w", brokerID, err)
+	}
+	first, ok := c.store.Snapshot().ProducerIDBlocks[brokerID]
+	if now, err := c.activeTerm(); err != nil || now != term || c.store.Term() != term || !ok {
+		return 0, fmt.Errorf("allocate producer ids: term changed during allocation: %w", metadata.ErrNotController)
+	}
+	return first, nil
 }

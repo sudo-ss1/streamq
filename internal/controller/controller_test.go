@@ -28,6 +28,8 @@ type fakeStore struct {
 	commit    uint64
 	applied   []*streamqv1.MetadataCommand
 	listeners []func(bool)
+	// afterApply runs after each ApplyForwarded (outside the lock), e.g. to change the term.
+	afterApply func()
 }
 
 func newFakeStore() *fakeStore {
@@ -43,6 +45,9 @@ func (f *fakeStore) Snapshot() metadata.Snapshot {
 }
 
 func (f *fakeStore) ApplyForwarded(_ context.Context, cmd *streamqv1.MetadataCommand) (uint64, error) {
+	if f.afterApply != nil {
+		defer f.afterApply()
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if !f.leader {
@@ -280,4 +285,25 @@ func TestRunStopsOnCancel(t *testing.T) {
 	require.Eventually(t, func() bool { _, err := c.activeTerm(); return err == nil }, 5*time.Second, time.Millisecond)
 	cancel()
 	require.NoError(t, <-done)
+}
+
+func TestAllocateProducerIDs(t *testing.T) {
+	ctx := context.Background()
+	c, st, _ := newTestController(t)
+	r1, r2 := register(t, c, 1), register(t, c, 2)
+	a, err := c.AllocateProducerIDs(ctx, 1, r1.BrokerEpoch)
+	require.NoError(t, err)
+	b, err := c.AllocateProducerIDs(ctx, 2, r2.BrokerEpoch)
+	require.NoError(t, err)
+	a2, err := c.AllocateProducerIDs(ctx, 1, r1.BrokerEpoch)
+	require.NoError(t, err)
+	require.Equal(t, []int64{0, 1000, 2000}, []int64{a, b, a2}, "distinct blocks")
+
+	_, err = c.AllocateProducerIDs(ctx, 1, r1.BrokerEpoch+5)
+	require.ErrorIs(t, err, ErrStaleBrokerEpoch)
+
+	// The term moves while the allocation is applied: the result is not trusted (plan R13).
+	st.afterApply = func() { st.setLeader(true, 2) }
+	_, err = c.AllocateProducerIDs(ctx, 1, r1.BrokerEpoch)
+	require.ErrorIs(t, err, metadata.ErrNotController)
 }

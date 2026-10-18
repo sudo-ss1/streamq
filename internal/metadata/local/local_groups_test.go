@@ -79,3 +79,36 @@ func TestPersistedJSONKeys(t *testing.T) {
 	require.ElementsMatch(t, []string{"name", "id", "configs", "partitions"}, keys, "persisted topic keys are stable")
 	require.Equal(t, int64(3), raw.Groups["g"]["t"]["0"])
 }
+
+// TestProducerIDBlocksPersist: blocks stay distinct across unrelated commands and a reopen
+// (M7 plan R4, D51).
+func TestProducerIDBlocksPersist(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	alloc := &streamqv1.MetadataCommand{Version: metadata.CommandVersion, Cmd: &streamqv1.MetadataCommand_AllocateProducerIds{
+		AllocateProducerIds: &streamqv1.AllocateProducerIDsCommand{BrokerId: 1},
+	}}
+	s, err := Open(ctx, dir, metadata.Broker{ID: 1, Host: "h", Port: 1}, nil)
+	require.NoError(t, err)
+	require.NoError(t, s.Propose(ctx, alloc))
+	first := s.Snapshot().ProducerIDBlocks[1]
+	require.NoError(t, s.Propose(ctx, &streamqv1.MetadataCommand{Version: metadata.CommandVersion, Cmd: &streamqv1.MetadataCommand_CreateTopic{
+		CreateTopic: &streamqv1.CreateTopicCommand{Name: "t", TopicId: "x",
+			Partitions: []*streamqv1.PartitionAssignment{{Partition: 0, Replicas: []int32{1}}}},
+	}}))
+	require.NoError(t, s.Propose(ctx, alloc))
+	second := s.Snapshot().ProducerIDBlocks[1]
+	require.NoError(t, s.Close())
+	require.NotEqual(t, first, second)
+
+	s, err = Open(ctx, dir, metadata.Broker{ID: 1, Host: "h", Port: 1}, nil)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, s.Close()) }()
+	require.NoError(t, s.Propose(ctx, alloc))
+	third := s.Snapshot().ProducerIDBlocks[1]
+	require.Equal(t, second+metadata.ProducerIDBlockSize, third, "the counter persisted")
+	data, err := os.ReadFile(filepath.Join(dir, FileName))
+	require.NoError(t, err)
+	require.Contains(t, string(data), `"next_producer_id"`)
+	require.Contains(t, string(data), `"producer_id_blocks"`)
+}

@@ -353,7 +353,9 @@ func TestFSMSnapshotRoundTrip(t *testing.T) {
 	apply(4, &streamqv1.MetadataCommand{Version: metadata.CommandVersion, Cmd: &streamqv1.MetadataCommand_CommitOffsets{
 		CommitOffsets: &streamqv1.CommitOffsetsCommand{GroupId: "g", Offsets: []*streamqv1.OffsetCommit{{Topic: "t", Offset: 9}}},
 	}})
+	apply(5, allocCmd(1))
 	before := f.snapshot()
+	require.Equal(t, int64(metadata.ProducerIDBlockSize), before.NextProducerID)
 
 	snap, err := f.Snapshot()
 	require.NoError(t, err)
@@ -369,7 +371,7 @@ func TestFSMSnapshotRoundTrip(t *testing.T) {
 	require.NoError(t, restored.Restore(io.NopCloser(bytes.NewReader(sink.Bytes()))))
 	after := restored.snapshot()
 	require.Equal(t, before, after)
-	require.Equal(t, uint64(4), after.Index)
+	require.Equal(t, uint64(5), after.Index)
 	ch := <-got
 	require.Equal(t, metadata.Restored, ch.Kind)
 	require.Equal(t, after, *ch.Snapshot)
@@ -387,4 +389,34 @@ func TestFSMRejectsGarbageDeterministically(t *testing.T) {
 	resp := f.Apply(rlog{index: 1, data: []byte{0xff, 0x01}}.log())
 	require.ErrorIs(t, resp.(error), metadata.ErrInvalidCommand)
 	require.Equal(t, uint64(1), f.appliedIndex(), "the index advances even for rejected entries")
+}
+
+func allocCmd(broker int32) *streamqv1.MetadataCommand {
+	return &streamqv1.MetadataCommand{Version: metadata.CommandVersion, Cmd: &streamqv1.MetadataCommand_AllocateProducerIds{
+		AllocateProducerIds: &streamqv1.AllocateProducerIDsCommand{BrokerId: broker},
+	}}
+}
+
+// TestFSMProducerIDBlocksSurviveOtherCommands: every apply clones the state, so a missed field
+// would reset the counter and hand out a block twice (M7 plan R4).
+func TestFSMProducerIDBlocksSurviveOtherCommands(t *testing.T) {
+	n := newNotifier()
+	defer n.close()
+	f := newFSM(n)
+	apply := func(i uint64, cmd *streamqv1.MetadataCommand) {
+		data, err := protoMarshal(cmd)
+		require.NoError(t, err)
+		require.Nil(t, f.Apply(rlog{index: i, data: data}.log()))
+	}
+	apply(1, registerCmd(1))
+	apply(2, registerCmd(2))
+	apply(3, allocCmd(1))
+	first := f.snapshot().ProducerIDBlocks[1]
+	apply(4, unfenceCmd(1, 1))
+	apply(5, allocCmd(2))
+	apply(6, allocCmd(1))
+	snap := f.snapshot()
+	require.Equal(t, map[int32]int64{1: 2 * metadata.ProducerIDBlockSize, 2: metadata.ProducerIDBlockSize}, snap.ProducerIDBlocks)
+	require.Equal(t, int64(0), first)
+	require.Equal(t, int64(3*metadata.ProducerIDBlockSize), snap.NextProducerID)
 }

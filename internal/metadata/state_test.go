@@ -189,7 +189,19 @@ func TestSnapshotAndCloneIsolation(t *testing.T) {
 	delete(snap.Topics, "existing")
 	require.Equal(t, orig, s)
 
+	_, err := s.Apply(&streamqv1.MetadataCommand{Version: metadata.CommandVersion, Cmd: &streamqv1.MetadataCommand_AllocateProducerIds{
+		AllocateProducerIds: &streamqv1.AllocateProducerIDsCommand{BrokerId: 2},
+	}})
+	require.NoError(t, err)
+	orig = s.Clone()
+	require.Equal(t, int64(metadata.ProducerIDBlockSize), orig.NextProducerID)
+	snap3 := s.Snapshot()
+	snap3.ProducerIDBlocks[2] = 99
+	require.Equal(t, orig, s)
+
 	c := s.Clone()
+	c.ProducerIDBlocks[2] = 99
+	c.NextProducerID = 7
 	c.Brokers[0].ID = 100
 	c.ControllerID = 100
 	c.Topics["existing"].Configs["retention.ms"] = "x"
@@ -197,7 +209,7 @@ func TestSnapshotAndCloneIsolation(t *testing.T) {
 	c.Topics["existing"].Partitions[1].Replicas[1] = 100
 	c.Topics["existing"].Partitions[1].ISR[1] = 100
 	c.Topics["existing"].Name = "renamed"
-	_, err := c.Apply(deleteCmd("existing"))
+	_, err = c.Apply(deleteCmd("existing"))
 	require.NoError(t, err)
 	require.Equal(t, orig, s)
 
@@ -338,4 +350,22 @@ func TestValidateTopicName(t *testing.T) {
 func uniq(ids []int32) []int32 {
 	s := slices.Sorted(slices.Values(ids))
 	return slices.Compact(s)
+}
+
+func TestAllocateProducerIDs(t *testing.T) {
+	t.Parallel()
+	s := baseState(t)
+	alloc := func(b int32) error {
+		_, err := s.Apply(&streamqv1.MetadataCommand{Version: metadata.CommandVersion, Cmd: &streamqv1.MetadataCommand_AllocateProducerIds{
+			AllocateProducerIds: &streamqv1.AllocateProducerIDsCommand{BrokerId: b},
+		}})
+		return err
+	}
+	require.ErrorIs(t, alloc(9), metadata.ErrInvalidCommand, "unregistered broker")
+	require.Zero(t, s.NextProducerID)
+	require.NoError(t, alloc(1))
+	require.NoError(t, alloc(2))
+	require.NoError(t, alloc(1))
+	require.Equal(t, map[int32]int64{1: 2000, 2: 1000}, s.ProducerIDBlocks)
+	require.Equal(t, int64(3000), s.NextProducerID)
 }

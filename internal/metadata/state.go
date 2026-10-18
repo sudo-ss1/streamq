@@ -20,6 +20,10 @@ type State struct {
 	Topics       map[string]*Topic `json:"topics"`
 	// Groups holds committed consumer group offsets (SPEC §5).
 	Groups map[string]GroupOffsets `json:"groups,omitempty"`
+	// NextProducerID is the first producer ID not yet allocated (SPEC §6, DECISIONS D51).
+	NextProducerID int64 `json:"next_producer_id,omitempty"`
+	// ProducerIDBlocks records the start of the last block allocated to each broker.
+	ProducerIDBlocks map[int32]int64 `json:"producer_id_blocks,omitempty"`
 }
 
 // NewState returns a state with the given registered brokers and controller.
@@ -39,6 +43,9 @@ func (s *State) Clone() *State {
 		ControllerID: s.ControllerID,
 		Topics:       make(map[string]*Topic, len(s.Topics)),
 		Groups:       cloneGroups(s.Groups),
+
+		NextProducerID:   s.NextProducerID,
+		ProducerIDBlocks: maps.Clone(s.ProducerIDBlocks),
 	}
 	for name, t := range s.Topics {
 		ct := cloneTopic(*t)
@@ -65,6 +72,9 @@ func (s *State) Snapshot() Snapshot {
 		ControllerID: s.ControllerID,
 		Topics:       make(map[string]Topic, len(s.Topics)),
 		Groups:       cloneGroups(s.Groups),
+
+		NextProducerID:   s.NextProducerID,
+		ProducerIDBlocks: maps.Clone(s.ProducerIDBlocks),
 	}
 	for name, t := range s.Topics {
 		snap.Topics[name] = cloneTopic(*t)
@@ -132,6 +142,8 @@ func (s *State) ApplyInTerm(cmd *streamqv1.MetadataCommand, term uint64) ([]Chan
 		return s.applyUnfenceBroker(c.UnfenceBroker)
 	case *streamqv1.MetadataCommand_AlterIsr:
 		return s.applyAlterISR(c.AlterIsr)
+	case *streamqv1.MetadataCommand_AllocateProducerIds:
+		return s.applyAllocateProducerIDs(c.AllocateProducerIds)
 	default:
 		return nil, fmt.Errorf("empty command: %w", ErrInvalidCommand)
 	}
@@ -495,4 +507,24 @@ func (s *State) applyAlterISR(c *streamqv1.AlterISRCommand) ([]Change, error) {
 	ps.ISR = isr
 	ps.PartitionEpoch++
 	return []Change{{Kind: PartitionChanged, Topic: c.GetTopic(), TopicID: t.ID, Partitions: clonePartitions([]PartitionState{*ps})}}, nil
+}
+
+// ProducerIDBlockSize is how many producer IDs one allocation reserves (SPEC §6).
+const ProducerIDBlockSize = 1000
+
+// applyAllocateProducerIDs reserves the next block of producer IDs for a registered broker and
+// records its start in ProducerIDBlocks (DECISIONS D51).
+func (s *State) applyAllocateProducerIDs(c *streamqv1.AllocateProducerIDsCommand) ([]Change, error) {
+	if c == nil {
+		return nil, fmt.Errorf("empty allocate_producer_ids: %w", ErrInvalidCommand)
+	}
+	if s.brokerIndex(c.GetBrokerId()) < 0 {
+		return nil, fmt.Errorf("allocate producer ids: unknown broker %d: %w", c.GetBrokerId(), ErrInvalidCommand)
+	}
+	if s.ProducerIDBlocks == nil {
+		s.ProducerIDBlocks = make(map[int32]int64)
+	}
+	s.ProducerIDBlocks[c.GetBrokerId()] = s.NextProducerID
+	s.NextProducerID += ProducerIDBlockSize
+	return []Change{{Kind: Applied}}, nil
 }

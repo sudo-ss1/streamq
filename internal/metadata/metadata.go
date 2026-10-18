@@ -95,6 +95,9 @@ type Snapshot struct {
 	// Index is the index of the last command applied into this snapshot (the Raft log index, or
 	// the local store's command sequence number).
 	Index uint64
+	// NextProducerID and ProducerIDBlocks are the producer-ID allocation state (DECISIONS D51).
+	NextProducerID   int64
+	ProducerIDBlocks map[int32]int64
 }
 
 // GroupOffsets are a group's committed offsets: topic → partition → next offset to consume.
