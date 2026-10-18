@@ -1,5 +1,7 @@
 # Build output and project-local tools
 /bin/
+/streamqctl
+/streamq-broker
 /.tools/
 
 # Test and profiling artifacts

@@ -70,6 +70,7 @@ type Config struct {
 
 // Store is the Raft-backed metadata store.
 type Store struct {
+	opened    time.Time // for the last-contact metric before any leader contact
 	cfg       Config
 	logger    *slog.Logger
 	raft      *raft.Raft
@@ -163,7 +164,8 @@ func Open(ctx context.Context, cfg Config) (*Store, error) {
 		return nil, fmt.Errorf("raftstore: start raft: %w", err)
 	}
 	s := &Store{
-		cfg: cfg, logger: logger, raft: r, fsm: f, notifier: n, transport: transport, bolt: bolt, peers: peers,
+		opened: time.Now(),
+		cfg:    cfg, logger: logger, raft: r, fsm: f, notifier: n, transport: transport, bolt: bolt, peers: peers,
 		obsCh: make(chan raft.Observation, 16), obsDone: make(chan struct{}), listeners: map[int]func(bool){},
 	}
 	if err := r.BootstrapCluster(raft.Configuration{Servers: servers}).Error(); err != nil && !errors.Is(err, raft.ErrCantBootstrap) {
@@ -230,7 +232,9 @@ func (s *Store) TransferLeadership(ctx context.Context) error {
 	}
 	f := s.raft.LeadershipTransfer()
 	done := make(chan error, 1)
-	go func() { done <- f.Error() }() // ends when Raft resolves the future (bounded by its own timeout)
+	// The waiter may outlive this call when ctx ends first; it is bounded: Raft resolves a
+	// leadership-transfer future within its election timeout, or with ErrRaftShutdown on Close.
+	go func() { done <- f.Error() }()
 	select {
 	case err := <-done:
 		if err != nil {

@@ -188,6 +188,6 @@ make chaos      # chaos scripts against the compose cluster
 - [x] M5 Metadata Raft
 - [x] M6 Replication
 - [x] M7 Idempotent producer
-- [ ] M8 Observability & ops
+- [x] M8 Observability & ops
 - [ ] M9 Correctness & chaos
 - [ ] M10 Benchmarks & docs

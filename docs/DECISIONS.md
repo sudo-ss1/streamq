@@ -480,7 +480,8 @@ Idempotence is on when `Acks == AcksAll` and `DisableIdempotence` is false, whic
     `streamq_partition_errors_total{method,error_code}`.
   - `streamq_partitions_offline` is exported by the controller (or single-node) only.
   - Consumer lag and the ISR gauges are exported by partition leaders.
-  - Raft last-contact is 0 on the leader.
+  - Raft last-contact is 0 on the leader. A node that has never heard from a leader reports the
+    time since its store opened, so it never looks healthy.
 - **Buckets:** latency buckets run from 0.5 ms to 60 s, to cover 30 s long-polls.
 - **Dependency:** `github.com/prometheus/common` (expfmt/model) and
   `github.com/prometheus/client_model` (the parsed metric types) are used directly by the metrics
@@ -509,4 +510,8 @@ Idempotence is on when `Acks == AcksAll` and `DisableIdempotence` is false, whic
 ## D55. Log level (M8)
 
 `log_level` is a new config key: debug, info (the default), warn or error, applied to the
-broker's JSON slog handler. Request-error logs added later belong at debug level.
+broker's JSON slog handler.
+
+The per-request error debug log planned in M8 §1 is deferred. Request errors are visible through
+`streamq_requests_total{code}` and `streamq_partition_errors_total`, and `metrics.New` takes no
+logger (contract). This is recorded as an override in `docs/plans/M8.md`.

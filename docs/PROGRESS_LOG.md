@@ -471,3 +471,69 @@ the `integration` build tag is linted.
 - No producer epoch fencing: the epoch is always 0, and a re-init gets a new pid instead (D48).
 - No test interleaves two controllers' ID allocations; the term check is unit-tested.
 - Fixed in passing: a data race in `pkg/client/admin_test.go` (an atomic counter).
+
+## M8 — Observability & ops (2026-10-18)
+
+**Built**
+- `internal/metrics` (package A, implementer):
+  - one Prometheus registry per node, with the Go and process collectors;
+  - gRPC interceptors on the client and internal servers: `streamq_requests_total`, and
+    `streamq_request_duration_seconds` with buckets from 0.5 ms to 60 s;
+  - bytes in/out (accepted batches only);
+  - `streamq_partition_errors_total`;
+  - scrape-time collectors:
+    - per-partition LEO and HW;
+    - ISR size and replicas (leader only);
+    - led and under-replicated counts;
+    - offline count (controller only);
+    - consumer lag (leaders only);
+    - Raft state, term, indexes and last contact.
+  - Served on `metrics_addr` and shut down first in Close (D52).
+- Controlled shutdown (main session, SPEC §4.6, D53):
+  - `ControlledShutdown` RPC and controller fence with a `shuttingDown` guard;
+  - Raft `TransferLeadership`;
+  - the `Node.Close` steps under one `controlled_shutdown_timeout_ms` budget.
+- Graceful shutdown on SIGTERM (NFR4): verified end to end.
+- `log_level` config key (D55). `broker_id` appears exactly once on every log line.
+- Deploy (package B, implementer, D54):
+  - multi-stage `Dockerfile` (distroless);
+  - `deploy/docker-compose.yml` with 3 brokers, toxiproxy carrying all broker-to-broker traffic,
+    Prometheus and Grafana, plus the provisioned dashboard;
+  - `make cluster-up` / `cluster-down`.
+- `streamqctl cluster status [--strict]`: brokers live/down, controller, per-topic
+  under-replicated and offline counts.
+- streamqctl produce and consume now route to partition leaders (fixed a multi-broker bug from
+  M2).
+
+**Process**
+- plan-reviewer: REVISE (1 BLOCKER, 4 MAJOR), then APPROVE.
+- Contract commit `4a23203`.
+- Two implementers ran in parallel worktrees: A (metrics) and B (deploy and cluster status). Both
+  were merged `--no-ff` and their worktrees removed.
+- code-reviewer: APPROVE with MINORs, mostly applied. Details are in `docs/plans/M8.md`.
+
+**Verification**: `make lint test test-int` green.
+- Shutdown tests:
+  - leadership moves before Close finishes and Stop takes < 3 s with a 60 s session timeout;
+  - controller self-shutdown moves the Raft leadership;
+  - negative control: a failing request spends the full budget;
+  - SIGTERM: exit 0, recovery point = LEO, HW checkpointed, producer snapshot at the LEO.
+
+  Stable 3/3.
+- Metrics e2e test: scrapes every node; request, byte and partition-error counters; LEO/HW/ISR;
+  exactly one Raft leader; under-replicated after a stop; offline RF 1 partitions reported only
+  by the controller; no Raft series in single-node mode.
+- Docker smoke test:
+  - `make cluster-up` brought up 3 live brokers through toxiproxy;
+  - 100 records produced and consumed with streamqctl;
+  - Prometheus: 6 led partitions, 1 Raft leader;
+  - `docker compose stop broker2` took 0.6 s (controlled shutdown: 114 ms);
+  - the cluster reported healthy after the restart.
+
+**Known limitations / deferred MINORs**
+- The streamqctl router resolves leaders once. `consume --follow` ends on a leader move, and
+  per-leader fetches are sequential.
+- No per-request debug log in the interceptor; errors are visible in the metrics (D55).
+- `want_shutdown` heartbeat flag not implemented. A heartbeat already in flight to a newly
+  elected controller can briefly unfence a stopping broker (D53).
+- Clients inside the compose network are unsupported; brokers advertise `localhost` (D54).

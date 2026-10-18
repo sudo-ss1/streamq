@@ -78,13 +78,25 @@ func value(fams map[string]*dto.MetricFamily, name string, want map[string]strin
 
 func metricsCluster(t *testing.T) *testnode.Cluster {
 	t.Helper()
+	// Bound here, on the test goroutine (the options hook runs on the cluster's start
+	// goroutines); a restarted node gets a fresh listener.
+	listeners := make(chan net.Listener, 3)
+	for range 3 {
+		lis, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
+		require.NoError(t, err)
+		listeners <- lis
+	}
 	c := testnode.StartClusterWith(t, 3, func(cfg *config.Config) {
 		cfg.TopicDefaults.MinInsyncReplicas = 2
 		cfg.ReplicaLagMaxMs = 1500
 	}, func(_ int32, o *node.Options) {
-		lis, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
-		require.NoError(t, err)
-		o.Metrics = lis
+		select {
+		case o.Metrics = <-listeners:
+		default:
+			if lis, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0"); err == nil {
+				o.Metrics = lis
+			}
+		}
 	})
 	waitAllUnfenced(t, c, []int32{1, 2, 3}, 3)
 	return c
@@ -99,7 +111,11 @@ func TestMetricsEndToEnd(t *testing.T) {
 	leaderOf := map[int32]int32{}
 	for _, p := range partitionsOf(metadataOf(t, c.Addr(1), topic), topic) {
 		leaderOf[p.GetPartition()] = p.GetLeaderId()
-		for range 5 {
+		// The leader may not have opened the partition yet; a rejected attempt appends nothing.
+		require.Eventually(t, func() bool {
+			return produceTo(t, c.Addr(p.GetLeaderId()), topic, p.GetPartition()) == streamqv1.ErrorCode_ERROR_CODE_NONE
+		}, 10*time.Second, 20*time.Millisecond)
+		for range 4 {
 			require.Equal(t, streamqv1.ErrorCode_ERROR_CODE_NONE, produceTo(t, c.Addr(p.GetLeaderId()), topic, p.GetPartition()))
 		}
 	}
@@ -129,6 +145,17 @@ func TestMetricsEndToEnd(t *testing.T) {
 	v, _ = value(l0, "streamq_requests_total", map[string]string{"service": "internal", "method": "ReplicaFetch"})
 	require.Positive(t, v, "internal API instrumented")
 
+	// A rejected batch counts as a partition error and adds no bytes in (plan R6, R20).
+	errLabels := map[string]string{"method": "Produce", "error_code": "ERROR_CODE_UNKNOWN_TOPIC_OR_PARTITION"}
+	bytesBefore, _ := value(l0, "streamq_bytes_in_total", map[string]string{"topic": topic})
+	errsBefore, _ := value(l0, "streamq_partition_errors_total", errLabels)
+	require.Equal(t, streamqv1.ErrorCode_ERROR_CODE_UNKNOWN_TOPIC_OR_PARTITION, produceTo(t, c.Addr(leaderOf[0]), topic, 99))
+	l0 = scrape(t, c.Node(leaderOf[0]).MetricsAddr())
+	v, _ = value(l0, "streamq_partition_errors_total", errLabels)
+	require.InDelta(t, errsBefore+1, v, 0)
+	v, _ = value(l0, "streamq_bytes_in_total", map[string]string{"topic": topic})
+	require.InDelta(t, bytesBefore, v, 0)
+
 	// LEO/HW gauges match the leader's own offsets; ISR size is reported by the leader.
 	require.Eventually(t, func() bool {
 		fams := scrape(t, c.Node(leaderOf[0]).MetricsAddr())
@@ -139,13 +166,24 @@ func TestMetricsEndToEnd(t *testing.T) {
 		return leo == 5 && hw == 5 && isr == 3
 	}, 10*time.Second, 50*time.Millisecond)
 
-	// Stop a broker: some leader reports under-replicated partitions, and offline partitions are
-	// reported (as 0) by the controller only.
+	// Stop a broker: some leader reports under-replicated partitions, and the controller alone
+	// reports the RF 1 partitions the victim led as offline.
 	controller := metadataOf(t, c.Addr(1), topic).GetControllerId()
 	victim := int32(1)
 	if victim == controller {
 		victim = 2
 	}
+	resp2, err := dial(t, c.Addr(1)).CreateTopic(testCtx(t), &streamqv1.CreateTopicRequest{Name: "solo", Partitions: 3, ReplicationFactor: 1,
+		Configs: map[string]string{"min_insync_replicas": "1"}})
+	require.NoError(t, err)
+	require.Equal(t, streamqv1.ErrorCode_ERROR_CODE_NONE, resp2.GetErrorCode(), resp2.GetErrorMessage())
+	soloOnVictim := 0
+	for _, p := range partitionsOf(metadataOf(t, c.Addr(1), "solo"), "solo") {
+		if p.GetLeaderId() == victim {
+			soloOnVictim++
+		}
+	}
+	require.Positive(t, soloOnVictim, "an RF 1 partition lives on the victim")
 	c.Stop(victim)
 	survivors := []int32{}
 	for id := int32(1); id <= 3; id++ {
@@ -161,15 +199,16 @@ func TestMetricsEndToEnd(t *testing.T) {
 		}
 		return under > 0
 	}, 20*time.Second, 100*time.Millisecond, "under-replicated partitions reported")
-	reporters, offline := 0, 0.0
-	for _, id := range survivors {
-		if v, ok := value(scrape(t, c.Node(id).MetricsAddr()), "streamq_partitions_offline", nil); ok {
-			reporters++
-			offline += v
+	require.Eventually(t, func() bool {
+		reporters, offline := 0, 0.0
+		for _, id := range survivors {
+			if v, ok := value(scrape(t, c.Node(id).MetricsAddr()), "streamq_partitions_offline", nil); ok {
+				reporters++
+				offline += v
+			}
 		}
-	}
-	require.Equal(t, 1, reporters, "only the controller reports offline partitions")
-	require.Zero(t, offline)
+		return reporters == 1 && offline == float64(soloOnVictim)
+	}, 10*time.Second, 100*time.Millisecond, "only the controller reports the offline partitions")
 
 	c.Restart(victim)
 	require.Eventually(t, func() bool {
