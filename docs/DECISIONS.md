@@ -482,6 +482,7 @@ Idempotence is on when `Acks == AcksAll` and `DisableIdempotence` is false, whic
   - Consumer lag and the ISR gauges are exported by partition leaders.
   - Raft last-contact is 0 on the leader.
 - **Buckets:** latency buckets run from 0.5 ms to 60 s, to cover 30 s long-polls.
-- **Dependency:** `github.com/prometheus/common` (expfmt/model) is used directly by the metrics
+- **Dependency:** `github.com/prometheus/common` (expfmt/model) and
+  `github.com/prometheus/client_model` (the parsed metric types) are used directly by the metrics
   tests. It comes from the same project as the approved client_golang, was approved by the M8
   plan-reviewer, and was already transitive.
