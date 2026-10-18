@@ -5,6 +5,9 @@ package config
 
 import (
 	"errors"
+	"fmt"
+	"io"
+	"os"
 
 	"gopkg.in/yaml.v3"
 
@@ -13,8 +16,6 @@ import (
 
 // ErrInvalidConfig wraps every validation failure.
 var ErrInvalidConfig = errors.New("config: invalid")
-
-var errUnimplemented = errors.New("config: unimplemented")
 
 // ClusterMember is one static cluster member (identical list on every broker).
 type ClusterMember struct {
@@ -59,35 +60,75 @@ type Config struct {
 }
 
 // Default returns the SPEC §10 defaults.
-func Default() Config { return Config{} }
+func Default() Config {
+	lc := storage.DefaultLogConfig()
+	return Config{
+		BrokerID:       1,
+		ListenAddr:     ":9092",
+		InternalAddr:   ":9093",
+		RaftAddr:       ":9094",
+		AdvertisedHost: "localhost",
+		DataDir:        "/var/lib/streamq",
+		MetricsAddr:    ":9100",
+		TopicDefaults: TopicDefaults{
+			Partitions:        3,
+			ReplicationFactor: 3,
+			MinInsyncReplicas: 2,
+			SegmentBytes:      lc.SegmentBytes,
+			SegmentMs:         lc.SegmentMs,
+			RetentionMs:       lc.RetentionMs,
+			RetentionBytes:    lc.RetentionBytes,
+			MaxMessageBytes:   int32(lc.MaxMessageBytes),
+			FlushPolicy:       string(lc.FlushPolicy),
+			FlushMs:           lc.FlushMs,
+		},
+		ReplicaLagMaxMs:           10_000,
+		BrokerHeartbeatIntervalMs: 2_000,
+		BrokerSessionTimeoutMs:    9_000,
+		GroupSessionTimeoutMs:     10_000,
+		GroupRebalanceTimeoutMs:   30_000,
+		FileDeleteDelayMs:         60_000,
+		ProducerIDExpirationMs:    604_800_000,
+	}
+}
 
 // Load builds a Config from defaults, then the YAML file at path (if non-empty; unknown keys are
 // an error), then env (a list of "KEY=value" as from os.Environ; only STREAMQ_* keys are used),
 // then flags (dotted yaml paths such as "topic_defaults.partitions" mapped to values), and
 // validates the result. Env and flags set scalar keys only; "cluster" is file-only.
 func Load(path string, env []string, flags map[string]string) (Config, error) {
-	_, _, _ = path, env, flags
-	_ = yaml.Unmarshal
-	return Config{}, errUnimplemented
+	cfg := Default()
+	if path != "" {
+		if err := loadFile(path, &cfg); err != nil {
+			return Config{}, err
+		}
+	}
+	if err := applyEnv(&cfg, env); err != nil {
+		return Config{}, err
+	}
+	if err := applyFlags(&cfg, flags); err != nil {
+		return Config{}, err
+	}
+	if err := cfg.Validate(); err != nil {
+		return Config{}, err
+	}
+	return cfg, nil
 }
 
-// Validate reports every problem, joined and wrapped in ErrInvalidConfig.
-func (c Config) Validate() error { return errUnimplemented }
-
-// TopicConfig is the resolved configuration of one topic.
-type TopicConfig struct {
-	Log               storage.LogConfig
-	MinInsyncReplicas int32
-}
-
-// TopicConfigKeys returns the keys accepted as topic config overrides (the SPEC §10
-// topic_defaults keys other than partitions and replication_factor).
-func TopicConfigKeys() []string { return nil }
-
-// ResolveTopicConfig applies per-topic overrides (keys from TopicConfigKeys, values as decimal
-// strings or flush policy names) over the defaults and validates the result. Unknown keys or bad
-// values return an error wrapping ErrInvalidConfig.
-func ResolveTopicConfig(defaults TopicDefaults, overrides map[string]string) (TopicConfig, error) {
-	_, _ = defaults, overrides
-	return TopicConfig{}, errUnimplemented
+// loadFile decodes the YAML file at path over cfg, rejecting unknown keys.
+func loadFile(path string, cfg *Config) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("config: open %s: %w", path, err)
+	}
+	defer func() { _ = f.Close() }()
+	dec := yaml.NewDecoder(f)
+	dec.KnownFields(true)
+	if err := dec.Decode(cfg); err != nil {
+		if errors.Is(err, io.EOF) {
+			return nil // empty file: keep defaults
+		}
+		return fmt.Errorf("%w: file %s: %w", ErrInvalidConfig, path, err)
+	}
+	return nil
 }
