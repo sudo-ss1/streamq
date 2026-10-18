@@ -30,6 +30,9 @@ enum ErrorCode {
   ERROR_CODE_INVALID_TIMESTAMP = 21;
   // Internal API: a broker heartbeat or request from a stale broker incarnation.
   ERROR_CODE_STALE_BROKER_EPOCH = 22;
+  // Internal API: an AlterISR whose new ISR is invalid (not replicas, missing the leader, fenced
+  // members).
+  ERROR_CODE_INVALID_ISR = 23;
 }
 
 // StreamQService is the public client API (SPEC §7.1).

@@ -51,6 +51,9 @@ const (
 	ErrorCode_ERROR_CODE_INVALID_TIMESTAMP ErrorCode = 21
 	// Internal API: a broker heartbeat or request from a stale broker incarnation.
 	ErrorCode_ERROR_CODE_STALE_BROKER_EPOCH ErrorCode = 22
+	// Internal API: an AlterISR whose new ISR is invalid (not replicas, missing the leader, fenced
+	// members).
+	ErrorCode_ERROR_CODE_INVALID_ISR ErrorCode = 23
 )
 
 // Enum value maps for ErrorCode.
@@ -79,6 +82,7 @@ var (
 		20: "ERROR_CODE_UNKNOWN",
 		21: "ERROR_CODE_INVALID_TIMESTAMP",
 		22: "ERROR_CODE_STALE_BROKER_EPOCH",
+		23: "ERROR_CODE_INVALID_ISR",
 	}
 	ErrorCode_value = map[string]int32{
 		"ERROR_CODE_NONE":                       0,
@@ -104,6 +108,7 @@ var (
 		"ERROR_CODE_UNKNOWN":                    20,
 		"ERROR_CODE_INVALID_TIMESTAMP":          21,
 		"ERROR_CODE_STALE_BROKER_EPOCH":         22,
+		"ERROR_CODE_INVALID_ISR":                23,
 	}
 )
 
@@ -3482,7 +3487,7 @@ const file_v1_streamq_proto_rawDesc = "" +
 	"\bassignor\x18\x05 \x01(\tR\bassignor\x121\n" +
 	"\amembers\x18\x06 \x03(\v2\x17.streamq.v1.GroupMemberR\amembers\x126\n" +
 	"\tcommitted\x18\a \x03(\v2\x18.streamq.v1.OffsetCommitR\tcommitted\x12#\n" +
-	"\rerror_message\x18\b \x01(\tR\ferrorMessage*\x94\x06\n" +
+	"\rerror_message\x18\b \x01(\tR\ferrorMessage*\xb0\x06\n" +
 	"\tErrorCode\x12\x13\n" +
 	"\x0fERROR_CODE_NONE\x10\x00\x12)\n" +
 	"%ERROR_CODE_UNKNOWN_TOPIC_OR_PARTITION\x10\x01\x12#\n" +
@@ -3507,7 +3512,8 @@ const file_v1_streamq_proto_rawDesc = "" +
 	"\x18ERROR_CODE_INVALID_TOPIC\x10\x13\x12\x16\n" +
 	"\x12ERROR_CODE_UNKNOWN\x10\x14\x12 \n" +
 	"\x1cERROR_CODE_INVALID_TIMESTAMP\x10\x15\x12!\n" +
-	"\x1dERROR_CODE_STALE_BROKER_EPOCH\x10\x16*J\n" +
+	"\x1dERROR_CODE_STALE_BROKER_EPOCH\x10\x16\x12\x1a\n" +
+	"\x16ERROR_CODE_INVALID_ISR\x10\x17*J\n" +
 	"\x04Acks\x12\x14\n" +
 	"\x10ACKS_UNSPECIFIED\x10\x00\x12\r\n" +
 	"\tACKS_NONE\x10\x01\x12\x0f\n" +

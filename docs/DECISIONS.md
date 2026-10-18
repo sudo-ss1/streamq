@@ -315,3 +315,67 @@ the slog adapter needs it.
 
 Code 22, internal API only, Kafka's name. A heartbeat from an old broker incarnation gets it, and
 the broker re-registers.
+
+## D39. Follower truncation deletes segments immediately (M6)
+
+`Log.TruncateTo` deletes segments wholly at or after the cut immediately (newest-first, with a
+dir fsync after each), then cuts the containing segment at a batch boundary. Only followers
+truncate, and followers serve no consumer reads. The caller then synchronously rewrites the
+recovery-point checkpoint before appending again. A replica fetch from a just-demoted leader racing
+its truncation can return data that is then truncated. That is harmless: the fetching follower
+re-truncates against the new leader through OffsetForLeaderEpoch.
+
+## D40. High watermark rules (M6)
+
+The leader's HW is the min LEO over the maximal ISR (D45) and never decreases while it remains
+leader. A follower's HW is min(leader HW, own LEO). A follower lowers its HW only when truncating
+below it, so a later leader never exposes truncated data (FR4).
+
+## D41. ISR expansion rule (M6)
+
+A follower joins the ISR when its LEO ≥ the HW and ≥ the start offset of the leader's current
+epoch (KIP-841), and it is not fenced in the leader's metadata. Kafka's caught-up rule drives
+shrinking: a follower is caught up at fetch time if it fetched from the current LEO, or as of its
+previous fetch if it reached the LEO observed then. It is removed after `replica_lag_max_ms`
+without catching up.
+
+## D42. Replication concurrency model (M6)
+
+There is one fetcher goroutine per followed partition, owned and joined by the broker, and one RPC
+per partition (no per-broker batching). Fetchers exit only on cancellation and back off on errors.
+AlterISR requests are sent by one broker-wide ISR loop, at most one in flight per partition.
+
+## D43. acks=all purgatory (M6)
+
+An acks=all produce waits on the gRPC handler goroutine, using the partition's HW and
+leadership-change channels with an injected-clock timeout. It succeeds only if the replica is still
+leader in the epoch the batch was appended in, and the HW has passed the batch. The default wait is
+`timeout_ms` (30 s if 0), capped just below the RPC deadline.
+
+## D44. NOT_ENOUGH_REPLICAS after append (M6)
+
+When the HW passes an acks=all batch but the committed ISR has dropped below min.insync, the
+produce returns NOT_ENOUGH_REPLICAS (retriable; the data may still commit). Kafka's
+NOT_ENOUGH_REPLICAS_AFTER_APPEND maps to this §7.3 code.
+
+## D45. Maximal ISR (M6, KIP-497)
+
+The leader computes the HW over committed ISR ∪ pending AlterISR additions, and keeps counting
+members a pending shrink would remove. min.insync uses the committed ISR. Pending state is cleared
+only when newer partition metadata arrives, or when the controller rejects the ISR content at
+matching epochs. A FENCED reply keeps it, which freezes ISR changes for that partition until its
+metadata catches up (as in Kafka). That is the safe direction: the HW stalls rather than acking
+under-replicated data. Transport errors retry the same request.
+
+## D46. KIP-279 follower truncation (M6)
+
+A follower asks the leader for the end offset of its latest epoch and truncates to
+min(LEO, leader end). If the leader knows only an older epoch E', it also truncates to its own end
+of E' and repeats. Without epoch information on either side it truncates to its HW. Below the
+leader's log start it restarts empty at that offset.
+
+## D47. `INVALID_ISR` internal error code (M6)
+
+Code 23, internal API only. AlterISR content rejections (members that are not replicas, the leader
+missing, fenced members) are distinguished from FENCED_LEADER_EPOCH, because the leader clears
+its pending state only for the former.

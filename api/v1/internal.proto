@@ -19,6 +19,7 @@ message MetadataCommand {
     RegisterBrokerCommand register_broker = 13;
     FenceBrokerCommand fence_broker = 14;
     UnfenceBrokerCommand unfence_broker = 15;
+    AlterISRCommand alter_isr = 16;
   }
 }
 
@@ -73,6 +74,16 @@ message UnfenceBrokerCommand {
   int64 broker_epoch = 2;
 }
 
+// AlterISRCommand changes a partition's ISR on behalf of its leader (SPEC §4.3). It applies only
+// if leader_epoch and partition_epoch match the current ones.
+message AlterISRCommand {
+  string topic = 1;
+  int32 partition = 2;
+  int32 leader_epoch = 3;
+  int32 partition_epoch = 4;
+  repeated int32 new_isr = 5;
+}
+
 // StreamQInternalService is the broker-to-broker API (SPEC §7.2), served on internal_addr.
 service StreamQInternalService {
   // RegisterBroker registers a broker with the controller.
@@ -81,6 +92,69 @@ service StreamQInternalService {
   rpc BrokerHeartbeat(BrokerHeartbeatRequest) returns (BrokerHeartbeatResponse);
   // ForwardMetadata applies a metadata command on the controller (follower forwarding).
   rpc ForwardMetadata(ForwardMetadataRequest) returns (ForwardMetadataResponse);
+  // ReplicaFetch is a follower's pull from the partition leader (SPEC §4.1).
+  rpc ReplicaFetch(ReplicaFetchRequest) returns (ReplicaFetchResponse);
+  // OffsetForLeaderEpoch returns the end offset of an epoch on the leader (SPEC §4.4).
+  rpc OffsetForLeaderEpoch(OffsetForLeaderEpochRequest) returns (OffsetForLeaderEpochResponse);
+  // AlterISR asks the controller to change a partition's ISR (SPEC §4.3).
+  rpc AlterISR(AlterISRRequest) returns (AlterISRResponse);
+}
+
+message ReplicaFetchRequest {
+  int32 replica_id = 1;
+  string topic = 2;
+  int32 partition = 3;
+  int32 leader_epoch = 4;
+  int64 fetch_offset = 5;
+  int32 max_bytes = 6;
+  int32 max_wait_ms = 7;
+  // The follower's registration epoch; stale incarnations are rejected (KIP-903).
+  int64 broker_epoch = 8;
+}
+
+message ReplicaFetchResponse {
+  ErrorCode error_code = 1;
+  string error_message = 2;
+  int64 high_watermark = 3;
+  int64 log_start_offset = 4;
+  int64 log_end_offset = 5;
+  // Whole batches from fetch_offset, up to the leader's LEO.
+  bytes records = 6;
+}
+
+message OffsetForLeaderEpochRequest {
+  string topic = 1;
+  int32 partition = 2;
+  // The follower's view of the current leader epoch (fencing check).
+  int32 current_leader_epoch = 3;
+  // The epoch whose end offset is wanted (the follower's latest epoch).
+  int32 requested_epoch = 4;
+}
+
+message OffsetForLeaderEpochResponse {
+  ErrorCode error_code = 1;
+  string error_message = 2;
+  // The largest leader epoch <= requested_epoch, or -1.
+  int32 leader_epoch = 3;
+  // That epoch's end offset, or -1.
+  int64 end_offset = 4;
+  // The leader's log start offset (for followers entirely below it).
+  int64 log_start_offset = 5;
+}
+
+message AlterISRRequest {
+  int32 leader_id = 1;
+  string topic = 2;
+  int32 partition = 3;
+  int32 leader_epoch = 4;
+  int32 partition_epoch = 5;
+  repeated int32 new_isr = 6;
+}
+
+message AlterISRResponse {
+  ErrorCode error_code = 1;
+  string error_message = 2;
+  int32 controller_id = 3;
 }
 
 message RegisterBrokerRequest {

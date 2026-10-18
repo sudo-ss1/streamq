@@ -19,9 +19,12 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	StreamQInternalService_RegisterBroker_FullMethodName  = "/streamq.v1.StreamQInternalService/RegisterBroker"
-	StreamQInternalService_BrokerHeartbeat_FullMethodName = "/streamq.v1.StreamQInternalService/BrokerHeartbeat"
-	StreamQInternalService_ForwardMetadata_FullMethodName = "/streamq.v1.StreamQInternalService/ForwardMetadata"
+	StreamQInternalService_RegisterBroker_FullMethodName       = "/streamq.v1.StreamQInternalService/RegisterBroker"
+	StreamQInternalService_BrokerHeartbeat_FullMethodName      = "/streamq.v1.StreamQInternalService/BrokerHeartbeat"
+	StreamQInternalService_ForwardMetadata_FullMethodName      = "/streamq.v1.StreamQInternalService/ForwardMetadata"
+	StreamQInternalService_ReplicaFetch_FullMethodName         = "/streamq.v1.StreamQInternalService/ReplicaFetch"
+	StreamQInternalService_OffsetForLeaderEpoch_FullMethodName = "/streamq.v1.StreamQInternalService/OffsetForLeaderEpoch"
+	StreamQInternalService_AlterISR_FullMethodName             = "/streamq.v1.StreamQInternalService/AlterISR"
 )
 
 // StreamQInternalServiceClient is the client API for StreamQInternalService service.
@@ -36,6 +39,12 @@ type StreamQInternalServiceClient interface {
 	BrokerHeartbeat(ctx context.Context, in *BrokerHeartbeatRequest, opts ...grpc.CallOption) (*BrokerHeartbeatResponse, error)
 	// ForwardMetadata applies a metadata command on the controller (follower forwarding).
 	ForwardMetadata(ctx context.Context, in *ForwardMetadataRequest, opts ...grpc.CallOption) (*ForwardMetadataResponse, error)
+	// ReplicaFetch is a follower's pull from the partition leader (SPEC §4.1).
+	ReplicaFetch(ctx context.Context, in *ReplicaFetchRequest, opts ...grpc.CallOption) (*ReplicaFetchResponse, error)
+	// OffsetForLeaderEpoch returns the end offset of an epoch on the leader (SPEC §4.4).
+	OffsetForLeaderEpoch(ctx context.Context, in *OffsetForLeaderEpochRequest, opts ...grpc.CallOption) (*OffsetForLeaderEpochResponse, error)
+	// AlterISR asks the controller to change a partition's ISR (SPEC §4.3).
+	AlterISR(ctx context.Context, in *AlterISRRequest, opts ...grpc.CallOption) (*AlterISRResponse, error)
 }
 
 type streamQInternalServiceClient struct {
@@ -76,6 +85,36 @@ func (c *streamQInternalServiceClient) ForwardMetadata(ctx context.Context, in *
 	return out, nil
 }
 
+func (c *streamQInternalServiceClient) ReplicaFetch(ctx context.Context, in *ReplicaFetchRequest, opts ...grpc.CallOption) (*ReplicaFetchResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReplicaFetchResponse)
+	err := c.cc.Invoke(ctx, StreamQInternalService_ReplicaFetch_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *streamQInternalServiceClient) OffsetForLeaderEpoch(ctx context.Context, in *OffsetForLeaderEpochRequest, opts ...grpc.CallOption) (*OffsetForLeaderEpochResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(OffsetForLeaderEpochResponse)
+	err := c.cc.Invoke(ctx, StreamQInternalService_OffsetForLeaderEpoch_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *streamQInternalServiceClient) AlterISR(ctx context.Context, in *AlterISRRequest, opts ...grpc.CallOption) (*AlterISRResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AlterISRResponse)
+	err := c.cc.Invoke(ctx, StreamQInternalService_AlterISR_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // StreamQInternalServiceServer is the server API for StreamQInternalService service.
 // All implementations must embed UnimplementedStreamQInternalServiceServer
 // for forward compatibility.
@@ -88,6 +127,12 @@ type StreamQInternalServiceServer interface {
 	BrokerHeartbeat(context.Context, *BrokerHeartbeatRequest) (*BrokerHeartbeatResponse, error)
 	// ForwardMetadata applies a metadata command on the controller (follower forwarding).
 	ForwardMetadata(context.Context, *ForwardMetadataRequest) (*ForwardMetadataResponse, error)
+	// ReplicaFetch is a follower's pull from the partition leader (SPEC §4.1).
+	ReplicaFetch(context.Context, *ReplicaFetchRequest) (*ReplicaFetchResponse, error)
+	// OffsetForLeaderEpoch returns the end offset of an epoch on the leader (SPEC §4.4).
+	OffsetForLeaderEpoch(context.Context, *OffsetForLeaderEpochRequest) (*OffsetForLeaderEpochResponse, error)
+	// AlterISR asks the controller to change a partition's ISR (SPEC §4.3).
+	AlterISR(context.Context, *AlterISRRequest) (*AlterISRResponse, error)
 	mustEmbedUnimplementedStreamQInternalServiceServer()
 }
 
@@ -106,6 +151,15 @@ func (UnimplementedStreamQInternalServiceServer) BrokerHeartbeat(context.Context
 }
 func (UnimplementedStreamQInternalServiceServer) ForwardMetadata(context.Context, *ForwardMetadataRequest) (*ForwardMetadataResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ForwardMetadata not implemented")
+}
+func (UnimplementedStreamQInternalServiceServer) ReplicaFetch(context.Context, *ReplicaFetchRequest) (*ReplicaFetchResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ReplicaFetch not implemented")
+}
+func (UnimplementedStreamQInternalServiceServer) OffsetForLeaderEpoch(context.Context, *OffsetForLeaderEpochRequest) (*OffsetForLeaderEpochResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method OffsetForLeaderEpoch not implemented")
+}
+func (UnimplementedStreamQInternalServiceServer) AlterISR(context.Context, *AlterISRRequest) (*AlterISRResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AlterISR not implemented")
 }
 func (UnimplementedStreamQInternalServiceServer) mustEmbedUnimplementedStreamQInternalServiceServer() {
 }
@@ -183,6 +237,60 @@ func _StreamQInternalService_ForwardMetadata_Handler(srv interface{}, ctx contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _StreamQInternalService_ReplicaFetch_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReplicaFetchRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(StreamQInternalServiceServer).ReplicaFetch(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: StreamQInternalService_ReplicaFetch_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(StreamQInternalServiceServer).ReplicaFetch(ctx, req.(*ReplicaFetchRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _StreamQInternalService_OffsetForLeaderEpoch_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(OffsetForLeaderEpochRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(StreamQInternalServiceServer).OffsetForLeaderEpoch(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: StreamQInternalService_OffsetForLeaderEpoch_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(StreamQInternalServiceServer).OffsetForLeaderEpoch(ctx, req.(*OffsetForLeaderEpochRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _StreamQInternalService_AlterISR_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AlterISRRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(StreamQInternalServiceServer).AlterISR(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: StreamQInternalService_AlterISR_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(StreamQInternalServiceServer).AlterISR(ctx, req.(*AlterISRRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // StreamQInternalService_ServiceDesc is the grpc.ServiceDesc for StreamQInternalService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -201,6 +309,18 @@ var StreamQInternalService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ForwardMetadata",
 			Handler:    _StreamQInternalService_ForwardMetadata_Handler,
+		},
+		{
+			MethodName: "ReplicaFetch",
+			Handler:    _StreamQInternalService_ReplicaFetch_Handler,
+		},
+		{
+			MethodName: "OffsetForLeaderEpoch",
+			Handler:    _StreamQInternalService_OffsetForLeaderEpoch_Handler,
+		},
+		{
+			MethodName: "AlterISR",
+			Handler:    _StreamQInternalService_AlterISR_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
