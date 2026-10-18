@@ -240,9 +240,13 @@ func TestProducerStickyPartitioner(t *testing.T) {
 		require.Greater(t, b.RecordCount(), int32(1), "unkeyed records are batched together")
 		parts = append(parts, pp.GetPartition())
 	}
-	for i := 1; i < len(parts); i++ {
-		require.NotEqual(t, parts[i-1], parts[i], "the sticky partition moves after each batch")
+	// Senders of different partitions run concurrently, so request order is not batch order;
+	// the sticky partition moving shows up as more than one partition being used.
+	distinct := map[int32]bool{}
+	for _, p := range parts {
+		distinct[p] = true
 	}
+	require.GreaterOrEqual(t, len(distinct), 2, "the sticky partition moves after each batch")
 }
 
 func TestProducerBatchSizeSealsAndOrder(t *testing.T) {
@@ -555,12 +559,18 @@ func TestProducerUnknownTopic(t *testing.T) {
 
 	// The topic appears while Produce waits for it.
 	p2, _ := newTestProducer(t, c, ProducerConfig{MaxBlock: time.Minute})
-	go func() {
-		require.Eventually(t, func() bool { return fb.count("Metadata") > 3 }, 10*time.Second, time.Millisecond)
-		fb.mu.Lock()
-		fb.topics["later"] = 1
-		fb.mu.Unlock()
-	}()
+	// The topic is created by the 4th metadata request (the hook runs before the default handler).
+	var calls atomic.Int32
+	fb.mu.Lock()
+	fb.onMetadata = func(*streamqv1.MetadataRequest) (*streamqv1.MetadataResponse, error) {
+		if calls.Add(1) == 4 {
+			fb.mu.Lock()
+			fb.topics["later"] = 1
+			fb.mu.Unlock()
+		}
+		return nil, nil
+	}
+	fb.mu.Unlock()
 	_, err = p2.ProduceSync(context.Background(), Record{Topic: "later", Value: []byte("v")})
 	require.NoError(t, err)
 }

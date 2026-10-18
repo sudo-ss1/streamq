@@ -26,9 +26,9 @@ type Record struct {
 	// records without a key).
 	Partition    int32
 	UsePartition bool
-	Key       []byte // nil = no key
-	Value     []byte
-	Headers   []Header
+	Key          []byte // nil = no key
+	Value        []byte
+	Headers      []Header
 	// Timestamp is the record's CreateTime; the zero value means "now" when producing.
 	Timestamp time.Time
 	// Offset is set on consumed records.

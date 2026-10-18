@@ -141,12 +141,13 @@ func TestMetadataRefreshCoalesces(t *testing.T) {
 		return nil, nil
 	}
 	var wg sync.WaitGroup
+	errs := make(chan error, 10)
 	for range 10 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			_, err := c.partitionCount(context.Background(), "t")
-			require.NoError(t, err)
+			errs <- err
 		}()
 	}
 	<-entered
@@ -161,6 +162,10 @@ func TestMetadataRefreshCoalesces(t *testing.T) {
 	}, 5*time.Second, time.Millisecond)
 	close(release)
 	wg.Wait()
+	close(errs)
+	for err := range errs {
+		require.NoError(t, err)
+	}
 	require.Equal(t, 1, fb.count("Metadata"), "concurrent refreshes share one RPC")
 }
 

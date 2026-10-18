@@ -32,7 +32,7 @@ type DefaultPartitioner struct {
 func NewDefaultPartitioner() *DefaultPartitioner {
 	return &DefaultPartitioner{
 		sticky: map[string]int32{},
-		intN:   func(n int32) int32 { return rand.Int32N(n) }, //nolint:gosec // G404: non-cryptographic partition choice
+		intN:   rand.Int32N,
 	}
 }
 

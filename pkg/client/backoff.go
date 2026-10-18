@@ -13,7 +13,7 @@ type backoff struct {
 }
 
 func newBackoff(base, maxDelay time.Duration) backoff {
-	return backoff{base: base, max: maxDelay, rand: rand.Float64} //nolint:gosec // jitter, not security
+	return backoff{base: base, max: maxDelay, rand: rand.Float64}
 }
 
 // delay returns the delay before retry attempt n (n = 0 for the first retry).

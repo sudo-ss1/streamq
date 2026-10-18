@@ -86,9 +86,9 @@ type fakeBroker struct {
 	id     int32
 	host   string
 	port   int32
-	topics map[string]int32                    // name -> partitions (leader = id, epoch = 0)
-	logs   map[TopicPartition][]record.Record  // appended records with offsets
-	calls  map[string]int                      // RPC name -> count
+	topics map[string]int32                   // name -> partitions (leader = id, epoch = 0)
+	logs   map[TopicPartition][]record.Record // appended records with offsets
+	calls  map[string]int                     // RPC name -> count
 
 	produceReqs []*streamqv1.ProduceRequest
 	fetchReqs   []*streamqv1.FetchRequest

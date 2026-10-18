@@ -245,6 +245,7 @@ func (p *Producer) Produce(ctx context.Context, rec Record, cb func(RecordMetada
 			p.buf.Release(size)
 			return fmt.Errorf("client: %s/%d: %w", rec.Topic, part, ErrUnknownTopicOrPartition)
 		}
+		//nolint:contextcheck // the sender it may start lives for the producer's lifetime, not this call
 		ps, err := p.partition(TopicPartition{Topic: rec.Topic, Partition: part})
 		if err != nil {
 			p.buf.Release(size)
@@ -294,7 +295,7 @@ func (p *Producer) waitTopic(ctx context.Context, topic string) (*topicMeta, err
 			return nil, err
 		}
 		if !p.wait(ctx, p.client.backoff.delay(attempt)) {
-			return nil, fmt.Errorf("client: topic %q not available (last error: %v): %w", topic, err, ErrUnknownTopicOrPartition)
+			return nil, fmt.Errorf("client: topic %q not available: %w (last error: %w)", topic, ErrUnknownTopicOrPartition, err)
 		}
 	}
 }
