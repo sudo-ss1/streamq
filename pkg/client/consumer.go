@@ -386,14 +386,7 @@ func (c *Consumer) route(ctx context.Context, tps []TopicPartition) ([]*consumer
 	var routes []*consumerRoute
 	failed := map[TopicPartition]error{}
 	for _, tp := range tps {
-		api, epoch, err := c.client.leader(ctx, tp)
-		var leaderID int32
-		if err == nil {
-			var tm *topicMeta
-			if tm, err = c.client.topic(ctx, tp.Topic); err == nil {
-				leaderID = tm.partitions[tp.Partition].leader
-			}
-		}
+		api, epoch, leaderID, err := c.client.leaderInfo(ctx, tp)
 		if err != nil {
 			if ctx.Err() != nil {
 				return nil, nil, ctx.Err()

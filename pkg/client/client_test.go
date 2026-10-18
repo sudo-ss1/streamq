@@ -191,3 +191,40 @@ func TestClosedClient(t *testing.T) {
 	_, err := c.partitionCount(context.Background(), "t")
 	require.ErrorIs(t, err, ErrClosed)
 }
+
+func TestCoalescedRefreshSurvivesFirstCallerCancel(t *testing.T) {
+	fb, c := singleBroker(t, map[string]int32{"t": 1})
+	release := make(chan struct{})
+	entered := make(chan struct{}, 1)
+	var once sync.Once
+	fb.onMetadata = func(*streamqv1.MetadataRequest) (*streamqv1.MetadataResponse, error) {
+		once.Do(func() { entered <- struct{}{}; <-release })
+		return nil, nil
+	}
+	// The first caller starts the refresh and gives up.
+	ctx1, cancel1 := context.WithCancel(context.Background())
+	first := make(chan error, 1)
+	go func() {
+		_, err := c.partitionCount(ctx1, "t")
+		first <- err
+	}()
+	<-entered
+	// A second caller (e.g. a producer's sender) joins the in-flight refresh.
+	second := make(chan error, 1)
+	go func() {
+		_, err := c.partitionCount(context.Background(), "t")
+		second <- err
+	}()
+	require.Eventually(t, func() bool {
+		c.mu.RLock()
+		defer c.mu.RUnlock()
+		for _, call := range c.inflight {
+			return call.waiters == 1
+		}
+		return false
+	}, 5*time.Second, time.Millisecond)
+	cancel1()
+	require.ErrorIs(t, <-first, context.Canceled)
+	close(release)
+	require.NoError(t, <-second, "a waiter must not inherit another caller's cancellation")
+}

@@ -1,3 +1,7 @@
+// Lock ordering in this file: Producer.mu → partitionState.mu. The partitioner's mutex,
+// Client.mu and the buffer semaphore are leaves; no producer lock is held while calling the
+// Partitioner, blocking on buffer space or metadata, or running callbacks.
+
 package client
 
 import (
@@ -6,6 +10,7 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/sync/semaphore"
@@ -144,6 +149,9 @@ type Producer struct {
 	parts   map[TopicPartition]*partitionState
 	senders sync.WaitGroup
 
+	closedCh      chan struct{} // closed when the first Close has finished
+	bufferWaiters atomic.Int32  // Produce calls currently blocked on buffer space (tests observe it)
+
 	closingCtx context.Context // done when Close begins: unblocks Produce
 	closing    context.CancelFunc
 	abortCtx   context.Context // done when Close's deadline passes: senders give up
@@ -160,7 +168,7 @@ func newProducer(c *Client, cfg ProducerConfig, clk clock) (*Producer, error) {
 		return nil, err
 	}
 	p := &Producer{client: c, cfg: cfg, clock: clk, buf: semaphore.NewWeighted(int64(cfg.BufferMemory)),
-		parts: map[TopicPartition]*partitionState{}}
+		parts: map[TopicPartition]*partitionState{}, closedCh: make(chan struct{})}
 	p.closingCtx, p.closing = context.WithCancel(context.Background())
 	p.abortCtx, p.abort = context.WithCancel(context.Background())
 	return p, nil
@@ -210,9 +218,11 @@ func (p *Producer) Produce(ctx context.Context, rec Record, cb func(RecordMetada
 	}
 	headers := toRecordHeaders(rec.Headers)
 	size := recordBytes(rec.Key, rec.Value, headers)
-	if size > int64(p.cfg.MaxRequestSize) || size > int64(p.cfg.BufferMemory) {
-		return fmt.Errorf("client: record of ~%d bytes exceeds max request size %d or buffer %d: %w",
-			size, p.cfg.MaxRequestSize, p.cfg.BufferMemory, ErrMessageTooLarge)
+	// Exact encoded size of this record alone in a batch, header included.
+	alone := record.NewBuilder(record.BuilderOptions{}).AppendedSize(ts.UnixMilli(), rec.Key, rec.Value, headers)
+	if alone > p.cfg.MaxRequestSize || size > int64(p.cfg.BufferMemory) {
+		return fmt.Errorf("client: record of %d bytes exceeds max request size %d or buffer %d: %w",
+			alone, p.cfg.MaxRequestSize, p.cfg.BufferMemory, ErrMessageTooLarge)
 	}
 	p.mu.Lock()
 	closed := p.closed
@@ -228,8 +238,13 @@ func (p *Producer) Produce(ctx context.Context, rec Record, cb func(RecordMetada
 		return p.blockErr(ctx, err)
 	}
 	n := int32(len(tm.partitions))
-	if err := p.buf.Acquire(bctx, size); err != nil {
-		return p.blockErr(ctx, fmt.Errorf("client: waiting for buffer memory: %w", err))
+	if !p.buf.TryAcquire(size) {
+		p.bufferWaiters.Add(1)
+		err := p.buf.Acquire(bctx, size)
+		p.bufferWaiters.Add(-1)
+		if err != nil {
+			return p.blockErr(ctx, fmt.Errorf("client: waiting for buffer memory: %w", err))
+		}
 	}
 	pr := pendingRecord{key: rec.Key, value: rec.Value, headers: headers, ts: ts.UnixMilli(), bytes: size, cb: cb}
 	// A sticky (unkeyed, partitioner-chosen) record that would start a new batch is re-partitioned
@@ -290,6 +305,9 @@ func (p *Producer) waitTopic(ctx context.Context, topic string) (*topicMeta, err
 		}
 		if err == nil {
 			err = fmt.Errorf("topic %q has no partitions: %w", topic, ErrUnknownTopicOrPartition)
+		}
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("client: topic %q not available: %w (last error: %w)", topic, ErrUnknownTopicOrPartition, err)
 		}
 		if !IsRetriable(err) && !errors.Is(err, ErrUnknownTopicOrPartition) {
 			return nil, err
@@ -445,6 +463,10 @@ func (p *Producer) send(tp TopicPartition, b *batch) []*batch {
 			return nil
 		}
 		base, err := p.sendOnce(tp, b)
+		if p.cfg.Acks == AcksNone && p.abortCtx.Err() == nil {
+			p.complete(tp, b, -1, err) // acks=0: a single attempt, as in Kafka
+			return nil
+		}
 		switch {
 		case err != nil && p.abortCtx.Err() != nil:
 			p.complete(tp, b, -1, ErrProducerClosed) // Close gave up; the RPC was cancelled
@@ -600,8 +622,12 @@ func (p *Producer) Close(ctx context.Context) error {
 	p.mu.Lock()
 	if p.closed {
 		p.mu.Unlock()
-		p.senders.Wait()
-		return nil
+		select {
+		case <-p.closedCh:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
 	p.closed = true
 	p.closing()
@@ -634,5 +660,6 @@ func (p *Producer) Close(ctx context.Context) error {
 		<-done
 	}
 	p.abort()
+	close(p.closedCh)
 	return err
 }

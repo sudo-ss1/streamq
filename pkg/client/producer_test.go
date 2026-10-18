@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -188,15 +189,22 @@ func TestProducerKeyedRecordsUseMurmur2(t *testing.T) {
 	}
 	require.NoError(t, p.Flush(context.Background()))
 	cl.wait(t)
-	for i, md := range cl.mds {
-		require.NoError(t, cl.errs[i])
-		_ = md
+	for _, err := range cl.errs {
+		require.NoError(t, err)
 	}
+	total, used := 0, 0
 	for part := range int32(5) {
-		for _, r := range fb.records(TopicPartition{Topic: "t", Partition: part}) {
+		recs := fb.records(TopicPartition{Topic: "t", Partition: part})
+		total += len(recs)
+		if len(recs) > 0 {
+			used++
+		}
+		for _, r := range recs {
 			require.Equal(t, part, partitioner.ForKey(r.Key, 5), "zero-value Partition must not force partition 0")
 		}
 	}
+	require.Equal(t, 50, total)
+	require.Greater(t, used, 1, "keys spread over partitions")
 }
 
 func TestProducerExplicitPartition(t *testing.T) {
@@ -529,6 +537,7 @@ func TestProducerCloseWithExpiredContextFailsPending(t *testing.T) {
 func TestProducerBufferMemoryBlocks(t *testing.T) {
 	fb, c := singleBroker(t, map[string]int32{"t": 1})
 	release := make(chan struct{})
+	var releaseOnce sync.Once
 	fb.onProduce = func(*streamqv1.ProduceRequest) (*streamqv1.ProduceResponse, error) {
 		<-release
 		return nil, nil
@@ -537,18 +546,45 @@ func TestProducerBufferMemoryBlocks(t *testing.T) {
 	rec := Record{Topic: "t", UsePartition: true, Value: make([]byte, 400)}
 	produceOK(t, p, rec, nil)
 	produceOK(t, p, rec, nil)
+
 	// The buffer is full: Produce blocks until ctx ends.
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 	require.ErrorIs(t, p.Produce(ctx, rec, nil), context.DeadlineExceeded)
-	// Close unblocks a blocked Produce with ErrProducerClosed.
+
+	// A blocked Produce proceeds once a batch completes and frees its bytes.
 	blocked := make(chan error, 1)
 	go func() { blocked <- p.Produce(context.Background(), rec, nil) }()
+	require.Eventually(t, func() bool { return p.bufferWaiters.Load() == 1 }, 10*time.Second, time.Millisecond)
+	releaseOnce.Do(func() { close(release) })
+	require.NoError(t, <-blocked)
+	require.NoError(t, p.Close(context.Background()))
+}
+
+func TestProducerCloseUnblocksBufferWait(t *testing.T) {
+	fb, c := singleBroker(t, map[string]int32{"t": 1})
+	release := make(chan struct{})
+	fb.onProduce = func(*streamqv1.ProduceRequest) (*streamqv1.ProduceResponse, error) {
+		<-release
+		return nil, nil
+	}
+	p, _ := newTestProducer(t, c, ProducerConfig{Linger: time.Hour, BatchSize: 100, BufferMemory: 1000, MaxRequestSize: 900})
+	rec := Record{Topic: "t", UsePartition: true, Value: make([]byte, 400)}
+	produceOK(t, p, rec, nil)
+	produceOK(t, p, rec, nil)
+	blocked := make(chan error, 1)
+	go func() { blocked <- p.Produce(context.Background(), rec, nil) }()
+	require.Eventually(t, func() bool { return p.bufferWaiters.Load() == 1 }, 10*time.Second, time.Millisecond)
 	closeDone := make(chan error, 1)
 	go func() { closeDone <- p.Close(context.Background()) }()
 	require.ErrorIs(t, <-blocked, ErrProducerClosed)
 	close(release)
 	require.NoError(t, <-closeDone)
+	// A second Close with an expired ctx returns promptly.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := p.Close(ctx)
+	require.True(t, err == nil || errors.Is(err, context.Canceled))
 }
 
 func TestProducerUnknownTopic(t *testing.T) {
@@ -591,13 +627,21 @@ func TestProducerRejectsInvalidRecords(t *testing.T) {
 func TestProducerAcksNone(t *testing.T) {
 	fb, c := singleBroker(t, map[string]int32{"t": 1})
 	fb.onProduce = func(req *streamqv1.ProduceRequest) (*streamqv1.ProduceResponse, error) {
-		require.Equal(t, streamqv1.Acks_ACKS_NONE, req.GetAcks())
+		if req.GetAcks() != streamqv1.Acks_ACKS_NONE {
+			return nil, status.Error(codes.InvalidArgument, "expected acks none")
+		}
 		return nil, nil
 	}
 	p, _ := newTestProducer(t, c, ProducerConfig{Acks: AcksNone})
 	md, err := p.ProduceSync(context.Background(), Record{Topic: "t", UsePartition: true, Value: []byte("v")})
 	require.NoError(t, err)
 	require.Equal(t, int64(-1), md.Offset)
+
+	// acks=0 is a single attempt: a retriable failure is not retried.
+	scriptedErrors(fb, grpcErr(codes.Unavailable))
+	_, err = p.ProduceSync(context.Background(), Record{Topic: "t", UsePartition: true, Value: []byte("v")})
+	require.Equal(t, codes.Unavailable, status.Code(err))
+	require.Equal(t, 2, fb.count("Produce"))
 }
 
 func TestProducerConcurrentProduceAndClose(t *testing.T) {

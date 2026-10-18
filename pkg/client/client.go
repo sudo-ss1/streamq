@@ -93,6 +93,12 @@ type Client struct {
 	backoff backoff
 	now     func() time.Time
 
+	// life is cancelled by Close; shared metadata refreshes run under it (not under any one
+	// caller's ctx) in goroutines tracked by refreshes.
+	life      context.Context
+	cancel    context.CancelFunc
+	refreshes sync.WaitGroup
+
 	mu       sync.RWMutex
 	closed   bool
 	conns    map[string]*grpc.ClientConn
@@ -106,7 +112,10 @@ func New(cfg Config) (*Client, error) {
 	if err := cfg.setDefaults(); err != nil {
 		return nil, err
 	}
+	life, cancel := context.WithCancel(context.Background())
 	return &Client{
+		life:     life,
+		cancel:   cancel,
 		cfg:      cfg,
 		logger:   cfg.Logger,
 		backoff:  newBackoff(cfg.RetryBackoff, cfg.RetryBackoffMax),
@@ -119,13 +128,19 @@ func New(cfg Config) (*Client, error) {
 }
 
 // Close closes every connection. Producers and consumers using the Client must be closed first.
+// Idempotent.
 func (c *Client) Close() error {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if c.closed {
+		c.mu.Unlock()
 		return nil
 	}
 	c.closed = true
+	c.mu.Unlock()
+	c.cancel()
+	c.refreshes.Wait()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	var errs []error
 	for addr, conn := range c.conns {
 		if err := conn.Close(); err != nil {
@@ -214,40 +229,56 @@ func (c *Client) callAny(ctx context.Context, fn func(context.Context, streamqv1
 }
 
 // refreshMetadata fetches metadata for topics (all topics if empty) and installs it. Concurrent
-// refreshes for the same topic set share one RPC.
+// refreshes for the same topic set share one RPC. The RPC runs in a client-owned goroutine under
+// the client's lifetime context (bounded by RequestTimeout per broker), never under a caller's
+// ctx, so one caller giving up cannot fail the others; each caller waits on its own ctx.
 func (c *Client) refreshMetadata(ctx context.Context, topics []string) error {
 	sorted := slices.Clone(topics)
 	slices.Sort(sorted)
 	key := strings.Join(sorted, "\x00")
 	c.mu.Lock()
-	if call, ok := c.inflight[key]; ok {
-		call.waiters++
+	if c.closed {
 		c.mu.Unlock()
-		select {
-		case <-call.done:
-			return call.err
-		case <-ctx.Done():
-			return ctx.Err()
-		}
+		return ErrClosed
 	}
-	call := &refreshCall{done: make(chan struct{})}
-	c.inflight[key] = call
+	call, ok := c.inflight[key]
+	if ok {
+		call.waiters++
+	} else {
+		call = &refreshCall{done: make(chan struct{})}
+		c.inflight[key] = call
+		c.refreshes.Add(1)
+		go c.runRefresh(key, sorted, call)
+	}
 	c.mu.Unlock()
+	select {
+	case <-call.done:
+		return call.err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
 
+// runRefresh performs one shared metadata RPC and publishes its result.
+func (c *Client) runRefresh(key string, topics []string, call *refreshCall) {
+	defer c.refreshes.Done()
 	var resp *streamqv1.MetadataResponse
-	call.err = c.callAny(ctx, func(ctx context.Context, api streamqv1.StreamQServiceClient) error {
+	err := c.callAny(c.life, func(ctx context.Context, api streamqv1.StreamQServiceClient) error {
 		var err error
-		resp, err = api.Metadata(ctx, &streamqv1.MetadataRequest{Topics: sorted})
+		resp, err = api.Metadata(ctx, &streamqv1.MetadataRequest{Topics: topics})
 		return err
 	})
+	if err != nil && c.life.Err() != nil {
+		err = ErrClosed
+	}
 	c.mu.Lock()
 	delete(c.inflight, key)
-	if call.err == nil {
-		c.install(resp, sorted)
+	if err == nil && !c.closed {
+		c.install(resp, topics)
 	}
+	call.err = err
 	c.mu.Unlock()
 	close(call.done)
-	return call.err
 }
 
 // install applies a Metadata response. Caller holds mu.
@@ -322,29 +353,35 @@ func (c *Client) partitionCount(ctx context.Context, topic string) (int32, error
 
 // leader returns a stub for tp's leader and the leader epoch to send with requests.
 func (c *Client) leader(ctx context.Context, tp TopicPartition) (streamqv1.StreamQServiceClient, int32, error) {
+	api, epoch, _, err := c.leaderInfo(ctx, tp)
+	return api, epoch, err
+}
+
+// leaderInfo is leader plus the leader's broker id, all from one metadata snapshot.
+func (c *Client) leaderInfo(ctx context.Context, tp TopicPartition) (streamqv1.StreamQServiceClient, int32, int32, error) {
 	tm, err := c.topic(ctx, tp.Topic)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, -1, err
 	}
 	if tp.Partition < 0 || int(tp.Partition) >= len(tm.partitions) {
-		return nil, 0, fmt.Errorf("%s/%d: %w", tp.Topic, tp.Partition, ErrUnknownTopicOrPartition)
+		return nil, 0, -1, fmt.Errorf("%s/%d: %w", tp.Topic, tp.Partition, ErrUnknownTopicOrPartition)
 	}
 	pm := tm.partitions[tp.Partition]
 	if pm.leader < 0 {
-		return nil, 0, fmt.Errorf("%s/%d has no leader: %w", tp.Topic, tp.Partition, ErrNotLeader)
+		return nil, 0, -1, fmt.Errorf("%s/%d has no leader: %w", tp.Topic, tp.Partition, ErrNotLeader)
 	}
 	c.mu.RLock()
 	addr, ok := c.brokers[pm.leader]
 	c.mu.RUnlock()
 	if !ok {
 		c.invalidate(tp.Topic)
-		return nil, 0, fmt.Errorf("%s/%d: leader %d address unknown: %w", tp.Topic, tp.Partition, pm.leader, ErrNotLeader)
+		return nil, 0, -1, fmt.Errorf("%s/%d: leader %d address unknown: %w", tp.Topic, tp.Partition, pm.leader, ErrNotLeader)
 	}
 	api, err := c.api(addr)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, -1, err
 	}
-	return api, pm.epoch, nil
+	return api, pm.epoch, pm.leader, nil
 }
 
 // sleep waits for d or until ctx or abort is done; it reports whether the full delay elapsed.
