@@ -42,12 +42,7 @@ func (b *Builder) Append(timestamp int64, key, value []byte, headers []Header) {
 	}
 	tsDelta := timestamp - b.firstTs
 	offDelta := int64(b.count)
-
-	body := 1 + varintSize(tsDelta) + varintSize(offDelta) +
-		nullableSize(key) + nullableSize(value) + varintSize(int64(len(headers)))
-	for _, h := range headers {
-		body += varintSize(int64(len(h.Key))) + len(h.Key) + nullableSize(h.Value)
-	}
+	body := recordBodySize(tsDelta, offDelta, key, value, headers)
 
 	r := b.records
 	r = binary.AppendVarint(r, int64(body))
@@ -81,6 +76,27 @@ func appendNullable(dst, v []byte) []byte {
 	}
 	dst = binary.AppendVarint(dst, int64(len(v)))
 	return append(dst, v...)
+}
+
+// recordBodySize is the encoded size of a record after its length prefix.
+func recordBodySize(tsDelta, offDelta int64, key, value []byte, headers []Header) int {
+	body := 1 + varintSize(tsDelta) + varintSize(offDelta) +
+		nullableSize(key) + nullableSize(value) + varintSize(int64(len(headers)))
+	for _, h := range headers {
+		body += varintSize(int64(len(h.Key))) + len(h.Key) + nullableSize(h.Value)
+	}
+	return body
+}
+
+// AppendedSize returns the encoded size the batch would have if this record were appended next.
+// It lets producers decide whether a record still fits before appending it.
+func (b *Builder) AppendedSize(timestamp int64, key, value []byte, headers []Header) int {
+	first := timestamp
+	if b.count > 0 {
+		first = b.firstTs
+	}
+	body := recordBodySize(timestamp-first, int64(b.count), key, value, headers)
+	return b.Size() + varintSize(int64(body)) + body
 }
 
 // Len returns the number of records appended so far.

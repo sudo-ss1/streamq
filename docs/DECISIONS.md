@@ -169,3 +169,37 @@ the logs.
 
 `max_wait_ms` is capped at 30 s and request `max_bytes` at 16 MiB. gRPC send and receive limits
 are 64 MiB on server and client.
+
+## D20. streamqctl stays on the generated gRPC stubs (M3)
+
+The CLI is a thin, low-level tool. Its tests already cover the wire API directly, and moving it
+onto `pkg/client` would mean rework for no functional gain. Applications use `pkg/client`.
+
+## D21. At most one in-flight batch per partition before idempotence (M3)
+
+Until M7 adds sequence numbers, the producer sends each partition's batches strictly one at a
+time, retries included. A retried batch can then never land after a later batch of the same key
+(Kafka's `max.in.flight.requests.per.connection=1` guarantee). FR3 holds under retries.
+
+## D22. Client defaults (M3)
+
+The defaults follow Kafka, except that linger is 5 ms (as in Kafka 4.0):
+- acks=all, linger 5 ms, batch.size 16 KiB, buffer.memory 32 MiB;
+- max request size 1 MiB, delivery timeout 2 min, max.block 60 s;
+- retry backoff 100 ms → 1 s with full jitter, request timeout 30 s, metadata max age 5 min;
+- consumer auto.offset.reset = latest, fetch max wait 500 ms.
+
+## D23. Producing to an unknown topic waits for metadata (M3)
+
+`Produce` refreshes metadata with backoff until the topic appears, bounded by the caller's ctx,
+`ProducerConfig.MaxBlock` (60 s, Kafka `max.block.ms`) and producer close. After that it returns
+`ErrUnknownTopicOrPartition` (or `ErrProducerClosed`) synchronously.
+
+## D24. MESSAGE_TOO_LARGE splits the batch (M3)
+
+The producer seals batches at `min(BatchSize, MaxRequestSize, topic max_message_bytes when
+known)`. The topic limit is not always visible to the client, so if the broker still rejects a
+multi-record batch with `MESSAGE_TOO_LARGE`, the producer splits it in half and puts both halves
+back at the head of the partition queue (Kafka's `splitAndReenqueue`), recursing as needed. Order
+is preserved because only one batch is in flight. Only a single-record batch fails with
+`ErrMessageTooLarge`.
