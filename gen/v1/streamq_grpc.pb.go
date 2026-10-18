@@ -23,6 +23,7 @@ const (
 	StreamQService_DeleteTopic_FullMethodName     = "/streamq.v1.StreamQService/DeleteTopic"
 	StreamQService_ListTopics_FullMethodName      = "/streamq.v1.StreamQService/ListTopics"
 	StreamQService_Metadata_FullMethodName        = "/streamq.v1.StreamQService/Metadata"
+	StreamQService_InitProducer_FullMethodName    = "/streamq.v1.StreamQService/InitProducer"
 	StreamQService_Produce_FullMethodName         = "/streamq.v1.StreamQService/Produce"
 	StreamQService_Fetch_FullMethodName           = "/streamq.v1.StreamQService/Fetch"
 	StreamQService_ListOffsets_FullMethodName     = "/streamq.v1.StreamQService/ListOffsets"
@@ -51,6 +52,8 @@ type StreamQServiceClient interface {
 	ListTopics(ctx context.Context, in *ListTopicsRequest, opts ...grpc.CallOption) (*ListTopicsResponse, error)
 	// Metadata returns brokers and per-partition leadership.
 	Metadata(ctx context.Context, in *MetadataRequest, opts ...grpc.CallOption) (*MetadataResponse, error)
+	// InitProducer returns a new idempotent producer ID (SPEC §6).
+	InitProducer(ctx context.Context, in *InitProducerRequest, opts ...grpc.CallOption) (*InitProducerResponse, error)
 	// Produce appends one record batch per partition.
 	Produce(ctx context.Context, in *ProduceRequest, opts ...grpc.CallOption) (*ProduceResponse, error)
 	// Fetch long-polls for records below the high watermark.
@@ -119,6 +122,16 @@ func (c *streamQServiceClient) Metadata(ctx context.Context, in *MetadataRequest
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(MetadataResponse)
 	err := c.cc.Invoke(ctx, StreamQService_Metadata_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *streamQServiceClient) InitProducer(ctx context.Context, in *InitProducerRequest, opts ...grpc.CallOption) (*InitProducerResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(InitProducerResponse)
+	err := c.cc.Invoke(ctx, StreamQService_InitProducer_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -259,6 +272,8 @@ type StreamQServiceServer interface {
 	ListTopics(context.Context, *ListTopicsRequest) (*ListTopicsResponse, error)
 	// Metadata returns brokers and per-partition leadership.
 	Metadata(context.Context, *MetadataRequest) (*MetadataResponse, error)
+	// InitProducer returns a new idempotent producer ID (SPEC §6).
+	InitProducer(context.Context, *InitProducerRequest) (*InitProducerResponse, error)
 	// Produce appends one record batch per partition.
 	Produce(context.Context, *ProduceRequest) (*ProduceResponse, error)
 	// Fetch long-polls for records below the high watermark.
@@ -304,6 +319,9 @@ func (UnimplementedStreamQServiceServer) ListTopics(context.Context, *ListTopics
 }
 func (UnimplementedStreamQServiceServer) Metadata(context.Context, *MetadataRequest) (*MetadataResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Metadata not implemented")
+}
+func (UnimplementedStreamQServiceServer) InitProducer(context.Context, *InitProducerRequest) (*InitProducerResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method InitProducer not implemented")
 }
 func (UnimplementedStreamQServiceServer) Produce(context.Context, *ProduceRequest) (*ProduceResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Produce not implemented")
@@ -430,6 +448,24 @@ func _StreamQService_Metadata_Handler(srv interface{}, ctx context.Context, dec 
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(StreamQServiceServer).Metadata(ctx, req.(*MetadataRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _StreamQService_InitProducer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(InitProducerRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(StreamQServiceServer).InitProducer(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: StreamQService_InitProducer_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(StreamQServiceServer).InitProducer(ctx, req.(*InitProducerRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -672,6 +708,10 @@ var StreamQService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Metadata",
 			Handler:    _StreamQService_Metadata_Handler,
+		},
+		{
+			MethodName: "InitProducer",
+			Handler:    _StreamQService_InitProducer_Handler,
 		},
 		{
 			MethodName: "Produce",

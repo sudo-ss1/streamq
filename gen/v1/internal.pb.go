@@ -39,6 +39,7 @@ type MetadataCommand struct {
 	//	*MetadataCommand_FenceBroker
 	//	*MetadataCommand_UnfenceBroker
 	//	*MetadataCommand_AlterIsr
+	//	*MetadataCommand_AllocateProducerIds
 	Cmd           isMetadataCommand_Cmd `protobuf_oneof:"cmd"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -165,6 +166,15 @@ func (x *MetadataCommand) GetAlterIsr() *AlterISRCommand {
 	return nil
 }
 
+func (x *MetadataCommand) GetAllocateProducerIds() *AllocateProducerIDsCommand {
+	if x != nil {
+		if x, ok := x.Cmd.(*MetadataCommand_AllocateProducerIds); ok {
+			return x.AllocateProducerIds
+		}
+	}
+	return nil
+}
+
 type isMetadataCommand_Cmd interface {
 	isMetadataCommand_Cmd()
 }
@@ -197,6 +207,10 @@ type MetadataCommand_AlterIsr struct {
 	AlterIsr *AlterISRCommand `protobuf:"bytes,16,opt,name=alter_isr,json=alterIsr,proto3,oneof"`
 }
 
+type MetadataCommand_AllocateProducerIds struct {
+	AllocateProducerIds *AllocateProducerIDsCommand `protobuf:"bytes,17,opt,name=allocate_producer_ids,json=allocateProducerIds,proto3,oneof"`
+}
+
 func (*MetadataCommand_CreateTopic) isMetadataCommand_Cmd() {}
 
 func (*MetadataCommand_DeleteTopic) isMetadataCommand_Cmd() {}
@@ -210,6 +224,8 @@ func (*MetadataCommand_FenceBroker) isMetadataCommand_Cmd() {}
 func (*MetadataCommand_UnfenceBroker) isMetadataCommand_Cmd() {}
 
 func (*MetadataCommand_AlterIsr) isMetadataCommand_Cmd() {}
+
+func (*MetadataCommand_AllocateProducerIds) isMetadataCommand_Cmd() {}
 
 type CreateTopicCommand struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
@@ -1176,6 +1192,179 @@ func (x *AlterISRResponse) GetControllerId() int32 {
 	return 0
 }
 
+// AllocateProducerIDsCommand reserves the next block of producer IDs for a broker (SPEC §6).
+type AllocateProducerIDsCommand struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	BrokerId      int32                  `protobuf:"varint,1,opt,name=broker_id,json=brokerId,proto3" json:"broker_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AllocateProducerIDsCommand) Reset() {
+	*x = AllocateProducerIDsCommand{}
+	mi := &file_v1_internal_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AllocateProducerIDsCommand) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AllocateProducerIDsCommand) ProtoMessage() {}
+
+func (x *AllocateProducerIDsCommand) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_internal_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AllocateProducerIDsCommand.ProtoReflect.Descriptor instead.
+func (*AllocateProducerIDsCommand) Descriptor() ([]byte, []int) {
+	return file_v1_internal_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *AllocateProducerIDsCommand) GetBrokerId() int32 {
+	if x != nil {
+		return x.BrokerId
+	}
+	return 0
+}
+
+type AllocateProducerIDsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	BrokerId      int32                  `protobuf:"varint,1,opt,name=broker_id,json=brokerId,proto3" json:"broker_id,omitempty"`
+	BrokerEpoch   int64                  `protobuf:"varint,2,opt,name=broker_epoch,json=brokerEpoch,proto3" json:"broker_epoch,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AllocateProducerIDsRequest) Reset() {
+	*x = AllocateProducerIDsRequest{}
+	mi := &file_v1_internal_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AllocateProducerIDsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AllocateProducerIDsRequest) ProtoMessage() {}
+
+func (x *AllocateProducerIDsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_internal_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AllocateProducerIDsRequest.ProtoReflect.Descriptor instead.
+func (*AllocateProducerIDsRequest) Descriptor() ([]byte, []int) {
+	return file_v1_internal_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *AllocateProducerIDsRequest) GetBrokerId() int32 {
+	if x != nil {
+		return x.BrokerId
+	}
+	return 0
+}
+
+func (x *AllocateProducerIDsRequest) GetBrokerEpoch() int64 {
+	if x != nil {
+		return x.BrokerEpoch
+	}
+	return 0
+}
+
+type AllocateProducerIDsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ErrorCode     ErrorCode              `protobuf:"varint,1,opt,name=error_code,json=errorCode,proto3,enum=streamq.v1.ErrorCode" json:"error_code,omitempty"`
+	ErrorMessage  string                 `protobuf:"bytes,2,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	FirstId       int64                  `protobuf:"varint,3,opt,name=first_id,json=firstId,proto3" json:"first_id,omitempty"`
+	Count         int32                  `protobuf:"varint,4,opt,name=count,proto3" json:"count,omitempty"`
+	ControllerId  int32                  `protobuf:"varint,5,opt,name=controller_id,json=controllerId,proto3" json:"controller_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AllocateProducerIDsResponse) Reset() {
+	*x = AllocateProducerIDsResponse{}
+	mi := &file_v1_internal_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AllocateProducerIDsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AllocateProducerIDsResponse) ProtoMessage() {}
+
+func (x *AllocateProducerIDsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_internal_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AllocateProducerIDsResponse.ProtoReflect.Descriptor instead.
+func (*AllocateProducerIDsResponse) Descriptor() ([]byte, []int) {
+	return file_v1_internal_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *AllocateProducerIDsResponse) GetErrorCode() ErrorCode {
+	if x != nil {
+		return x.ErrorCode
+	}
+	return ErrorCode_ERROR_CODE_NONE
+}
+
+func (x *AllocateProducerIDsResponse) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
+func (x *AllocateProducerIDsResponse) GetFirstId() int64 {
+	if x != nil {
+		return x.FirstId
+	}
+	return 0
+}
+
+func (x *AllocateProducerIDsResponse) GetCount() int32 {
+	if x != nil {
+		return x.Count
+	}
+	return 0
+}
+
+func (x *AllocateProducerIDsResponse) GetControllerId() int32 {
+	if x != nil {
+		return x.ControllerId
+	}
+	return 0
+}
+
 type RegisterBrokerRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	BrokerId      int32                  `protobuf:"varint,1,opt,name=broker_id,json=brokerId,proto3" json:"broker_id,omitempty"`
@@ -1188,7 +1377,7 @@ type RegisterBrokerRequest struct {
 
 func (x *RegisterBrokerRequest) Reset() {
 	*x = RegisterBrokerRequest{}
-	mi := &file_v1_internal_proto_msgTypes[15]
+	mi := &file_v1_internal_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1200,7 +1389,7 @@ func (x *RegisterBrokerRequest) String() string {
 func (*RegisterBrokerRequest) ProtoMessage() {}
 
 func (x *RegisterBrokerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_internal_proto_msgTypes[15]
+	mi := &file_v1_internal_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1213,7 +1402,7 @@ func (x *RegisterBrokerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterBrokerRequest.ProtoReflect.Descriptor instead.
 func (*RegisterBrokerRequest) Descriptor() ([]byte, []int) {
-	return file_v1_internal_proto_rawDescGZIP(), []int{15}
+	return file_v1_internal_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *RegisterBrokerRequest) GetBrokerId() int32 {
@@ -1259,7 +1448,7 @@ type RegisterBrokerResponse struct {
 
 func (x *RegisterBrokerResponse) Reset() {
 	*x = RegisterBrokerResponse{}
-	mi := &file_v1_internal_proto_msgTypes[16]
+	mi := &file_v1_internal_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1271,7 +1460,7 @@ func (x *RegisterBrokerResponse) String() string {
 func (*RegisterBrokerResponse) ProtoMessage() {}
 
 func (x *RegisterBrokerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_internal_proto_msgTypes[16]
+	mi := &file_v1_internal_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1284,7 +1473,7 @@ func (x *RegisterBrokerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterBrokerResponse.ProtoReflect.Descriptor instead.
 func (*RegisterBrokerResponse) Descriptor() ([]byte, []int) {
-	return file_v1_internal_proto_rawDescGZIP(), []int{16}
+	return file_v1_internal_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *RegisterBrokerResponse) GetErrorCode() ErrorCode {
@@ -1333,7 +1522,7 @@ type BrokerHeartbeatRequest struct {
 
 func (x *BrokerHeartbeatRequest) Reset() {
 	*x = BrokerHeartbeatRequest{}
-	mi := &file_v1_internal_proto_msgTypes[17]
+	mi := &file_v1_internal_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1345,7 +1534,7 @@ func (x *BrokerHeartbeatRequest) String() string {
 func (*BrokerHeartbeatRequest) ProtoMessage() {}
 
 func (x *BrokerHeartbeatRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_internal_proto_msgTypes[17]
+	mi := &file_v1_internal_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1358,7 +1547,7 @@ func (x *BrokerHeartbeatRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BrokerHeartbeatRequest.ProtoReflect.Descriptor instead.
 func (*BrokerHeartbeatRequest) Descriptor() ([]byte, []int) {
-	return file_v1_internal_proto_rawDescGZIP(), []int{17}
+	return file_v1_internal_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *BrokerHeartbeatRequest) GetBrokerId() int32 {
@@ -1394,7 +1583,7 @@ type BrokerHeartbeatResponse struct {
 
 func (x *BrokerHeartbeatResponse) Reset() {
 	*x = BrokerHeartbeatResponse{}
-	mi := &file_v1_internal_proto_msgTypes[18]
+	mi := &file_v1_internal_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1406,7 +1595,7 @@ func (x *BrokerHeartbeatResponse) String() string {
 func (*BrokerHeartbeatResponse) ProtoMessage() {}
 
 func (x *BrokerHeartbeatResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_internal_proto_msgTypes[18]
+	mi := &file_v1_internal_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1419,7 +1608,7 @@ func (x *BrokerHeartbeatResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BrokerHeartbeatResponse.ProtoReflect.Descriptor instead.
 func (*BrokerHeartbeatResponse) Descriptor() ([]byte, []int) {
-	return file_v1_internal_proto_rawDescGZIP(), []int{18}
+	return file_v1_internal_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *BrokerHeartbeatResponse) GetErrorCode() ErrorCode {
@@ -1459,7 +1648,7 @@ type ForwardMetadataRequest struct {
 
 func (x *ForwardMetadataRequest) Reset() {
 	*x = ForwardMetadataRequest{}
-	mi := &file_v1_internal_proto_msgTypes[19]
+	mi := &file_v1_internal_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1471,7 +1660,7 @@ func (x *ForwardMetadataRequest) String() string {
 func (*ForwardMetadataRequest) ProtoMessage() {}
 
 func (x *ForwardMetadataRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_internal_proto_msgTypes[19]
+	mi := &file_v1_internal_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1484,7 +1673,7 @@ func (x *ForwardMetadataRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ForwardMetadataRequest.ProtoReflect.Descriptor instead.
 func (*ForwardMetadataRequest) Descriptor() ([]byte, []int) {
-	return file_v1_internal_proto_rawDescGZIP(), []int{19}
+	return file_v1_internal_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ForwardMetadataRequest) GetCommand() *MetadataCommand {
@@ -1507,7 +1696,7 @@ type ForwardMetadataResponse struct {
 
 func (x *ForwardMetadataResponse) Reset() {
 	*x = ForwardMetadataResponse{}
-	mi := &file_v1_internal_proto_msgTypes[20]
+	mi := &file_v1_internal_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1519,7 +1708,7 @@ func (x *ForwardMetadataResponse) String() string {
 func (*ForwardMetadataResponse) ProtoMessage() {}
 
 func (x *ForwardMetadataResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_internal_proto_msgTypes[20]
+	mi := &file_v1_internal_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1532,7 +1721,7 @@ func (x *ForwardMetadataResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ForwardMetadataResponse.ProtoReflect.Descriptor instead.
 func (*ForwardMetadataResponse) Descriptor() ([]byte, []int) {
-	return file_v1_internal_proto_rawDescGZIP(), []int{20}
+	return file_v1_internal_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ForwardMetadataResponse) GetErrorCode() ErrorCode {
@@ -1568,7 +1757,7 @@ var File_v1_internal_proto protoreflect.FileDescriptor
 const file_v1_internal_proto_rawDesc = "" +
 	"\n" +
 	"\x11v1/internal.proto\x12\n" +
-	"streamq.v1\x1a\x10v1/streamq.proto\"\xef\x04\n" +
+	"streamq.v1\x1a\x10v1/streamq.proto\"\xcd\x05\n" +
 	"\x0fMetadataCommand\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\x05R\aversion\x12!\n" +
 	"\ftimestamp_ms\x18\x02 \x01(\x03R\vtimestampMs\x12)\n" +
@@ -1580,7 +1769,8 @@ const file_v1_internal_proto_rawDesc = "" +
 	"\x0fregister_broker\x18\r \x01(\v2!.streamq.v1.RegisterBrokerCommandH\x00R\x0eregisterBroker\x12C\n" +
 	"\ffence_broker\x18\x0e \x01(\v2\x1e.streamq.v1.FenceBrokerCommandH\x00R\vfenceBroker\x12I\n" +
 	"\x0eunfence_broker\x18\x0f \x01(\v2 .streamq.v1.UnfenceBrokerCommandH\x00R\runfenceBroker\x12:\n" +
-	"\talter_isr\x18\x10 \x01(\v2\x1b.streamq.v1.AlterISRCommandH\x00R\balterIsrB\x05\n" +
+	"\talter_isr\x18\x10 \x01(\v2\x1b.streamq.v1.AlterISRCommandH\x00R\balterIsr\x12\\\n" +
+	"\x15allocate_producer_ids\x18\x11 \x01(\v2&.streamq.v1.AllocateProducerIDsCommandH\x00R\x13allocateProducerIdsB\x05\n" +
 	"\x03cmd\"\x87\x02\n" +
 	"\x12CreateTopicCommand\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12E\n" +
@@ -1660,7 +1850,19 @@ const file_v1_internal_proto_rawDesc = "" +
 	"\n" +
 	"error_code\x18\x01 \x01(\x0e2\x15.streamq.v1.ErrorCodeR\terrorCode\x12#\n" +
 	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\x12#\n" +
-	"\rcontroller_id\x18\x03 \x01(\x05R\fcontrollerId\"\x81\x01\n" +
+	"\rcontroller_id\x18\x03 \x01(\x05R\fcontrollerId\"9\n" +
+	"\x1aAllocateProducerIDsCommand\x12\x1b\n" +
+	"\tbroker_id\x18\x01 \x01(\x05R\bbrokerId\"\\\n" +
+	"\x1aAllocateProducerIDsRequest\x12\x1b\n" +
+	"\tbroker_id\x18\x01 \x01(\x05R\bbrokerId\x12!\n" +
+	"\fbroker_epoch\x18\x02 \x01(\x03R\vbrokerEpoch\"\xce\x01\n" +
+	"\x1bAllocateProducerIDsResponse\x124\n" +
+	"\n" +
+	"error_code\x18\x01 \x01(\x0e2\x15.streamq.v1.ErrorCodeR\terrorCode\x12#\n" +
+	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\x12\x19\n" +
+	"\bfirst_id\x18\x03 \x01(\x03R\afirstId\x12\x14\n" +
+	"\x05count\x18\x04 \x01(\x05R\x05count\x12#\n" +
+	"\rcontroller_id\x18\x05 \x01(\x05R\fcontrollerId\"\x81\x01\n" +
 	"\x15RegisterBrokerRequest\x12\x1b\n" +
 	"\tbroker_id\x18\x01 \x01(\x05R\bbrokerId\x12\x12\n" +
 	"\x04host\x18\x02 \x01(\tR\x04host\x12\x12\n" +
@@ -1690,14 +1892,15 @@ const file_v1_internal_proto_rawDesc = "" +
 	"error_code\x18\x01 \x01(\x0e2\x15.streamq.v1.ErrorCodeR\terrorCode\x12#\n" +
 	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\x12#\n" +
 	"\rcontroller_id\x18\x03 \x01(\x05R\fcontrollerId\x12\x14\n" +
-	"\x05index\x18\x04 \x01(\x04R\x05index2\xae\x04\n" +
+	"\x05index\x18\x04 \x01(\x04R\x05index2\x96\x05\n" +
 	"\x16StreamQInternalService\x12W\n" +
 	"\x0eRegisterBroker\x12!.streamq.v1.RegisterBrokerRequest\x1a\".streamq.v1.RegisterBrokerResponse\x12Z\n" +
 	"\x0fBrokerHeartbeat\x12\".streamq.v1.BrokerHeartbeatRequest\x1a#.streamq.v1.BrokerHeartbeatResponse\x12Z\n" +
 	"\x0fForwardMetadata\x12\".streamq.v1.ForwardMetadataRequest\x1a#.streamq.v1.ForwardMetadataResponse\x12Q\n" +
 	"\fReplicaFetch\x12\x1f.streamq.v1.ReplicaFetchRequest\x1a .streamq.v1.ReplicaFetchResponse\x12i\n" +
 	"\x14OffsetForLeaderEpoch\x12'.streamq.v1.OffsetForLeaderEpochRequest\x1a(.streamq.v1.OffsetForLeaderEpochResponse\x12E\n" +
-	"\bAlterISR\x12\x1b.streamq.v1.AlterISRRequest\x1a\x1c.streamq.v1.AlterISRResponseB\x96\x01\n" +
+	"\bAlterISR\x12\x1b.streamq.v1.AlterISRRequest\x1a\x1c.streamq.v1.AlterISRResponse\x12f\n" +
+	"\x13AllocateProducerIDs\x12&.streamq.v1.AllocateProducerIDsRequest\x1a'.streamq.v1.AllocateProducerIDsResponseB\x96\x01\n" +
 	"\x0ecom.streamq.v1B\rInternalProtoP\x01Z,github.com/sudo-ss1/streamq/gen/v1;streamqv1\xa2\x02\x03SXX\xaa\x02\n" +
 	"Streamq.V1\xca\x02\n" +
 	"Streamq\\V1\xe2\x02\x16Streamq\\V1\\GPBMetadata\xea\x02\vStreamq::V1b\x06proto3"
@@ -1714,7 +1917,7 @@ func file_v1_internal_proto_rawDescGZIP() []byte {
 	return file_v1_internal_proto_rawDescData
 }
 
-var file_v1_internal_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
+var file_v1_internal_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
 var file_v1_internal_proto_goTypes = []any{
 	(*MetadataCommand)(nil),              // 0: streamq.v1.MetadataCommand
 	(*CreateTopicCommand)(nil),           // 1: streamq.v1.CreateTopicCommand
@@ -1731,15 +1934,18 @@ var file_v1_internal_proto_goTypes = []any{
 	(*OffsetForLeaderEpochResponse)(nil), // 12: streamq.v1.OffsetForLeaderEpochResponse
 	(*AlterISRRequest)(nil),              // 13: streamq.v1.AlterISRRequest
 	(*AlterISRResponse)(nil),             // 14: streamq.v1.AlterISRResponse
-	(*RegisterBrokerRequest)(nil),        // 15: streamq.v1.RegisterBrokerRequest
-	(*RegisterBrokerResponse)(nil),       // 16: streamq.v1.RegisterBrokerResponse
-	(*BrokerHeartbeatRequest)(nil),       // 17: streamq.v1.BrokerHeartbeatRequest
-	(*BrokerHeartbeatResponse)(nil),      // 18: streamq.v1.BrokerHeartbeatResponse
-	(*ForwardMetadataRequest)(nil),       // 19: streamq.v1.ForwardMetadataRequest
-	(*ForwardMetadataResponse)(nil),      // 20: streamq.v1.ForwardMetadataResponse
-	nil,                                  // 21: streamq.v1.CreateTopicCommand.ConfigsEntry
-	(*OffsetCommit)(nil),                 // 22: streamq.v1.OffsetCommit
-	(ErrorCode)(0),                       // 23: streamq.v1.ErrorCode
+	(*AllocateProducerIDsCommand)(nil),   // 15: streamq.v1.AllocateProducerIDsCommand
+	(*AllocateProducerIDsRequest)(nil),   // 16: streamq.v1.AllocateProducerIDsRequest
+	(*AllocateProducerIDsResponse)(nil),  // 17: streamq.v1.AllocateProducerIDsResponse
+	(*RegisterBrokerRequest)(nil),        // 18: streamq.v1.RegisterBrokerRequest
+	(*RegisterBrokerResponse)(nil),       // 19: streamq.v1.RegisterBrokerResponse
+	(*BrokerHeartbeatRequest)(nil),       // 20: streamq.v1.BrokerHeartbeatRequest
+	(*BrokerHeartbeatResponse)(nil),      // 21: streamq.v1.BrokerHeartbeatResponse
+	(*ForwardMetadataRequest)(nil),       // 22: streamq.v1.ForwardMetadataRequest
+	(*ForwardMetadataResponse)(nil),      // 23: streamq.v1.ForwardMetadataResponse
+	nil,                                  // 24: streamq.v1.CreateTopicCommand.ConfigsEntry
+	(*OffsetCommit)(nil),                 // 25: streamq.v1.OffsetCommit
+	(ErrorCode)(0),                       // 26: streamq.v1.ErrorCode
 }
 var file_v1_internal_proto_depIdxs = []int32{
 	1,  // 0: streamq.v1.MetadataCommand.create_topic:type_name -> streamq.v1.CreateTopicCommand
@@ -1749,33 +1955,37 @@ var file_v1_internal_proto_depIdxs = []int32{
 	6,  // 4: streamq.v1.MetadataCommand.fence_broker:type_name -> streamq.v1.FenceBrokerCommand
 	7,  // 5: streamq.v1.MetadataCommand.unfence_broker:type_name -> streamq.v1.UnfenceBrokerCommand
 	8,  // 6: streamq.v1.MetadataCommand.alter_isr:type_name -> streamq.v1.AlterISRCommand
-	21, // 7: streamq.v1.CreateTopicCommand.configs:type_name -> streamq.v1.CreateTopicCommand.ConfigsEntry
-	2,  // 8: streamq.v1.CreateTopicCommand.partitions:type_name -> streamq.v1.PartitionAssignment
-	22, // 9: streamq.v1.CommitOffsetsCommand.offsets:type_name -> streamq.v1.OffsetCommit
-	23, // 10: streamq.v1.ReplicaFetchResponse.error_code:type_name -> streamq.v1.ErrorCode
-	23, // 11: streamq.v1.OffsetForLeaderEpochResponse.error_code:type_name -> streamq.v1.ErrorCode
-	23, // 12: streamq.v1.AlterISRResponse.error_code:type_name -> streamq.v1.ErrorCode
-	23, // 13: streamq.v1.RegisterBrokerResponse.error_code:type_name -> streamq.v1.ErrorCode
-	23, // 14: streamq.v1.BrokerHeartbeatResponse.error_code:type_name -> streamq.v1.ErrorCode
-	0,  // 15: streamq.v1.ForwardMetadataRequest.command:type_name -> streamq.v1.MetadataCommand
-	23, // 16: streamq.v1.ForwardMetadataResponse.error_code:type_name -> streamq.v1.ErrorCode
-	15, // 17: streamq.v1.StreamQInternalService.RegisterBroker:input_type -> streamq.v1.RegisterBrokerRequest
-	17, // 18: streamq.v1.StreamQInternalService.BrokerHeartbeat:input_type -> streamq.v1.BrokerHeartbeatRequest
-	19, // 19: streamq.v1.StreamQInternalService.ForwardMetadata:input_type -> streamq.v1.ForwardMetadataRequest
-	9,  // 20: streamq.v1.StreamQInternalService.ReplicaFetch:input_type -> streamq.v1.ReplicaFetchRequest
-	11, // 21: streamq.v1.StreamQInternalService.OffsetForLeaderEpoch:input_type -> streamq.v1.OffsetForLeaderEpochRequest
-	13, // 22: streamq.v1.StreamQInternalService.AlterISR:input_type -> streamq.v1.AlterISRRequest
-	16, // 23: streamq.v1.StreamQInternalService.RegisterBroker:output_type -> streamq.v1.RegisterBrokerResponse
-	18, // 24: streamq.v1.StreamQInternalService.BrokerHeartbeat:output_type -> streamq.v1.BrokerHeartbeatResponse
-	20, // 25: streamq.v1.StreamQInternalService.ForwardMetadata:output_type -> streamq.v1.ForwardMetadataResponse
-	10, // 26: streamq.v1.StreamQInternalService.ReplicaFetch:output_type -> streamq.v1.ReplicaFetchResponse
-	12, // 27: streamq.v1.StreamQInternalService.OffsetForLeaderEpoch:output_type -> streamq.v1.OffsetForLeaderEpochResponse
-	14, // 28: streamq.v1.StreamQInternalService.AlterISR:output_type -> streamq.v1.AlterISRResponse
-	23, // [23:29] is the sub-list for method output_type
-	17, // [17:23] is the sub-list for method input_type
-	17, // [17:17] is the sub-list for extension type_name
-	17, // [17:17] is the sub-list for extension extendee
-	0,  // [0:17] is the sub-list for field type_name
+	15, // 7: streamq.v1.MetadataCommand.allocate_producer_ids:type_name -> streamq.v1.AllocateProducerIDsCommand
+	24, // 8: streamq.v1.CreateTopicCommand.configs:type_name -> streamq.v1.CreateTopicCommand.ConfigsEntry
+	2,  // 9: streamq.v1.CreateTopicCommand.partitions:type_name -> streamq.v1.PartitionAssignment
+	25, // 10: streamq.v1.CommitOffsetsCommand.offsets:type_name -> streamq.v1.OffsetCommit
+	26, // 11: streamq.v1.ReplicaFetchResponse.error_code:type_name -> streamq.v1.ErrorCode
+	26, // 12: streamq.v1.OffsetForLeaderEpochResponse.error_code:type_name -> streamq.v1.ErrorCode
+	26, // 13: streamq.v1.AlterISRResponse.error_code:type_name -> streamq.v1.ErrorCode
+	26, // 14: streamq.v1.AllocateProducerIDsResponse.error_code:type_name -> streamq.v1.ErrorCode
+	26, // 15: streamq.v1.RegisterBrokerResponse.error_code:type_name -> streamq.v1.ErrorCode
+	26, // 16: streamq.v1.BrokerHeartbeatResponse.error_code:type_name -> streamq.v1.ErrorCode
+	0,  // 17: streamq.v1.ForwardMetadataRequest.command:type_name -> streamq.v1.MetadataCommand
+	26, // 18: streamq.v1.ForwardMetadataResponse.error_code:type_name -> streamq.v1.ErrorCode
+	18, // 19: streamq.v1.StreamQInternalService.RegisterBroker:input_type -> streamq.v1.RegisterBrokerRequest
+	20, // 20: streamq.v1.StreamQInternalService.BrokerHeartbeat:input_type -> streamq.v1.BrokerHeartbeatRequest
+	22, // 21: streamq.v1.StreamQInternalService.ForwardMetadata:input_type -> streamq.v1.ForwardMetadataRequest
+	9,  // 22: streamq.v1.StreamQInternalService.ReplicaFetch:input_type -> streamq.v1.ReplicaFetchRequest
+	11, // 23: streamq.v1.StreamQInternalService.OffsetForLeaderEpoch:input_type -> streamq.v1.OffsetForLeaderEpochRequest
+	13, // 24: streamq.v1.StreamQInternalService.AlterISR:input_type -> streamq.v1.AlterISRRequest
+	16, // 25: streamq.v1.StreamQInternalService.AllocateProducerIDs:input_type -> streamq.v1.AllocateProducerIDsRequest
+	19, // 26: streamq.v1.StreamQInternalService.RegisterBroker:output_type -> streamq.v1.RegisterBrokerResponse
+	21, // 27: streamq.v1.StreamQInternalService.BrokerHeartbeat:output_type -> streamq.v1.BrokerHeartbeatResponse
+	23, // 28: streamq.v1.StreamQInternalService.ForwardMetadata:output_type -> streamq.v1.ForwardMetadataResponse
+	10, // 29: streamq.v1.StreamQInternalService.ReplicaFetch:output_type -> streamq.v1.ReplicaFetchResponse
+	12, // 30: streamq.v1.StreamQInternalService.OffsetForLeaderEpoch:output_type -> streamq.v1.OffsetForLeaderEpochResponse
+	14, // 31: streamq.v1.StreamQInternalService.AlterISR:output_type -> streamq.v1.AlterISRResponse
+	17, // 32: streamq.v1.StreamQInternalService.AllocateProducerIDs:output_type -> streamq.v1.AllocateProducerIDsResponse
+	26, // [26:33] is the sub-list for method output_type
+	19, // [19:26] is the sub-list for method input_type
+	19, // [19:19] is the sub-list for extension type_name
+	19, // [19:19] is the sub-list for extension extendee
+	0,  // [0:19] is the sub-list for field type_name
 }
 
 func init() { file_v1_internal_proto_init() }
@@ -1792,6 +2002,7 @@ func file_v1_internal_proto_init() {
 		(*MetadataCommand_FenceBroker)(nil),
 		(*MetadataCommand_UnfenceBroker)(nil),
 		(*MetadataCommand_AlterIsr)(nil),
+		(*MetadataCommand_AllocateProducerIds)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -1799,7 +2010,7 @@ func file_v1_internal_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_internal_proto_rawDesc), len(file_v1_internal_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   22,
+			NumMessages:   25,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

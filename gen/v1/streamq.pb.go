@@ -1149,6 +1149,111 @@ func (x *ProduceTopicResponse) GetPartitions() []*ProducePartitionResponse {
 	return nil
 }
 
+type InitProducerRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InitProducerRequest) Reset() {
+	*x = InitProducerRequest{}
+	mi := &file_v1_streamq_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InitProducerRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InitProducerRequest) ProtoMessage() {}
+
+func (x *InitProducerRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_streamq_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InitProducerRequest.ProtoReflect.Descriptor instead.
+func (*InitProducerRequest) Descriptor() ([]byte, []int) {
+	return file_v1_streamq_proto_rawDescGZIP(), []int{16}
+}
+
+type InitProducerResponse struct {
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	ErrorCode    ErrorCode              `protobuf:"varint,1,opt,name=error_code,json=errorCode,proto3,enum=streamq.v1.ErrorCode" json:"error_code,omitempty"`
+	ErrorMessage string                 `protobuf:"bytes,2,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	ProducerId   int64                  `protobuf:"varint,3,opt,name=producer_id,json=producerId,proto3" json:"producer_id,omitempty"`
+	// Always 0 for now (SPEC §3.5).
+	ProducerEpoch int32 `protobuf:"varint,4,opt,name=producer_epoch,json=producerEpoch,proto3" json:"producer_epoch,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InitProducerResponse) Reset() {
+	*x = InitProducerResponse{}
+	mi := &file_v1_streamq_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InitProducerResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InitProducerResponse) ProtoMessage() {}
+
+func (x *InitProducerResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_streamq_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InitProducerResponse.ProtoReflect.Descriptor instead.
+func (*InitProducerResponse) Descriptor() ([]byte, []int) {
+	return file_v1_streamq_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *InitProducerResponse) GetErrorCode() ErrorCode {
+	if x != nil {
+		return x.ErrorCode
+	}
+	return ErrorCode_ERROR_CODE_NONE
+}
+
+func (x *InitProducerResponse) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
+func (x *InitProducerResponse) GetProducerId() int64 {
+	if x != nil {
+		return x.ProducerId
+	}
+	return 0
+}
+
+func (x *InitProducerResponse) GetProducerEpoch() int32 {
+	if x != nil {
+		return x.ProducerEpoch
+	}
+	return 0
+}
+
 type ProduceResponse struct {
 	state         protoimpl.MessageState  `protogen:"open.v1"`
 	Topics        []*ProduceTopicResponse `protobuf:"bytes,1,rep,name=topics,proto3" json:"topics,omitempty"`
@@ -1158,7 +1263,7 @@ type ProduceResponse struct {
 
 func (x *ProduceResponse) Reset() {
 	*x = ProduceResponse{}
-	mi := &file_v1_streamq_proto_msgTypes[16]
+	mi := &file_v1_streamq_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1170,7 +1275,7 @@ func (x *ProduceResponse) String() string {
 func (*ProduceResponse) ProtoMessage() {}
 
 func (x *ProduceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_streamq_proto_msgTypes[16]
+	mi := &file_v1_streamq_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1183,7 +1288,7 @@ func (x *ProduceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProduceResponse.ProtoReflect.Descriptor instead.
 func (*ProduceResponse) Descriptor() ([]byte, []int) {
-	return file_v1_streamq_proto_rawDescGZIP(), []int{16}
+	return file_v1_streamq_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *ProduceResponse) GetTopics() []*ProduceTopicResponse {
@@ -1206,7 +1311,7 @@ type FetchPartition struct {
 
 func (x *FetchPartition) Reset() {
 	*x = FetchPartition{}
-	mi := &file_v1_streamq_proto_msgTypes[17]
+	mi := &file_v1_streamq_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1218,7 +1323,7 @@ func (x *FetchPartition) String() string {
 func (*FetchPartition) ProtoMessage() {}
 
 func (x *FetchPartition) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_streamq_proto_msgTypes[17]
+	mi := &file_v1_streamq_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1231,7 +1336,7 @@ func (x *FetchPartition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FetchPartition.ProtoReflect.Descriptor instead.
 func (*FetchPartition) Descriptor() ([]byte, []int) {
-	return file_v1_streamq_proto_rawDescGZIP(), []int{17}
+	return file_v1_streamq_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *FetchPartition) GetPartition() int32 {
@@ -1272,7 +1377,7 @@ type FetchTopic struct {
 
 func (x *FetchTopic) Reset() {
 	*x = FetchTopic{}
-	mi := &file_v1_streamq_proto_msgTypes[18]
+	mi := &file_v1_streamq_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1284,7 +1389,7 @@ func (x *FetchTopic) String() string {
 func (*FetchTopic) ProtoMessage() {}
 
 func (x *FetchTopic) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_streamq_proto_msgTypes[18]
+	mi := &file_v1_streamq_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1297,7 +1402,7 @@ func (x *FetchTopic) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FetchTopic.ProtoReflect.Descriptor instead.
 func (*FetchTopic) Descriptor() ([]byte, []int) {
-	return file_v1_streamq_proto_rawDescGZIP(), []int{18}
+	return file_v1_streamq_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *FetchTopic) GetTopic() string {
@@ -1326,7 +1431,7 @@ type FetchRequest struct {
 
 func (x *FetchRequest) Reset() {
 	*x = FetchRequest{}
-	mi := &file_v1_streamq_proto_msgTypes[19]
+	mi := &file_v1_streamq_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1338,7 +1443,7 @@ func (x *FetchRequest) String() string {
 func (*FetchRequest) ProtoMessage() {}
 
 func (x *FetchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_streamq_proto_msgTypes[19]
+	mi := &file_v1_streamq_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1351,7 +1456,7 @@ func (x *FetchRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FetchRequest.ProtoReflect.Descriptor instead.
 func (*FetchRequest) Descriptor() ([]byte, []int) {
-	return file_v1_streamq_proto_rawDescGZIP(), []int{19}
+	return file_v1_streamq_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *FetchRequest) GetMaxWaitMs() int32 {
@@ -1398,7 +1503,7 @@ type FetchPartitionResponse struct {
 
 func (x *FetchPartitionResponse) Reset() {
 	*x = FetchPartitionResponse{}
-	mi := &file_v1_streamq_proto_msgTypes[20]
+	mi := &file_v1_streamq_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1410,7 +1515,7 @@ func (x *FetchPartitionResponse) String() string {
 func (*FetchPartitionResponse) ProtoMessage() {}
 
 func (x *FetchPartitionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_streamq_proto_msgTypes[20]
+	mi := &file_v1_streamq_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1423,7 +1528,7 @@ func (x *FetchPartitionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FetchPartitionResponse.ProtoReflect.Descriptor instead.
 func (*FetchPartitionResponse) Descriptor() ([]byte, []int) {
-	return file_v1_streamq_proto_rawDescGZIP(), []int{20}
+	return file_v1_streamq_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *FetchPartitionResponse) GetPartition() int32 {
@@ -1485,7 +1590,7 @@ type FetchTopicResponse struct {
 
 func (x *FetchTopicResponse) Reset() {
 	*x = FetchTopicResponse{}
-	mi := &file_v1_streamq_proto_msgTypes[21]
+	mi := &file_v1_streamq_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1497,7 +1602,7 @@ func (x *FetchTopicResponse) String() string {
 func (*FetchTopicResponse) ProtoMessage() {}
 
 func (x *FetchTopicResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_streamq_proto_msgTypes[21]
+	mi := &file_v1_streamq_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1510,7 +1615,7 @@ func (x *FetchTopicResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FetchTopicResponse.ProtoReflect.Descriptor instead.
 func (*FetchTopicResponse) Descriptor() ([]byte, []int) {
-	return file_v1_streamq_proto_rawDescGZIP(), []int{21}
+	return file_v1_streamq_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *FetchTopicResponse) GetTopic() string {
@@ -1536,7 +1641,7 @@ type FetchResponse struct {
 
 func (x *FetchResponse) Reset() {
 	*x = FetchResponse{}
-	mi := &file_v1_streamq_proto_msgTypes[22]
+	mi := &file_v1_streamq_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1548,7 +1653,7 @@ func (x *FetchResponse) String() string {
 func (*FetchResponse) ProtoMessage() {}
 
 func (x *FetchResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_streamq_proto_msgTypes[22]
+	mi := &file_v1_streamq_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1561,7 +1666,7 @@ func (x *FetchResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FetchResponse.ProtoReflect.Descriptor instead.
 func (*FetchResponse) Descriptor() ([]byte, []int) {
-	return file_v1_streamq_proto_rawDescGZIP(), []int{22}
+	return file_v1_streamq_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *FetchResponse) GetTopics() []*FetchTopicResponse {
@@ -1584,7 +1689,7 @@ type ListOffsetsPartition struct {
 
 func (x *ListOffsetsPartition) Reset() {
 	*x = ListOffsetsPartition{}
-	mi := &file_v1_streamq_proto_msgTypes[23]
+	mi := &file_v1_streamq_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1596,7 +1701,7 @@ func (x *ListOffsetsPartition) String() string {
 func (*ListOffsetsPartition) ProtoMessage() {}
 
 func (x *ListOffsetsPartition) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_streamq_proto_msgTypes[23]
+	mi := &file_v1_streamq_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1609,7 +1714,7 @@ func (x *ListOffsetsPartition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListOffsetsPartition.ProtoReflect.Descriptor instead.
 func (*ListOffsetsPartition) Descriptor() ([]byte, []int) {
-	return file_v1_streamq_proto_rawDescGZIP(), []int{23}
+	return file_v1_streamq_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *ListOffsetsPartition) GetPartition() int32 {
@@ -1643,7 +1748,7 @@ type ListOffsetsTopic struct {
 
 func (x *ListOffsetsTopic) Reset() {
 	*x = ListOffsetsTopic{}
-	mi := &file_v1_streamq_proto_msgTypes[24]
+	mi := &file_v1_streamq_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1655,7 +1760,7 @@ func (x *ListOffsetsTopic) String() string {
 func (*ListOffsetsTopic) ProtoMessage() {}
 
 func (x *ListOffsetsTopic) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_streamq_proto_msgTypes[24]
+	mi := &file_v1_streamq_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1668,7 +1773,7 @@ func (x *ListOffsetsTopic) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListOffsetsTopic.ProtoReflect.Descriptor instead.
 func (*ListOffsetsTopic) Descriptor() ([]byte, []int) {
-	return file_v1_streamq_proto_rawDescGZIP(), []int{24}
+	return file_v1_streamq_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *ListOffsetsTopic) GetTopic() string {
@@ -1694,7 +1799,7 @@ type ListOffsetsRequest struct {
 
 func (x *ListOffsetsRequest) Reset() {
 	*x = ListOffsetsRequest{}
-	mi := &file_v1_streamq_proto_msgTypes[25]
+	mi := &file_v1_streamq_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1706,7 +1811,7 @@ func (x *ListOffsetsRequest) String() string {
 func (*ListOffsetsRequest) ProtoMessage() {}
 
 func (x *ListOffsetsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_streamq_proto_msgTypes[25]
+	mi := &file_v1_streamq_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1719,7 +1824,7 @@ func (x *ListOffsetsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListOffsetsRequest.ProtoReflect.Descriptor instead.
 func (*ListOffsetsRequest) Descriptor() ([]byte, []int) {
-	return file_v1_streamq_proto_rawDescGZIP(), []int{25}
+	return file_v1_streamq_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *ListOffsetsRequest) GetTopics() []*ListOffsetsTopic {
@@ -1745,7 +1850,7 @@ type ListOffsetsPartitionResponse struct {
 
 func (x *ListOffsetsPartitionResponse) Reset() {
 	*x = ListOffsetsPartitionResponse{}
-	mi := &file_v1_streamq_proto_msgTypes[26]
+	mi := &file_v1_streamq_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1757,7 +1862,7 @@ func (x *ListOffsetsPartitionResponse) String() string {
 func (*ListOffsetsPartitionResponse) ProtoMessage() {}
 
 func (x *ListOffsetsPartitionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_streamq_proto_msgTypes[26]
+	mi := &file_v1_streamq_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1770,7 +1875,7 @@ func (x *ListOffsetsPartitionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListOffsetsPartitionResponse.ProtoReflect.Descriptor instead.
 func (*ListOffsetsPartitionResponse) Descriptor() ([]byte, []int) {
-	return file_v1_streamq_proto_rawDescGZIP(), []int{26}
+	return file_v1_streamq_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *ListOffsetsPartitionResponse) GetPartition() int32 {
@@ -1825,7 +1930,7 @@ type ListOffsetsTopicResponse struct {
 
 func (x *ListOffsetsTopicResponse) Reset() {
 	*x = ListOffsetsTopicResponse{}
-	mi := &file_v1_streamq_proto_msgTypes[27]
+	mi := &file_v1_streamq_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1837,7 +1942,7 @@ func (x *ListOffsetsTopicResponse) String() string {
 func (*ListOffsetsTopicResponse) ProtoMessage() {}
 
 func (x *ListOffsetsTopicResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_streamq_proto_msgTypes[27]
+	mi := &file_v1_streamq_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1850,7 +1955,7 @@ func (x *ListOffsetsTopicResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListOffsetsTopicResponse.ProtoReflect.Descriptor instead.
 func (*ListOffsetsTopicResponse) Descriptor() ([]byte, []int) {
-	return file_v1_streamq_proto_rawDescGZIP(), []int{27}
+	return file_v1_streamq_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *ListOffsetsTopicResponse) GetTopic() string {
@@ -1876,7 +1981,7 @@ type ListOffsetsResponse struct {
 
 func (x *ListOffsetsResponse) Reset() {
 	*x = ListOffsetsResponse{}
-	mi := &file_v1_streamq_proto_msgTypes[28]
+	mi := &file_v1_streamq_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1888,7 +1993,7 @@ func (x *ListOffsetsResponse) String() string {
 func (*ListOffsetsResponse) ProtoMessage() {}
 
 func (x *ListOffsetsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_streamq_proto_msgTypes[28]
+	mi := &file_v1_streamq_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1901,7 +2006,7 @@ func (x *ListOffsetsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListOffsetsResponse.ProtoReflect.Descriptor instead.
 func (*ListOffsetsResponse) Descriptor() ([]byte, []int) {
-	return file_v1_streamq_proto_rawDescGZIP(), []int{28}
+	return file_v1_streamq_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *ListOffsetsResponse) GetTopics() []*ListOffsetsTopicResponse {
@@ -1920,7 +2025,7 @@ type FindCoordinatorRequest struct {
 
 func (x *FindCoordinatorRequest) Reset() {
 	*x = FindCoordinatorRequest{}
-	mi := &file_v1_streamq_proto_msgTypes[29]
+	mi := &file_v1_streamq_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1932,7 +2037,7 @@ func (x *FindCoordinatorRequest) String() string {
 func (*FindCoordinatorRequest) ProtoMessage() {}
 
 func (x *FindCoordinatorRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_streamq_proto_msgTypes[29]
+	mi := &file_v1_streamq_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1945,7 +2050,7 @@ func (x *FindCoordinatorRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FindCoordinatorRequest.ProtoReflect.Descriptor instead.
 func (*FindCoordinatorRequest) Descriptor() ([]byte, []int) {
-	return file_v1_streamq_proto_rawDescGZIP(), []int{29}
+	return file_v1_streamq_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *FindCoordinatorRequest) GetGroupId() string {
@@ -1966,7 +2071,7 @@ type FindCoordinatorResponse struct {
 
 func (x *FindCoordinatorResponse) Reset() {
 	*x = FindCoordinatorResponse{}
-	mi := &file_v1_streamq_proto_msgTypes[30]
+	mi := &file_v1_streamq_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1978,7 +2083,7 @@ func (x *FindCoordinatorResponse) String() string {
 func (*FindCoordinatorResponse) ProtoMessage() {}
 
 func (x *FindCoordinatorResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_streamq_proto_msgTypes[30]
+	mi := &file_v1_streamq_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1991,7 +2096,7 @@ func (x *FindCoordinatorResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FindCoordinatorResponse.ProtoReflect.Descriptor instead.
 func (*FindCoordinatorResponse) Descriptor() ([]byte, []int) {
-	return file_v1_streamq_proto_rawDescGZIP(), []int{30}
+	return file_v1_streamq_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *FindCoordinatorResponse) GetErrorCode() ErrorCode {
@@ -2025,7 +2130,7 @@ type TopicPartitions struct {
 
 func (x *TopicPartitions) Reset() {
 	*x = TopicPartitions{}
-	mi := &file_v1_streamq_proto_msgTypes[31]
+	mi := &file_v1_streamq_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2037,7 +2142,7 @@ func (x *TopicPartitions) String() string {
 func (*TopicPartitions) ProtoMessage() {}
 
 func (x *TopicPartitions) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_streamq_proto_msgTypes[31]
+	mi := &file_v1_streamq_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2050,7 +2155,7 @@ func (x *TopicPartitions) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TopicPartitions.ProtoReflect.Descriptor instead.
 func (*TopicPartitions) Descriptor() ([]byte, []int) {
-	return file_v1_streamq_proto_rawDescGZIP(), []int{31}
+	return file_v1_streamq_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *TopicPartitions) GetTopic() string {
@@ -2084,7 +2189,7 @@ type JoinGroupRequest struct {
 
 func (x *JoinGroupRequest) Reset() {
 	*x = JoinGroupRequest{}
-	mi := &file_v1_streamq_proto_msgTypes[32]
+	mi := &file_v1_streamq_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2096,7 +2201,7 @@ func (x *JoinGroupRequest) String() string {
 func (*JoinGroupRequest) ProtoMessage() {}
 
 func (x *JoinGroupRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_streamq_proto_msgTypes[32]
+	mi := &file_v1_streamq_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2109,7 +2214,7 @@ func (x *JoinGroupRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JoinGroupRequest.ProtoReflect.Descriptor instead.
 func (*JoinGroupRequest) Descriptor() ([]byte, []int) {
-	return file_v1_streamq_proto_rawDescGZIP(), []int{32}
+	return file_v1_streamq_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *JoinGroupRequest) GetGroupId() string {
@@ -2169,7 +2274,7 @@ type JoinGroupResponse struct {
 
 func (x *JoinGroupResponse) Reset() {
 	*x = JoinGroupResponse{}
-	mi := &file_v1_streamq_proto_msgTypes[33]
+	mi := &file_v1_streamq_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2181,7 +2286,7 @@ func (x *JoinGroupResponse) String() string {
 func (*JoinGroupResponse) ProtoMessage() {}
 
 func (x *JoinGroupResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_streamq_proto_msgTypes[33]
+	mi := &file_v1_streamq_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2194,7 +2299,7 @@ func (x *JoinGroupResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JoinGroupResponse.ProtoReflect.Descriptor instead.
 func (*JoinGroupResponse) Descriptor() ([]byte, []int) {
-	return file_v1_streamq_proto_rawDescGZIP(), []int{33}
+	return file_v1_streamq_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *JoinGroupResponse) GetErrorCode() ErrorCode {
@@ -2250,7 +2355,7 @@ type SyncGroupRequest struct {
 
 func (x *SyncGroupRequest) Reset() {
 	*x = SyncGroupRequest{}
-	mi := &file_v1_streamq_proto_msgTypes[34]
+	mi := &file_v1_streamq_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2262,7 +2367,7 @@ func (x *SyncGroupRequest) String() string {
 func (*SyncGroupRequest) ProtoMessage() {}
 
 func (x *SyncGroupRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_streamq_proto_msgTypes[34]
+	mi := &file_v1_streamq_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2275,7 +2380,7 @@ func (x *SyncGroupRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncGroupRequest.ProtoReflect.Descriptor instead.
 func (*SyncGroupRequest) Descriptor() ([]byte, []int) {
-	return file_v1_streamq_proto_rawDescGZIP(), []int{34}
+	return file_v1_streamq_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *SyncGroupRequest) GetGroupId() string {
@@ -2310,7 +2415,7 @@ type SyncGroupResponse struct {
 
 func (x *SyncGroupResponse) Reset() {
 	*x = SyncGroupResponse{}
-	mi := &file_v1_streamq_proto_msgTypes[35]
+	mi := &file_v1_streamq_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2322,7 +2427,7 @@ func (x *SyncGroupResponse) String() string {
 func (*SyncGroupResponse) ProtoMessage() {}
 
 func (x *SyncGroupResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_streamq_proto_msgTypes[35]
+	mi := &file_v1_streamq_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2335,7 +2440,7 @@ func (x *SyncGroupResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncGroupResponse.ProtoReflect.Descriptor instead.
 func (*SyncGroupResponse) Descriptor() ([]byte, []int) {
-	return file_v1_streamq_proto_rawDescGZIP(), []int{35}
+	return file_v1_streamq_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *SyncGroupResponse) GetErrorCode() ErrorCode {
@@ -2370,7 +2475,7 @@ type HeartbeatRequest struct {
 
 func (x *HeartbeatRequest) Reset() {
 	*x = HeartbeatRequest{}
-	mi := &file_v1_streamq_proto_msgTypes[36]
+	mi := &file_v1_streamq_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2382,7 +2487,7 @@ func (x *HeartbeatRequest) String() string {
 func (*HeartbeatRequest) ProtoMessage() {}
 
 func (x *HeartbeatRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_streamq_proto_msgTypes[36]
+	mi := &file_v1_streamq_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2395,7 +2500,7 @@ func (x *HeartbeatRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HeartbeatRequest.ProtoReflect.Descriptor instead.
 func (*HeartbeatRequest) Descriptor() ([]byte, []int) {
-	return file_v1_streamq_proto_rawDescGZIP(), []int{36}
+	return file_v1_streamq_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *HeartbeatRequest) GetGroupId() string {
@@ -2429,7 +2534,7 @@ type HeartbeatResponse struct {
 
 func (x *HeartbeatResponse) Reset() {
 	*x = HeartbeatResponse{}
-	mi := &file_v1_streamq_proto_msgTypes[37]
+	mi := &file_v1_streamq_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2441,7 +2546,7 @@ func (x *HeartbeatResponse) String() string {
 func (*HeartbeatResponse) ProtoMessage() {}
 
 func (x *HeartbeatResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_streamq_proto_msgTypes[37]
+	mi := &file_v1_streamq_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2454,7 +2559,7 @@ func (x *HeartbeatResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HeartbeatResponse.ProtoReflect.Descriptor instead.
 func (*HeartbeatResponse) Descriptor() ([]byte, []int) {
-	return file_v1_streamq_proto_rawDescGZIP(), []int{37}
+	return file_v1_streamq_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *HeartbeatResponse) GetErrorCode() ErrorCode {
@@ -2481,7 +2586,7 @@ type LeaveGroupRequest struct {
 
 func (x *LeaveGroupRequest) Reset() {
 	*x = LeaveGroupRequest{}
-	mi := &file_v1_streamq_proto_msgTypes[38]
+	mi := &file_v1_streamq_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2493,7 +2598,7 @@ func (x *LeaveGroupRequest) String() string {
 func (*LeaveGroupRequest) ProtoMessage() {}
 
 func (x *LeaveGroupRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_streamq_proto_msgTypes[38]
+	mi := &file_v1_streamq_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2506,7 +2611,7 @@ func (x *LeaveGroupRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LeaveGroupRequest.ProtoReflect.Descriptor instead.
 func (*LeaveGroupRequest) Descriptor() ([]byte, []int) {
-	return file_v1_streamq_proto_rawDescGZIP(), []int{38}
+	return file_v1_streamq_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *LeaveGroupRequest) GetGroupId() string {
@@ -2533,7 +2638,7 @@ type LeaveGroupResponse struct {
 
 func (x *LeaveGroupResponse) Reset() {
 	*x = LeaveGroupResponse{}
-	mi := &file_v1_streamq_proto_msgTypes[39]
+	mi := &file_v1_streamq_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2545,7 +2650,7 @@ func (x *LeaveGroupResponse) String() string {
 func (*LeaveGroupResponse) ProtoMessage() {}
 
 func (x *LeaveGroupResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_streamq_proto_msgTypes[39]
+	mi := &file_v1_streamq_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2558,7 +2663,7 @@ func (x *LeaveGroupResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LeaveGroupResponse.ProtoReflect.Descriptor instead.
 func (*LeaveGroupResponse) Descriptor() ([]byte, []int) {
-	return file_v1_streamq_proto_rawDescGZIP(), []int{39}
+	return file_v1_streamq_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *LeaveGroupResponse) GetErrorCode() ErrorCode {
@@ -2586,7 +2691,7 @@ type OffsetCommit struct {
 
 func (x *OffsetCommit) Reset() {
 	*x = OffsetCommit{}
-	mi := &file_v1_streamq_proto_msgTypes[40]
+	mi := &file_v1_streamq_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2598,7 +2703,7 @@ func (x *OffsetCommit) String() string {
 func (*OffsetCommit) ProtoMessage() {}
 
 func (x *OffsetCommit) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_streamq_proto_msgTypes[40]
+	mi := &file_v1_streamq_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2611,7 +2716,7 @@ func (x *OffsetCommit) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OffsetCommit.ProtoReflect.Descriptor instead.
 func (*OffsetCommit) Descriptor() ([]byte, []int) {
-	return file_v1_streamq_proto_rawDescGZIP(), []int{40}
+	return file_v1_streamq_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *OffsetCommit) GetTopic() string {
@@ -2648,7 +2753,7 @@ type CommitOffsetRequest struct {
 
 func (x *CommitOffsetRequest) Reset() {
 	*x = CommitOffsetRequest{}
-	mi := &file_v1_streamq_proto_msgTypes[41]
+	mi := &file_v1_streamq_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2660,7 +2765,7 @@ func (x *CommitOffsetRequest) String() string {
 func (*CommitOffsetRequest) ProtoMessage() {}
 
 func (x *CommitOffsetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_streamq_proto_msgTypes[41]
+	mi := &file_v1_streamq_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2673,7 +2778,7 @@ func (x *CommitOffsetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommitOffsetRequest.ProtoReflect.Descriptor instead.
 func (*CommitOffsetRequest) Descriptor() ([]byte, []int) {
-	return file_v1_streamq_proto_rawDescGZIP(), []int{41}
+	return file_v1_streamq_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *CommitOffsetRequest) GetGroupId() string {
@@ -2716,7 +2821,7 @@ type CommitOffsetResponse struct {
 
 func (x *CommitOffsetResponse) Reset() {
 	*x = CommitOffsetResponse{}
-	mi := &file_v1_streamq_proto_msgTypes[42]
+	mi := &file_v1_streamq_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2728,7 +2833,7 @@ func (x *CommitOffsetResponse) String() string {
 func (*CommitOffsetResponse) ProtoMessage() {}
 
 func (x *CommitOffsetResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_streamq_proto_msgTypes[42]
+	mi := &file_v1_streamq_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2741,7 +2846,7 @@ func (x *CommitOffsetResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommitOffsetResponse.ProtoReflect.Descriptor instead.
 func (*CommitOffsetResponse) Descriptor() ([]byte, []int) {
-	return file_v1_streamq_proto_rawDescGZIP(), []int{42}
+	return file_v1_streamq_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *CommitOffsetResponse) GetErrorCode() ErrorCode {
@@ -2776,7 +2881,7 @@ type FetchOffsetRequest struct {
 
 func (x *FetchOffsetRequest) Reset() {
 	*x = FetchOffsetRequest{}
-	mi := &file_v1_streamq_proto_msgTypes[43]
+	mi := &file_v1_streamq_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2788,7 +2893,7 @@ func (x *FetchOffsetRequest) String() string {
 func (*FetchOffsetRequest) ProtoMessage() {}
 
 func (x *FetchOffsetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_streamq_proto_msgTypes[43]
+	mi := &file_v1_streamq_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2801,7 +2906,7 @@ func (x *FetchOffsetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FetchOffsetRequest.ProtoReflect.Descriptor instead.
 func (*FetchOffsetRequest) Descriptor() ([]byte, []int) {
-	return file_v1_streamq_proto_rawDescGZIP(), []int{43}
+	return file_v1_streamq_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *FetchOffsetRequest) GetGroupId() string {
@@ -2830,7 +2935,7 @@ type FetchOffsetResponse struct {
 
 func (x *FetchOffsetResponse) Reset() {
 	*x = FetchOffsetResponse{}
-	mi := &file_v1_streamq_proto_msgTypes[44]
+	mi := &file_v1_streamq_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2842,7 +2947,7 @@ func (x *FetchOffsetResponse) String() string {
 func (*FetchOffsetResponse) ProtoMessage() {}
 
 func (x *FetchOffsetResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_streamq_proto_msgTypes[44]
+	mi := &file_v1_streamq_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2855,7 +2960,7 @@ func (x *FetchOffsetResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FetchOffsetResponse.ProtoReflect.Descriptor instead.
 func (*FetchOffsetResponse) Descriptor() ([]byte, []int) {
-	return file_v1_streamq_proto_rawDescGZIP(), []int{44}
+	return file_v1_streamq_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *FetchOffsetResponse) GetErrorCode() ErrorCode {
@@ -2887,7 +2992,7 @@ type ListGroupsRequest struct {
 
 func (x *ListGroupsRequest) Reset() {
 	*x = ListGroupsRequest{}
-	mi := &file_v1_streamq_proto_msgTypes[45]
+	mi := &file_v1_streamq_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2899,7 +3004,7 @@ func (x *ListGroupsRequest) String() string {
 func (*ListGroupsRequest) ProtoMessage() {}
 
 func (x *ListGroupsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_streamq_proto_msgTypes[45]
+	mi := &file_v1_streamq_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2912,7 +3017,7 @@ func (x *ListGroupsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListGroupsRequest.ProtoReflect.Descriptor instead.
 func (*ListGroupsRequest) Descriptor() ([]byte, []int) {
-	return file_v1_streamq_proto_rawDescGZIP(), []int{45}
+	return file_v1_streamq_proto_rawDescGZIP(), []int{47}
 }
 
 type ListGroupsResponse struct {
@@ -2926,7 +3031,7 @@ type ListGroupsResponse struct {
 
 func (x *ListGroupsResponse) Reset() {
 	*x = ListGroupsResponse{}
-	mi := &file_v1_streamq_proto_msgTypes[46]
+	mi := &file_v1_streamq_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2938,7 +3043,7 @@ func (x *ListGroupsResponse) String() string {
 func (*ListGroupsResponse) ProtoMessage() {}
 
 func (x *ListGroupsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_streamq_proto_msgTypes[46]
+	mi := &file_v1_streamq_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2951,7 +3056,7 @@ func (x *ListGroupsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListGroupsResponse.ProtoReflect.Descriptor instead.
 func (*ListGroupsResponse) Descriptor() ([]byte, []int) {
-	return file_v1_streamq_proto_rawDescGZIP(), []int{46}
+	return file_v1_streamq_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *ListGroupsResponse) GetGroupIds() []string {
@@ -2986,7 +3091,7 @@ type OffsetCommitResult struct {
 
 func (x *OffsetCommitResult) Reset() {
 	*x = OffsetCommitResult{}
-	mi := &file_v1_streamq_proto_msgTypes[47]
+	mi := &file_v1_streamq_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2998,7 +3103,7 @@ func (x *OffsetCommitResult) String() string {
 func (*OffsetCommitResult) ProtoMessage() {}
 
 func (x *OffsetCommitResult) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_streamq_proto_msgTypes[47]
+	mi := &file_v1_streamq_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3011,7 +3116,7 @@ func (x *OffsetCommitResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OffsetCommitResult.ProtoReflect.Descriptor instead.
 func (*OffsetCommitResult) Descriptor() ([]byte, []int) {
-	return file_v1_streamq_proto_rawDescGZIP(), []int{47}
+	return file_v1_streamq_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *OffsetCommitResult) GetTopic() string {
@@ -3044,7 +3149,7 @@ type DescribeGroupRequest struct {
 
 func (x *DescribeGroupRequest) Reset() {
 	*x = DescribeGroupRequest{}
-	mi := &file_v1_streamq_proto_msgTypes[48]
+	mi := &file_v1_streamq_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3056,7 +3161,7 @@ func (x *DescribeGroupRequest) String() string {
 func (*DescribeGroupRequest) ProtoMessage() {}
 
 func (x *DescribeGroupRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_streamq_proto_msgTypes[48]
+	mi := &file_v1_streamq_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3069,7 +3174,7 @@ func (x *DescribeGroupRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DescribeGroupRequest.ProtoReflect.Descriptor instead.
 func (*DescribeGroupRequest) Descriptor() ([]byte, []int) {
-	return file_v1_streamq_proto_rawDescGZIP(), []int{48}
+	return file_v1_streamq_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *DescribeGroupRequest) GetGroupId() string {
@@ -3089,7 +3194,7 @@ type GroupMember struct {
 
 func (x *GroupMember) Reset() {
 	*x = GroupMember{}
-	mi := &file_v1_streamq_proto_msgTypes[49]
+	mi := &file_v1_streamq_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3101,7 +3206,7 @@ func (x *GroupMember) String() string {
 func (*GroupMember) ProtoMessage() {}
 
 func (x *GroupMember) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_streamq_proto_msgTypes[49]
+	mi := &file_v1_streamq_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3114,7 +3219,7 @@ func (x *GroupMember) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GroupMember.ProtoReflect.Descriptor instead.
 func (*GroupMember) Descriptor() ([]byte, []int) {
-	return file_v1_streamq_proto_rawDescGZIP(), []int{49}
+	return file_v1_streamq_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *GroupMember) GetMemberId() string {
@@ -3148,7 +3253,7 @@ type DescribeGroupResponse struct {
 
 func (x *DescribeGroupResponse) Reset() {
 	*x = DescribeGroupResponse{}
-	mi := &file_v1_streamq_proto_msgTypes[50]
+	mi := &file_v1_streamq_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3160,7 +3265,7 @@ func (x *DescribeGroupResponse) String() string {
 func (*DescribeGroupResponse) ProtoMessage() {}
 
 func (x *DescribeGroupResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_streamq_proto_msgTypes[50]
+	mi := &file_v1_streamq_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3173,7 +3278,7 @@ func (x *DescribeGroupResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DescribeGroupResponse.ProtoReflect.Descriptor instead.
 func (*DescribeGroupResponse) Descriptor() ([]byte, []int) {
-	return file_v1_streamq_proto_rawDescGZIP(), []int{50}
+	return file_v1_streamq_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *DescribeGroupResponse) GetErrorCode() ErrorCode {
@@ -3320,7 +3425,15 @@ const file_v1_streamq_proto_rawDesc = "" +
 	"\x05topic\x18\x01 \x01(\tR\x05topic\x12D\n" +
 	"\n" +
 	"partitions\x18\x02 \x03(\v2$.streamq.v1.ProducePartitionResponseR\n" +
-	"partitions\"K\n" +
+	"partitions\"\x15\n" +
+	"\x13InitProducerRequest\"\xb9\x01\n" +
+	"\x14InitProducerResponse\x124\n" +
+	"\n" +
+	"error_code\x18\x01 \x01(\x0e2\x15.streamq.v1.ErrorCodeR\terrorCode\x12#\n" +
+	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\x12\x1f\n" +
+	"\vproducer_id\x18\x03 \x01(\x03R\n" +
+	"producerId\x12%\n" +
+	"\x0eproducer_epoch\x18\x04 \x01(\x05R\rproducerEpoch\"K\n" +
 	"\x0fProduceResponse\x128\n" +
 	"\x06topics\x18\x01 \x03(\v2 .streamq.v1.ProduceTopicResponseR\x06topics\"\x91\x01\n" +
 	"\x0eFetchPartition\x12\x1c\n" +
@@ -3518,13 +3631,15 @@ const file_v1_streamq_proto_rawDesc = "" +
 	"\x10ACKS_UNSPECIFIED\x10\x00\x12\r\n" +
 	"\tACKS_NONE\x10\x01\x12\x0f\n" +
 	"\vACKS_LEADER\x10\x02\x12\f\n" +
-	"\bACKS_ALL\x10\x032\xe3\t\n" +
+	"\bACKS_ALL\x10\x032\xb6\n" +
+	"\n" +
 	"\x0eStreamQService\x12N\n" +
 	"\vCreateTopic\x12\x1e.streamq.v1.CreateTopicRequest\x1a\x1f.streamq.v1.CreateTopicResponse\x12N\n" +
 	"\vDeleteTopic\x12\x1e.streamq.v1.DeleteTopicRequest\x1a\x1f.streamq.v1.DeleteTopicResponse\x12K\n" +
 	"\n" +
 	"ListTopics\x12\x1d.streamq.v1.ListTopicsRequest\x1a\x1e.streamq.v1.ListTopicsResponse\x12E\n" +
-	"\bMetadata\x12\x1b.streamq.v1.MetadataRequest\x1a\x1c.streamq.v1.MetadataResponse\x12B\n" +
+	"\bMetadata\x12\x1b.streamq.v1.MetadataRequest\x1a\x1c.streamq.v1.MetadataResponse\x12Q\n" +
+	"\fInitProducer\x12\x1f.streamq.v1.InitProducerRequest\x1a .streamq.v1.InitProducerResponse\x12B\n" +
 	"\aProduce\x12\x1a.streamq.v1.ProduceRequest\x1a\x1b.streamq.v1.ProduceResponse\x12<\n" +
 	"\x05Fetch\x12\x18.streamq.v1.FetchRequest\x1a\x19.streamq.v1.FetchResponse\x12N\n" +
 	"\vListOffsets\x12\x1e.streamq.v1.ListOffsetsRequest\x1a\x1f.streamq.v1.ListOffsetsResponse\x12Z\n" +
@@ -3556,7 +3671,7 @@ func file_v1_streamq_proto_rawDescGZIP() []byte {
 }
 
 var file_v1_streamq_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_v1_streamq_proto_msgTypes = make([]protoimpl.MessageInfo, 53)
+var file_v1_streamq_proto_msgTypes = make([]protoimpl.MessageInfo, 55)
 var file_v1_streamq_proto_goTypes = []any{
 	(ErrorCode)(0),                       // 0: streamq.v1.ErrorCode
 	(Acks)(0),                            // 1: streamq.v1.Acks
@@ -3576,52 +3691,54 @@ var file_v1_streamq_proto_goTypes = []any{
 	(*ProduceRequest)(nil),               // 15: streamq.v1.ProduceRequest
 	(*ProducePartitionResponse)(nil),     // 16: streamq.v1.ProducePartitionResponse
 	(*ProduceTopicResponse)(nil),         // 17: streamq.v1.ProduceTopicResponse
-	(*ProduceResponse)(nil),              // 18: streamq.v1.ProduceResponse
-	(*FetchPartition)(nil),               // 19: streamq.v1.FetchPartition
-	(*FetchTopic)(nil),                   // 20: streamq.v1.FetchTopic
-	(*FetchRequest)(nil),                 // 21: streamq.v1.FetchRequest
-	(*FetchPartitionResponse)(nil),       // 22: streamq.v1.FetchPartitionResponse
-	(*FetchTopicResponse)(nil),           // 23: streamq.v1.FetchTopicResponse
-	(*FetchResponse)(nil),                // 24: streamq.v1.FetchResponse
-	(*ListOffsetsPartition)(nil),         // 25: streamq.v1.ListOffsetsPartition
-	(*ListOffsetsTopic)(nil),             // 26: streamq.v1.ListOffsetsTopic
-	(*ListOffsetsRequest)(nil),           // 27: streamq.v1.ListOffsetsRequest
-	(*ListOffsetsPartitionResponse)(nil), // 28: streamq.v1.ListOffsetsPartitionResponse
-	(*ListOffsetsTopicResponse)(nil),     // 29: streamq.v1.ListOffsetsTopicResponse
-	(*ListOffsetsResponse)(nil),          // 30: streamq.v1.ListOffsetsResponse
-	(*FindCoordinatorRequest)(nil),       // 31: streamq.v1.FindCoordinatorRequest
-	(*FindCoordinatorResponse)(nil),      // 32: streamq.v1.FindCoordinatorResponse
-	(*TopicPartitions)(nil),              // 33: streamq.v1.TopicPartitions
-	(*JoinGroupRequest)(nil),             // 34: streamq.v1.JoinGroupRequest
-	(*JoinGroupResponse)(nil),            // 35: streamq.v1.JoinGroupResponse
-	(*SyncGroupRequest)(nil),             // 36: streamq.v1.SyncGroupRequest
-	(*SyncGroupResponse)(nil),            // 37: streamq.v1.SyncGroupResponse
-	(*HeartbeatRequest)(nil),             // 38: streamq.v1.HeartbeatRequest
-	(*HeartbeatResponse)(nil),            // 39: streamq.v1.HeartbeatResponse
-	(*LeaveGroupRequest)(nil),            // 40: streamq.v1.LeaveGroupRequest
-	(*LeaveGroupResponse)(nil),           // 41: streamq.v1.LeaveGroupResponse
-	(*OffsetCommit)(nil),                 // 42: streamq.v1.OffsetCommit
-	(*CommitOffsetRequest)(nil),          // 43: streamq.v1.CommitOffsetRequest
-	(*CommitOffsetResponse)(nil),         // 44: streamq.v1.CommitOffsetResponse
-	(*FetchOffsetRequest)(nil),           // 45: streamq.v1.FetchOffsetRequest
-	(*FetchOffsetResponse)(nil),          // 46: streamq.v1.FetchOffsetResponse
-	(*ListGroupsRequest)(nil),            // 47: streamq.v1.ListGroupsRequest
-	(*ListGroupsResponse)(nil),           // 48: streamq.v1.ListGroupsResponse
-	(*OffsetCommitResult)(nil),           // 49: streamq.v1.OffsetCommitResult
-	(*DescribeGroupRequest)(nil),         // 50: streamq.v1.DescribeGroupRequest
-	(*GroupMember)(nil),                  // 51: streamq.v1.GroupMember
-	(*DescribeGroupResponse)(nil),        // 52: streamq.v1.DescribeGroupResponse
-	nil,                                  // 53: streamq.v1.CreateTopicRequest.ConfigsEntry
-	nil,                                  // 54: streamq.v1.TopicMetadata.ConfigsEntry
+	(*InitProducerRequest)(nil),          // 18: streamq.v1.InitProducerRequest
+	(*InitProducerResponse)(nil),         // 19: streamq.v1.InitProducerResponse
+	(*ProduceResponse)(nil),              // 20: streamq.v1.ProduceResponse
+	(*FetchPartition)(nil),               // 21: streamq.v1.FetchPartition
+	(*FetchTopic)(nil),                   // 22: streamq.v1.FetchTopic
+	(*FetchRequest)(nil),                 // 23: streamq.v1.FetchRequest
+	(*FetchPartitionResponse)(nil),       // 24: streamq.v1.FetchPartitionResponse
+	(*FetchTopicResponse)(nil),           // 25: streamq.v1.FetchTopicResponse
+	(*FetchResponse)(nil),                // 26: streamq.v1.FetchResponse
+	(*ListOffsetsPartition)(nil),         // 27: streamq.v1.ListOffsetsPartition
+	(*ListOffsetsTopic)(nil),             // 28: streamq.v1.ListOffsetsTopic
+	(*ListOffsetsRequest)(nil),           // 29: streamq.v1.ListOffsetsRequest
+	(*ListOffsetsPartitionResponse)(nil), // 30: streamq.v1.ListOffsetsPartitionResponse
+	(*ListOffsetsTopicResponse)(nil),     // 31: streamq.v1.ListOffsetsTopicResponse
+	(*ListOffsetsResponse)(nil),          // 32: streamq.v1.ListOffsetsResponse
+	(*FindCoordinatorRequest)(nil),       // 33: streamq.v1.FindCoordinatorRequest
+	(*FindCoordinatorResponse)(nil),      // 34: streamq.v1.FindCoordinatorResponse
+	(*TopicPartitions)(nil),              // 35: streamq.v1.TopicPartitions
+	(*JoinGroupRequest)(nil),             // 36: streamq.v1.JoinGroupRequest
+	(*JoinGroupResponse)(nil),            // 37: streamq.v1.JoinGroupResponse
+	(*SyncGroupRequest)(nil),             // 38: streamq.v1.SyncGroupRequest
+	(*SyncGroupResponse)(nil),            // 39: streamq.v1.SyncGroupResponse
+	(*HeartbeatRequest)(nil),             // 40: streamq.v1.HeartbeatRequest
+	(*HeartbeatResponse)(nil),            // 41: streamq.v1.HeartbeatResponse
+	(*LeaveGroupRequest)(nil),            // 42: streamq.v1.LeaveGroupRequest
+	(*LeaveGroupResponse)(nil),           // 43: streamq.v1.LeaveGroupResponse
+	(*OffsetCommit)(nil),                 // 44: streamq.v1.OffsetCommit
+	(*CommitOffsetRequest)(nil),          // 45: streamq.v1.CommitOffsetRequest
+	(*CommitOffsetResponse)(nil),         // 46: streamq.v1.CommitOffsetResponse
+	(*FetchOffsetRequest)(nil),           // 47: streamq.v1.FetchOffsetRequest
+	(*FetchOffsetResponse)(nil),          // 48: streamq.v1.FetchOffsetResponse
+	(*ListGroupsRequest)(nil),            // 49: streamq.v1.ListGroupsRequest
+	(*ListGroupsResponse)(nil),           // 50: streamq.v1.ListGroupsResponse
+	(*OffsetCommitResult)(nil),           // 51: streamq.v1.OffsetCommitResult
+	(*DescribeGroupRequest)(nil),         // 52: streamq.v1.DescribeGroupRequest
+	(*GroupMember)(nil),                  // 53: streamq.v1.GroupMember
+	(*DescribeGroupResponse)(nil),        // 54: streamq.v1.DescribeGroupResponse
+	nil,                                  // 55: streamq.v1.CreateTopicRequest.ConfigsEntry
+	nil,                                  // 56: streamq.v1.TopicMetadata.ConfigsEntry
 }
 var file_v1_streamq_proto_depIdxs = []int32{
-	53, // 0: streamq.v1.CreateTopicRequest.configs:type_name -> streamq.v1.CreateTopicRequest.ConfigsEntry
+	55, // 0: streamq.v1.CreateTopicRequest.configs:type_name -> streamq.v1.CreateTopicRequest.ConfigsEntry
 	0,  // 1: streamq.v1.CreateTopicResponse.error_code:type_name -> streamq.v1.ErrorCode
 	0,  // 2: streamq.v1.DeleteTopicResponse.error_code:type_name -> streamq.v1.ErrorCode
 	0,  // 3: streamq.v1.PartitionMetadata.error_code:type_name -> streamq.v1.ErrorCode
 	0,  // 4: streamq.v1.TopicMetadata.error_code:type_name -> streamq.v1.ErrorCode
 	10, // 5: streamq.v1.TopicMetadata.partitions:type_name -> streamq.v1.PartitionMetadata
-	54, // 6: streamq.v1.TopicMetadata.configs:type_name -> streamq.v1.TopicMetadata.ConfigsEntry
+	56, // 6: streamq.v1.TopicMetadata.configs:type_name -> streamq.v1.TopicMetadata.ConfigsEntry
 	9,  // 7: streamq.v1.MetadataResponse.brokers:type_name -> streamq.v1.Broker
 	11, // 8: streamq.v1.MetadataResponse.topics:type_name -> streamq.v1.TopicMetadata
 	13, // 9: streamq.v1.ProduceTopic.partitions:type_name -> streamq.v1.ProducePartition
@@ -3629,74 +3746,77 @@ var file_v1_streamq_proto_depIdxs = []int32{
 	14, // 11: streamq.v1.ProduceRequest.topics:type_name -> streamq.v1.ProduceTopic
 	0,  // 12: streamq.v1.ProducePartitionResponse.error_code:type_name -> streamq.v1.ErrorCode
 	16, // 13: streamq.v1.ProduceTopicResponse.partitions:type_name -> streamq.v1.ProducePartitionResponse
-	17, // 14: streamq.v1.ProduceResponse.topics:type_name -> streamq.v1.ProduceTopicResponse
-	19, // 15: streamq.v1.FetchTopic.partitions:type_name -> streamq.v1.FetchPartition
-	20, // 16: streamq.v1.FetchRequest.topics:type_name -> streamq.v1.FetchTopic
-	0,  // 17: streamq.v1.FetchPartitionResponse.error_code:type_name -> streamq.v1.ErrorCode
-	22, // 18: streamq.v1.FetchTopicResponse.partitions:type_name -> streamq.v1.FetchPartitionResponse
-	23, // 19: streamq.v1.FetchResponse.topics:type_name -> streamq.v1.FetchTopicResponse
-	25, // 20: streamq.v1.ListOffsetsTopic.partitions:type_name -> streamq.v1.ListOffsetsPartition
-	26, // 21: streamq.v1.ListOffsetsRequest.topics:type_name -> streamq.v1.ListOffsetsTopic
-	0,  // 22: streamq.v1.ListOffsetsPartitionResponse.error_code:type_name -> streamq.v1.ErrorCode
-	28, // 23: streamq.v1.ListOffsetsTopicResponse.partitions:type_name -> streamq.v1.ListOffsetsPartitionResponse
-	29, // 24: streamq.v1.ListOffsetsResponse.topics:type_name -> streamq.v1.ListOffsetsTopicResponse
-	0,  // 25: streamq.v1.FindCoordinatorResponse.error_code:type_name -> streamq.v1.ErrorCode
-	9,  // 26: streamq.v1.FindCoordinatorResponse.coordinator:type_name -> streamq.v1.Broker
-	0,  // 27: streamq.v1.JoinGroupResponse.error_code:type_name -> streamq.v1.ErrorCode
-	33, // 28: streamq.v1.JoinGroupResponse.assignment:type_name -> streamq.v1.TopicPartitions
-	0,  // 29: streamq.v1.SyncGroupResponse.error_code:type_name -> streamq.v1.ErrorCode
-	33, // 30: streamq.v1.SyncGroupResponse.assignment:type_name -> streamq.v1.TopicPartitions
-	0,  // 31: streamq.v1.HeartbeatResponse.error_code:type_name -> streamq.v1.ErrorCode
-	0,  // 32: streamq.v1.LeaveGroupResponse.error_code:type_name -> streamq.v1.ErrorCode
-	42, // 33: streamq.v1.CommitOffsetRequest.offsets:type_name -> streamq.v1.OffsetCommit
-	0,  // 34: streamq.v1.CommitOffsetResponse.error_code:type_name -> streamq.v1.ErrorCode
-	49, // 35: streamq.v1.CommitOffsetResponse.results:type_name -> streamq.v1.OffsetCommitResult
-	33, // 36: streamq.v1.FetchOffsetRequest.partitions:type_name -> streamq.v1.TopicPartitions
-	0,  // 37: streamq.v1.FetchOffsetResponse.error_code:type_name -> streamq.v1.ErrorCode
-	42, // 38: streamq.v1.FetchOffsetResponse.offsets:type_name -> streamq.v1.OffsetCommit
-	0,  // 39: streamq.v1.ListGroupsResponse.error_code:type_name -> streamq.v1.ErrorCode
-	0,  // 40: streamq.v1.OffsetCommitResult.error_code:type_name -> streamq.v1.ErrorCode
-	33, // 41: streamq.v1.GroupMember.assignment:type_name -> streamq.v1.TopicPartitions
-	0,  // 42: streamq.v1.DescribeGroupResponse.error_code:type_name -> streamq.v1.ErrorCode
-	51, // 43: streamq.v1.DescribeGroupResponse.members:type_name -> streamq.v1.GroupMember
-	42, // 44: streamq.v1.DescribeGroupResponse.committed:type_name -> streamq.v1.OffsetCommit
-	2,  // 45: streamq.v1.StreamQService.CreateTopic:input_type -> streamq.v1.CreateTopicRequest
-	4,  // 46: streamq.v1.StreamQService.DeleteTopic:input_type -> streamq.v1.DeleteTopicRequest
-	6,  // 47: streamq.v1.StreamQService.ListTopics:input_type -> streamq.v1.ListTopicsRequest
-	8,  // 48: streamq.v1.StreamQService.Metadata:input_type -> streamq.v1.MetadataRequest
-	15, // 49: streamq.v1.StreamQService.Produce:input_type -> streamq.v1.ProduceRequest
-	21, // 50: streamq.v1.StreamQService.Fetch:input_type -> streamq.v1.FetchRequest
-	27, // 51: streamq.v1.StreamQService.ListOffsets:input_type -> streamq.v1.ListOffsetsRequest
-	31, // 52: streamq.v1.StreamQService.FindCoordinator:input_type -> streamq.v1.FindCoordinatorRequest
-	34, // 53: streamq.v1.StreamQService.JoinGroup:input_type -> streamq.v1.JoinGroupRequest
-	36, // 54: streamq.v1.StreamQService.SyncGroup:input_type -> streamq.v1.SyncGroupRequest
-	38, // 55: streamq.v1.StreamQService.Heartbeat:input_type -> streamq.v1.HeartbeatRequest
-	40, // 56: streamq.v1.StreamQService.LeaveGroup:input_type -> streamq.v1.LeaveGroupRequest
-	43, // 57: streamq.v1.StreamQService.CommitOffset:input_type -> streamq.v1.CommitOffsetRequest
-	45, // 58: streamq.v1.StreamQService.FetchOffset:input_type -> streamq.v1.FetchOffsetRequest
-	47, // 59: streamq.v1.StreamQService.ListGroups:input_type -> streamq.v1.ListGroupsRequest
-	50, // 60: streamq.v1.StreamQService.DescribeGroup:input_type -> streamq.v1.DescribeGroupRequest
-	3,  // 61: streamq.v1.StreamQService.CreateTopic:output_type -> streamq.v1.CreateTopicResponse
-	5,  // 62: streamq.v1.StreamQService.DeleteTopic:output_type -> streamq.v1.DeleteTopicResponse
-	7,  // 63: streamq.v1.StreamQService.ListTopics:output_type -> streamq.v1.ListTopicsResponse
-	12, // 64: streamq.v1.StreamQService.Metadata:output_type -> streamq.v1.MetadataResponse
-	18, // 65: streamq.v1.StreamQService.Produce:output_type -> streamq.v1.ProduceResponse
-	24, // 66: streamq.v1.StreamQService.Fetch:output_type -> streamq.v1.FetchResponse
-	30, // 67: streamq.v1.StreamQService.ListOffsets:output_type -> streamq.v1.ListOffsetsResponse
-	32, // 68: streamq.v1.StreamQService.FindCoordinator:output_type -> streamq.v1.FindCoordinatorResponse
-	35, // 69: streamq.v1.StreamQService.JoinGroup:output_type -> streamq.v1.JoinGroupResponse
-	37, // 70: streamq.v1.StreamQService.SyncGroup:output_type -> streamq.v1.SyncGroupResponse
-	39, // 71: streamq.v1.StreamQService.Heartbeat:output_type -> streamq.v1.HeartbeatResponse
-	41, // 72: streamq.v1.StreamQService.LeaveGroup:output_type -> streamq.v1.LeaveGroupResponse
-	44, // 73: streamq.v1.StreamQService.CommitOffset:output_type -> streamq.v1.CommitOffsetResponse
-	46, // 74: streamq.v1.StreamQService.FetchOffset:output_type -> streamq.v1.FetchOffsetResponse
-	48, // 75: streamq.v1.StreamQService.ListGroups:output_type -> streamq.v1.ListGroupsResponse
-	52, // 76: streamq.v1.StreamQService.DescribeGroup:output_type -> streamq.v1.DescribeGroupResponse
-	61, // [61:77] is the sub-list for method output_type
-	45, // [45:61] is the sub-list for method input_type
-	45, // [45:45] is the sub-list for extension type_name
-	45, // [45:45] is the sub-list for extension extendee
-	0,  // [0:45] is the sub-list for field type_name
+	0,  // 14: streamq.v1.InitProducerResponse.error_code:type_name -> streamq.v1.ErrorCode
+	17, // 15: streamq.v1.ProduceResponse.topics:type_name -> streamq.v1.ProduceTopicResponse
+	21, // 16: streamq.v1.FetchTopic.partitions:type_name -> streamq.v1.FetchPartition
+	22, // 17: streamq.v1.FetchRequest.topics:type_name -> streamq.v1.FetchTopic
+	0,  // 18: streamq.v1.FetchPartitionResponse.error_code:type_name -> streamq.v1.ErrorCode
+	24, // 19: streamq.v1.FetchTopicResponse.partitions:type_name -> streamq.v1.FetchPartitionResponse
+	25, // 20: streamq.v1.FetchResponse.topics:type_name -> streamq.v1.FetchTopicResponse
+	27, // 21: streamq.v1.ListOffsetsTopic.partitions:type_name -> streamq.v1.ListOffsetsPartition
+	28, // 22: streamq.v1.ListOffsetsRequest.topics:type_name -> streamq.v1.ListOffsetsTopic
+	0,  // 23: streamq.v1.ListOffsetsPartitionResponse.error_code:type_name -> streamq.v1.ErrorCode
+	30, // 24: streamq.v1.ListOffsetsTopicResponse.partitions:type_name -> streamq.v1.ListOffsetsPartitionResponse
+	31, // 25: streamq.v1.ListOffsetsResponse.topics:type_name -> streamq.v1.ListOffsetsTopicResponse
+	0,  // 26: streamq.v1.FindCoordinatorResponse.error_code:type_name -> streamq.v1.ErrorCode
+	9,  // 27: streamq.v1.FindCoordinatorResponse.coordinator:type_name -> streamq.v1.Broker
+	0,  // 28: streamq.v1.JoinGroupResponse.error_code:type_name -> streamq.v1.ErrorCode
+	35, // 29: streamq.v1.JoinGroupResponse.assignment:type_name -> streamq.v1.TopicPartitions
+	0,  // 30: streamq.v1.SyncGroupResponse.error_code:type_name -> streamq.v1.ErrorCode
+	35, // 31: streamq.v1.SyncGroupResponse.assignment:type_name -> streamq.v1.TopicPartitions
+	0,  // 32: streamq.v1.HeartbeatResponse.error_code:type_name -> streamq.v1.ErrorCode
+	0,  // 33: streamq.v1.LeaveGroupResponse.error_code:type_name -> streamq.v1.ErrorCode
+	44, // 34: streamq.v1.CommitOffsetRequest.offsets:type_name -> streamq.v1.OffsetCommit
+	0,  // 35: streamq.v1.CommitOffsetResponse.error_code:type_name -> streamq.v1.ErrorCode
+	51, // 36: streamq.v1.CommitOffsetResponse.results:type_name -> streamq.v1.OffsetCommitResult
+	35, // 37: streamq.v1.FetchOffsetRequest.partitions:type_name -> streamq.v1.TopicPartitions
+	0,  // 38: streamq.v1.FetchOffsetResponse.error_code:type_name -> streamq.v1.ErrorCode
+	44, // 39: streamq.v1.FetchOffsetResponse.offsets:type_name -> streamq.v1.OffsetCommit
+	0,  // 40: streamq.v1.ListGroupsResponse.error_code:type_name -> streamq.v1.ErrorCode
+	0,  // 41: streamq.v1.OffsetCommitResult.error_code:type_name -> streamq.v1.ErrorCode
+	35, // 42: streamq.v1.GroupMember.assignment:type_name -> streamq.v1.TopicPartitions
+	0,  // 43: streamq.v1.DescribeGroupResponse.error_code:type_name -> streamq.v1.ErrorCode
+	53, // 44: streamq.v1.DescribeGroupResponse.members:type_name -> streamq.v1.GroupMember
+	44, // 45: streamq.v1.DescribeGroupResponse.committed:type_name -> streamq.v1.OffsetCommit
+	2,  // 46: streamq.v1.StreamQService.CreateTopic:input_type -> streamq.v1.CreateTopicRequest
+	4,  // 47: streamq.v1.StreamQService.DeleteTopic:input_type -> streamq.v1.DeleteTopicRequest
+	6,  // 48: streamq.v1.StreamQService.ListTopics:input_type -> streamq.v1.ListTopicsRequest
+	8,  // 49: streamq.v1.StreamQService.Metadata:input_type -> streamq.v1.MetadataRequest
+	18, // 50: streamq.v1.StreamQService.InitProducer:input_type -> streamq.v1.InitProducerRequest
+	15, // 51: streamq.v1.StreamQService.Produce:input_type -> streamq.v1.ProduceRequest
+	23, // 52: streamq.v1.StreamQService.Fetch:input_type -> streamq.v1.FetchRequest
+	29, // 53: streamq.v1.StreamQService.ListOffsets:input_type -> streamq.v1.ListOffsetsRequest
+	33, // 54: streamq.v1.StreamQService.FindCoordinator:input_type -> streamq.v1.FindCoordinatorRequest
+	36, // 55: streamq.v1.StreamQService.JoinGroup:input_type -> streamq.v1.JoinGroupRequest
+	38, // 56: streamq.v1.StreamQService.SyncGroup:input_type -> streamq.v1.SyncGroupRequest
+	40, // 57: streamq.v1.StreamQService.Heartbeat:input_type -> streamq.v1.HeartbeatRequest
+	42, // 58: streamq.v1.StreamQService.LeaveGroup:input_type -> streamq.v1.LeaveGroupRequest
+	45, // 59: streamq.v1.StreamQService.CommitOffset:input_type -> streamq.v1.CommitOffsetRequest
+	47, // 60: streamq.v1.StreamQService.FetchOffset:input_type -> streamq.v1.FetchOffsetRequest
+	49, // 61: streamq.v1.StreamQService.ListGroups:input_type -> streamq.v1.ListGroupsRequest
+	52, // 62: streamq.v1.StreamQService.DescribeGroup:input_type -> streamq.v1.DescribeGroupRequest
+	3,  // 63: streamq.v1.StreamQService.CreateTopic:output_type -> streamq.v1.CreateTopicResponse
+	5,  // 64: streamq.v1.StreamQService.DeleteTopic:output_type -> streamq.v1.DeleteTopicResponse
+	7,  // 65: streamq.v1.StreamQService.ListTopics:output_type -> streamq.v1.ListTopicsResponse
+	12, // 66: streamq.v1.StreamQService.Metadata:output_type -> streamq.v1.MetadataResponse
+	19, // 67: streamq.v1.StreamQService.InitProducer:output_type -> streamq.v1.InitProducerResponse
+	20, // 68: streamq.v1.StreamQService.Produce:output_type -> streamq.v1.ProduceResponse
+	26, // 69: streamq.v1.StreamQService.Fetch:output_type -> streamq.v1.FetchResponse
+	32, // 70: streamq.v1.StreamQService.ListOffsets:output_type -> streamq.v1.ListOffsetsResponse
+	34, // 71: streamq.v1.StreamQService.FindCoordinator:output_type -> streamq.v1.FindCoordinatorResponse
+	37, // 72: streamq.v1.StreamQService.JoinGroup:output_type -> streamq.v1.JoinGroupResponse
+	39, // 73: streamq.v1.StreamQService.SyncGroup:output_type -> streamq.v1.SyncGroupResponse
+	41, // 74: streamq.v1.StreamQService.Heartbeat:output_type -> streamq.v1.HeartbeatResponse
+	43, // 75: streamq.v1.StreamQService.LeaveGroup:output_type -> streamq.v1.LeaveGroupResponse
+	46, // 76: streamq.v1.StreamQService.CommitOffset:output_type -> streamq.v1.CommitOffsetResponse
+	48, // 77: streamq.v1.StreamQService.FetchOffset:output_type -> streamq.v1.FetchOffsetResponse
+	50, // 78: streamq.v1.StreamQService.ListGroups:output_type -> streamq.v1.ListGroupsResponse
+	54, // 79: streamq.v1.StreamQService.DescribeGroup:output_type -> streamq.v1.DescribeGroupResponse
+	63, // [63:80] is the sub-list for method output_type
+	46, // [46:63] is the sub-list for method input_type
+	46, // [46:46] is the sub-list for extension type_name
+	46, // [46:46] is the sub-list for extension extendee
+	0,  // [0:46] is the sub-list for field type_name
 }
 
 func init() { file_v1_streamq_proto_init() }
@@ -3710,7 +3830,7 @@ func file_v1_streamq_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_streamq_proto_rawDesc), len(file_v1_streamq_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   53,
+			NumMessages:   55,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

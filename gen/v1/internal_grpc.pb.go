@@ -25,6 +25,7 @@ const (
 	StreamQInternalService_ReplicaFetch_FullMethodName         = "/streamq.v1.StreamQInternalService/ReplicaFetch"
 	StreamQInternalService_OffsetForLeaderEpoch_FullMethodName = "/streamq.v1.StreamQInternalService/OffsetForLeaderEpoch"
 	StreamQInternalService_AlterISR_FullMethodName             = "/streamq.v1.StreamQInternalService/AlterISR"
+	StreamQInternalService_AllocateProducerIDs_FullMethodName  = "/streamq.v1.StreamQInternalService/AllocateProducerIDs"
 )
 
 // StreamQInternalServiceClient is the client API for StreamQInternalService service.
@@ -45,6 +46,8 @@ type StreamQInternalServiceClient interface {
 	OffsetForLeaderEpoch(ctx context.Context, in *OffsetForLeaderEpochRequest, opts ...grpc.CallOption) (*OffsetForLeaderEpochResponse, error)
 	// AlterISR asks the controller to change a partition's ISR (SPEC §4.3).
 	AlterISR(ctx context.Context, in *AlterISRRequest, opts ...grpc.CallOption) (*AlterISRResponse, error)
+	// AllocateProducerIDs reserves a block of producer IDs for a broker (SPEC §6).
+	AllocateProducerIDs(ctx context.Context, in *AllocateProducerIDsRequest, opts ...grpc.CallOption) (*AllocateProducerIDsResponse, error)
 }
 
 type streamQInternalServiceClient struct {
@@ -115,6 +118,16 @@ func (c *streamQInternalServiceClient) AlterISR(ctx context.Context, in *AlterIS
 	return out, nil
 }
 
+func (c *streamQInternalServiceClient) AllocateProducerIDs(ctx context.Context, in *AllocateProducerIDsRequest, opts ...grpc.CallOption) (*AllocateProducerIDsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AllocateProducerIDsResponse)
+	err := c.cc.Invoke(ctx, StreamQInternalService_AllocateProducerIDs_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // StreamQInternalServiceServer is the server API for StreamQInternalService service.
 // All implementations must embed UnimplementedStreamQInternalServiceServer
 // for forward compatibility.
@@ -133,6 +146,8 @@ type StreamQInternalServiceServer interface {
 	OffsetForLeaderEpoch(context.Context, *OffsetForLeaderEpochRequest) (*OffsetForLeaderEpochResponse, error)
 	// AlterISR asks the controller to change a partition's ISR (SPEC §4.3).
 	AlterISR(context.Context, *AlterISRRequest) (*AlterISRResponse, error)
+	// AllocateProducerIDs reserves a block of producer IDs for a broker (SPEC §6).
+	AllocateProducerIDs(context.Context, *AllocateProducerIDsRequest) (*AllocateProducerIDsResponse, error)
 	mustEmbedUnimplementedStreamQInternalServiceServer()
 }
 
@@ -160,6 +175,9 @@ func (UnimplementedStreamQInternalServiceServer) OffsetForLeaderEpoch(context.Co
 }
 func (UnimplementedStreamQInternalServiceServer) AlterISR(context.Context, *AlterISRRequest) (*AlterISRResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method AlterISR not implemented")
+}
+func (UnimplementedStreamQInternalServiceServer) AllocateProducerIDs(context.Context, *AllocateProducerIDsRequest) (*AllocateProducerIDsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AllocateProducerIDs not implemented")
 }
 func (UnimplementedStreamQInternalServiceServer) mustEmbedUnimplementedStreamQInternalServiceServer() {
 }
@@ -291,6 +309,24 @@ func _StreamQInternalService_AlterISR_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _StreamQInternalService_AllocateProducerIDs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AllocateProducerIDsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(StreamQInternalServiceServer).AllocateProducerIDs(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: StreamQInternalService_AllocateProducerIDs_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(StreamQInternalServiceServer).AllocateProducerIDs(ctx, req.(*AllocateProducerIDsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // StreamQInternalService_ServiceDesc is the grpc.ServiceDesc for StreamQInternalService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -321,6 +357,10 @@ var StreamQInternalService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "AlterISR",
 			Handler:    _StreamQInternalService_AlterISR_Handler,
+		},
+		{
+			MethodName: "AllocateProducerIDs",
+			Handler:    _StreamQInternalService_AllocateProducerIDs_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

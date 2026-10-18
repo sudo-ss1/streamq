@@ -20,6 +20,7 @@ message MetadataCommand {
     FenceBrokerCommand fence_broker = 14;
     UnfenceBrokerCommand unfence_broker = 15;
     AlterISRCommand alter_isr = 16;
+    AllocateProducerIDsCommand allocate_producer_ids = 17;
   }
 }
 
@@ -98,6 +99,8 @@ service StreamQInternalService {
   rpc OffsetForLeaderEpoch(OffsetForLeaderEpochRequest) returns (OffsetForLeaderEpochResponse);
   // AlterISR asks the controller to change a partition's ISR (SPEC §4.3).
   rpc AlterISR(AlterISRRequest) returns (AlterISRResponse);
+  // AllocateProducerIDs reserves a block of producer IDs for a broker (SPEC §6).
+  rpc AllocateProducerIDs(AllocateProducerIDsRequest) returns (AllocateProducerIDsResponse);
 }
 
 message ReplicaFetchRequest {
@@ -155,6 +158,24 @@ message AlterISRResponse {
   ErrorCode error_code = 1;
   string error_message = 2;
   int32 controller_id = 3;
+}
+
+// AllocateProducerIDsCommand reserves the next block of producer IDs for a broker (SPEC §6).
+message AllocateProducerIDsCommand {
+  int32 broker_id = 1;
+}
+
+message AllocateProducerIDsRequest {
+  int32 broker_id = 1;
+  int64 broker_epoch = 2;
+}
+
+message AllocateProducerIDsResponse {
+  ErrorCode error_code = 1;
+  string error_message = 2;
+  int64 first_id = 3;
+  int32 count = 4;
+  int32 controller_id = 5;
 }
 
 message RegisterBrokerRequest {

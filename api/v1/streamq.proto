@@ -45,6 +45,8 @@ service StreamQService {
   rpc ListTopics(ListTopicsRequest) returns (ListTopicsResponse);
   // Metadata returns brokers and per-partition leadership.
   rpc Metadata(MetadataRequest) returns (MetadataResponse);
+  // InitProducer returns a new idempotent producer ID (SPEC §6).
+  rpc InitProducer(InitProducerRequest) returns (InitProducerResponse);
   // Produce appends one record batch per partition.
   rpc Produce(ProduceRequest) returns (ProduceResponse);
   // Fetch long-polls for records below the high watermark.
@@ -184,6 +186,16 @@ message ProducePartitionResponse {
 message ProduceTopicResponse {
   string topic = 1;
   repeated ProducePartitionResponse partitions = 2;
+}
+
+message InitProducerRequest {}
+
+message InitProducerResponse {
+  ErrorCode error_code = 1;
+  string error_message = 2;
+  int64 producer_id = 3;
+  // Always 0 for now (SPEC §3.5).
+  int32 producer_epoch = 4;
 }
 
 message ProduceResponse {
