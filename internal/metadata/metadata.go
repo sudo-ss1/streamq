@@ -32,6 +32,33 @@ type Broker struct {
 	ID   int32  `json:"id"`
 	Host string `json:"host"`
 	Port int32  `json:"port"`
+	// InternalAddr is the broker-to-broker gRPC address (cluster mode).
+	InternalAddr string `json:"internal_addr,omitempty"`
+	// Fenced brokers lead no partition and are in no ISR except as a last member (SPEC §2.3).
+	Fenced bool `json:"fenced,omitempty"`
+	// Epoch counts registrations; heartbeats carrying an older epoch are stale.
+	Epoch int64 `json:"epoch,omitempty"`
+}
+
+// Broker returns the registered broker with id.
+func (s Snapshot) Broker(id int32) (Broker, bool) {
+	for _, b := range s.Brokers {
+		if b.ID == id {
+			return b, true
+		}
+	}
+	return Broker{}, false
+}
+
+// LiveBrokers returns the unfenced registered brokers.
+func (s Snapshot) LiveBrokers() []Broker {
+	var out []Broker
+	for _, b := range s.Brokers {
+		if !b.Fenced {
+			out = append(out, b)
+		}
+	}
+	return out
 }
 
 // PartitionState is the replicated state of one partition (SPEC §2.1).
@@ -96,6 +123,11 @@ const (
 	TopicDeleted
 	PartitionChanged
 	OffsetsCommitted
+	// BrokersChanged reports a registration, fencing or unfencing.
+	BrokersChanged
+	// Restored reports that the whole state was replaced (Raft snapshot restore); subscribers
+	// must resync from Snapshot().
+	Restored
 )
 
 // Change describes one applied state change, delivered to subscribers in apply order.

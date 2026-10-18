@@ -28,6 +28,8 @@ enum ErrorCode {
   ERROR_CODE_INVALID_TOPIC = 19;
   ERROR_CODE_UNKNOWN = 20;
   ERROR_CODE_INVALID_TIMESTAMP = 21;
+  // Internal API: a broker heartbeat or request from a stale broker incarnation.
+  ERROR_CODE_STALE_BROKER_EPOCH = 22;
 }
 
 // StreamQService is the public client API (SPEC §7.1).
@@ -80,6 +82,8 @@ message CreateTopicRequest {
 message CreateTopicResponse {
   ErrorCode error_code = 1;
   string error_message = 2;
+  // Controller hint for NOT_CONTROLLER; -1 if unknown.
+  int32 controller_id = 3;
 }
 
 message DeleteTopicRequest {
@@ -89,6 +93,8 @@ message DeleteTopicRequest {
 message DeleteTopicResponse {
   ErrorCode error_code = 1;
   string error_message = 2;
+  // Controller hint for NOT_CONTROLLER; -1 if unknown.
+  int32 controller_id = 3;
 }
 
 message ListTopicsRequest {}

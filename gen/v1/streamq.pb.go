@@ -49,6 +49,8 @@ const (
 	ErrorCode_ERROR_CODE_INVALID_TOPIC     ErrorCode = 19
 	ErrorCode_ERROR_CODE_UNKNOWN           ErrorCode = 20
 	ErrorCode_ERROR_CODE_INVALID_TIMESTAMP ErrorCode = 21
+	// Internal API: a broker heartbeat or request from a stale broker incarnation.
+	ErrorCode_ERROR_CODE_STALE_BROKER_EPOCH ErrorCode = 22
 )
 
 // Enum value maps for ErrorCode.
@@ -76,6 +78,7 @@ var (
 		19: "ERROR_CODE_INVALID_TOPIC",
 		20: "ERROR_CODE_UNKNOWN",
 		21: "ERROR_CODE_INVALID_TIMESTAMP",
+		22: "ERROR_CODE_STALE_BROKER_EPOCH",
 	}
 	ErrorCode_value = map[string]int32{
 		"ERROR_CODE_NONE":                       0,
@@ -100,6 +103,7 @@ var (
 		"ERROR_CODE_INVALID_TOPIC":              19,
 		"ERROR_CODE_UNKNOWN":                    20,
 		"ERROR_CODE_INVALID_TIMESTAMP":          21,
+		"ERROR_CODE_STALE_BROKER_EPOCH":         22,
 	}
 )
 
@@ -256,9 +260,11 @@ func (x *CreateTopicRequest) GetConfigs() map[string]string {
 }
 
 type CreateTopicResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ErrorCode     ErrorCode              `protobuf:"varint,1,opt,name=error_code,json=errorCode,proto3,enum=streamq.v1.ErrorCode" json:"error_code,omitempty"`
-	ErrorMessage  string                 `protobuf:"bytes,2,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	ErrorCode    ErrorCode              `protobuf:"varint,1,opt,name=error_code,json=errorCode,proto3,enum=streamq.v1.ErrorCode" json:"error_code,omitempty"`
+	ErrorMessage string                 `protobuf:"bytes,2,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	// Controller hint for NOT_CONTROLLER; -1 if unknown.
+	ControllerId  int32 `protobuf:"varint,3,opt,name=controller_id,json=controllerId,proto3" json:"controller_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -307,6 +313,13 @@ func (x *CreateTopicResponse) GetErrorMessage() string {
 	return ""
 }
 
+func (x *CreateTopicResponse) GetControllerId() int32 {
+	if x != nil {
+		return x.ControllerId
+	}
+	return 0
+}
+
 type DeleteTopicRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -352,9 +365,11 @@ func (x *DeleteTopicRequest) GetName() string {
 }
 
 type DeleteTopicResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ErrorCode     ErrorCode              `protobuf:"varint,1,opt,name=error_code,json=errorCode,proto3,enum=streamq.v1.ErrorCode" json:"error_code,omitempty"`
-	ErrorMessage  string                 `protobuf:"bytes,2,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	ErrorCode    ErrorCode              `protobuf:"varint,1,opt,name=error_code,json=errorCode,proto3,enum=streamq.v1.ErrorCode" json:"error_code,omitempty"`
+	ErrorMessage string                 `protobuf:"bytes,2,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	// Controller hint for NOT_CONTROLLER; -1 if unknown.
+	ControllerId  int32 `protobuf:"varint,3,opt,name=controller_id,json=controllerId,proto3" json:"controller_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -401,6 +416,13 @@ func (x *DeleteTopicResponse) GetErrorMessage() string {
 		return x.ErrorMessage
 	}
 	return ""
+}
+
+func (x *DeleteTopicResponse) GetControllerId() int32 {
+	if x != nil {
+		return x.ControllerId
+	}
+	return 0
 }
 
 type ListTopicsRequest struct {
@@ -3220,17 +3242,19 @@ const file_v1_streamq_proto_rawDesc = "" +
 	"\aconfigs\x18\x04 \x03(\v2+.streamq.v1.CreateTopicRequest.ConfigsEntryR\aconfigs\x1a:\n" +
 	"\fConfigsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"p\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x95\x01\n" +
 	"\x13CreateTopicResponse\x124\n" +
 	"\n" +
 	"error_code\x18\x01 \x01(\x0e2\x15.streamq.v1.ErrorCodeR\terrorCode\x12#\n" +
-	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\"(\n" +
+	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\x12#\n" +
+	"\rcontroller_id\x18\x03 \x01(\x05R\fcontrollerId\"(\n" +
 	"\x12DeleteTopicRequest\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\"p\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\"\x95\x01\n" +
 	"\x13DeleteTopicResponse\x124\n" +
 	"\n" +
 	"error_code\x18\x01 \x01(\x0e2\x15.streamq.v1.ErrorCodeR\terrorCode\x12#\n" +
-	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\"\x13\n" +
+	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\x12#\n" +
+	"\rcontroller_id\x18\x03 \x01(\x05R\fcontrollerId\"\x13\n" +
 	"\x11ListTopicsRequest\"*\n" +
 	"\x12ListTopicsResponse\x12\x14\n" +
 	"\x05names\x18\x01 \x03(\tR\x05names\")\n" +
@@ -3458,7 +3482,7 @@ const file_v1_streamq_proto_rawDesc = "" +
 	"\bassignor\x18\x05 \x01(\tR\bassignor\x121\n" +
 	"\amembers\x18\x06 \x03(\v2\x17.streamq.v1.GroupMemberR\amembers\x126\n" +
 	"\tcommitted\x18\a \x03(\v2\x18.streamq.v1.OffsetCommitR\tcommitted\x12#\n" +
-	"\rerror_message\x18\b \x01(\tR\ferrorMessage*\xf1\x05\n" +
+	"\rerror_message\x18\b \x01(\tR\ferrorMessage*\x94\x06\n" +
 	"\tErrorCode\x12\x13\n" +
 	"\x0fERROR_CODE_NONE\x10\x00\x12)\n" +
 	"%ERROR_CODE_UNKNOWN_TOPIC_OR_PARTITION\x10\x01\x12#\n" +
@@ -3482,7 +3506,8 @@ const file_v1_streamq_proto_rawDesc = "" +
 	"\x19ERROR_CODE_INVALID_CONFIG\x10\x12\x12\x1c\n" +
 	"\x18ERROR_CODE_INVALID_TOPIC\x10\x13\x12\x16\n" +
 	"\x12ERROR_CODE_UNKNOWN\x10\x14\x12 \n" +
-	"\x1cERROR_CODE_INVALID_TIMESTAMP\x10\x15*J\n" +
+	"\x1cERROR_CODE_INVALID_TIMESTAMP\x10\x15\x12!\n" +
+	"\x1dERROR_CODE_STALE_BROKER_EPOCH\x10\x16*J\n" +
 	"\x04Acks\x12\x14\n" +
 	"\x10ACKS_UNSPECIFIED\x10\x00\x12\r\n" +
 	"\tACKS_NONE\x10\x01\x12\x0f\n" +

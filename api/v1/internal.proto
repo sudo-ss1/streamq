@@ -9,10 +9,16 @@ import "v1/streamq.proto";
 message MetadataCommand {
   int32 version = 1;
   int64 timestamp_ms = 2;
+  // For leader-issued commands, the Raft term the issuer acted in; the FSM rejects the entry if
+  // it was committed in a different term (0 = not term-bound).
+  uint64 controller_epoch = 3;
   oneof cmd {
     CreateTopicCommand create_topic = 10;
     DeleteTopicCommand delete_topic = 11;
     CommitOffsetsCommand commit_offsets = 12;
+    RegisterBrokerCommand register_broker = 13;
+    FenceBrokerCommand fence_broker = 14;
+    UnfenceBrokerCommand unfence_broker = 15;
   }
 }
 
@@ -38,4 +44,80 @@ message DeleteTopicCommand {
 message CommitOffsetsCommand {
   string group_id = 1;
   repeated OffsetCommit offsets = 2;
+}
+
+// RegisterBrokerCommand registers (or re-registers) a broker. It stays fenced until the
+// controller unfences it once it has caught up on metadata (SPEC §2.3).
+message RegisterBrokerCommand {
+  int32 broker_id = 1;
+  string host = 2;
+  int32 port = 3;
+  string internal_addr = 4;
+}
+
+// FenceBrokerCommand fences a broker that missed heartbeats: it leaves every ISR (except as the
+// last member) and loses leadership (SPEC §2.3, §4.4).
+message FenceBrokerCommand {
+  int32 broker_id = 1;
+  // The incarnation being fenced; a mismatch with the current epoch makes this a no-op.
+  int64 broker_epoch = 2;
+}
+
+// UnfenceBrokerCommand unfences a caught-up broker; offline partitions it can lead re-elect it.
+message UnfenceBrokerCommand {
+  int32 broker_id = 1;
+  // The incarnation being unfenced; a mismatch with the current epoch makes this a no-op.
+  int64 broker_epoch = 2;
+}
+
+// StreamQInternalService is the broker-to-broker API (SPEC §7.2), served on internal_addr.
+service StreamQInternalService {
+  // RegisterBroker registers a broker with the controller.
+  rpc RegisterBroker(RegisterBrokerRequest) returns (RegisterBrokerResponse);
+  // BrokerHeartbeat keeps a broker alive and reports its metadata progress.
+  rpc BrokerHeartbeat(BrokerHeartbeatRequest) returns (BrokerHeartbeatResponse);
+  // ForwardMetadata applies a metadata command on the controller (follower forwarding).
+  rpc ForwardMetadata(ForwardMetadataRequest) returns (ForwardMetadataResponse);
+}
+
+message RegisterBrokerRequest {
+  int32 broker_id = 1;
+  string host = 2;
+  int32 port = 3;
+  string internal_addr = 4;
+}
+
+message RegisterBrokerResponse {
+  ErrorCode error_code = 1;
+  string error_message = 2;
+  int64 broker_epoch = 3;
+  // Controller hint for NOT_CONTROLLER; -1 if unknown.
+  int32 controller_id = 4;
+  // The broker must have processed metadata up to this index before opening its partitions.
+  uint64 catch_up_index = 5;
+}
+
+message BrokerHeartbeatRequest {
+  int32 broker_id = 1;
+  int64 broker_epoch = 2;
+  uint64 applied_index = 3;
+}
+
+message BrokerHeartbeatResponse {
+  ErrorCode error_code = 1;
+  string error_message = 2;
+  bool fenced = 3;
+  int32 controller_id = 4;
+}
+
+message ForwardMetadataRequest {
+  MetadataCommand command = 1;
+}
+
+message ForwardMetadataResponse {
+  ErrorCode error_code = 1;
+  string error_message = 2;
+  int32 controller_id = 3;
+  // Raft index of the applied command; the forwarder waits until it has applied it locally.
+  uint64 index = 4;
 }

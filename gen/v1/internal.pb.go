@@ -27,11 +27,17 @@ type MetadataCommand struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	Version     int32                  `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
 	TimestampMs int64                  `protobuf:"varint,2,opt,name=timestamp_ms,json=timestampMs,proto3" json:"timestamp_ms,omitempty"`
+	// For leader-issued commands, the Raft term the issuer acted in; the FSM rejects the entry if
+	// it was committed in a different term (0 = not term-bound).
+	ControllerEpoch uint64 `protobuf:"varint,3,opt,name=controller_epoch,json=controllerEpoch,proto3" json:"controller_epoch,omitempty"`
 	// Types that are valid to be assigned to Cmd:
 	//
 	//	*MetadataCommand_CreateTopic
 	//	*MetadataCommand_DeleteTopic
 	//	*MetadataCommand_CommitOffsets
+	//	*MetadataCommand_RegisterBroker
+	//	*MetadataCommand_FenceBroker
+	//	*MetadataCommand_UnfenceBroker
 	Cmd           isMetadataCommand_Cmd `protobuf_oneof:"cmd"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -81,6 +87,13 @@ func (x *MetadataCommand) GetTimestampMs() int64 {
 	return 0
 }
 
+func (x *MetadataCommand) GetControllerEpoch() uint64 {
+	if x != nil {
+		return x.ControllerEpoch
+	}
+	return 0
+}
+
 func (x *MetadataCommand) GetCmd() isMetadataCommand_Cmd {
 	if x != nil {
 		return x.Cmd
@@ -115,6 +128,33 @@ func (x *MetadataCommand) GetCommitOffsets() *CommitOffsetsCommand {
 	return nil
 }
 
+func (x *MetadataCommand) GetRegisterBroker() *RegisterBrokerCommand {
+	if x != nil {
+		if x, ok := x.Cmd.(*MetadataCommand_RegisterBroker); ok {
+			return x.RegisterBroker
+		}
+	}
+	return nil
+}
+
+func (x *MetadataCommand) GetFenceBroker() *FenceBrokerCommand {
+	if x != nil {
+		if x, ok := x.Cmd.(*MetadataCommand_FenceBroker); ok {
+			return x.FenceBroker
+		}
+	}
+	return nil
+}
+
+func (x *MetadataCommand) GetUnfenceBroker() *UnfenceBrokerCommand {
+	if x != nil {
+		if x, ok := x.Cmd.(*MetadataCommand_UnfenceBroker); ok {
+			return x.UnfenceBroker
+		}
+	}
+	return nil
+}
+
 type isMetadataCommand_Cmd interface {
 	isMetadataCommand_Cmd()
 }
@@ -131,11 +171,29 @@ type MetadataCommand_CommitOffsets struct {
 	CommitOffsets *CommitOffsetsCommand `protobuf:"bytes,12,opt,name=commit_offsets,json=commitOffsets,proto3,oneof"`
 }
 
+type MetadataCommand_RegisterBroker struct {
+	RegisterBroker *RegisterBrokerCommand `protobuf:"bytes,13,opt,name=register_broker,json=registerBroker,proto3,oneof"`
+}
+
+type MetadataCommand_FenceBroker struct {
+	FenceBroker *FenceBrokerCommand `protobuf:"bytes,14,opt,name=fence_broker,json=fenceBroker,proto3,oneof"`
+}
+
+type MetadataCommand_UnfenceBroker struct {
+	UnfenceBroker *UnfenceBrokerCommand `protobuf:"bytes,15,opt,name=unfence_broker,json=unfenceBroker,proto3,oneof"`
+}
+
 func (*MetadataCommand_CreateTopic) isMetadataCommand_Cmd() {}
 
 func (*MetadataCommand_DeleteTopic) isMetadataCommand_Cmd() {}
 
 func (*MetadataCommand_CommitOffsets) isMetadataCommand_Cmd() {}
+
+func (*MetadataCommand_RegisterBroker) isMetadataCommand_Cmd() {}
+
+func (*MetadataCommand_FenceBroker) isMetadataCommand_Cmd() {}
+
+func (*MetadataCommand_UnfenceBroker) isMetadataCommand_Cmd() {}
 
 type CreateTopicCommand struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
@@ -356,19 +414,589 @@ func (x *CommitOffsetsCommand) GetOffsets() []*OffsetCommit {
 	return nil
 }
 
+// RegisterBrokerCommand registers (or re-registers) a broker. It stays fenced until the
+// controller unfences it once it has caught up on metadata (SPEC §2.3).
+type RegisterBrokerCommand struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	BrokerId      int32                  `protobuf:"varint,1,opt,name=broker_id,json=brokerId,proto3" json:"broker_id,omitempty"`
+	Host          string                 `protobuf:"bytes,2,opt,name=host,proto3" json:"host,omitempty"`
+	Port          int32                  `protobuf:"varint,3,opt,name=port,proto3" json:"port,omitempty"`
+	InternalAddr  string                 `protobuf:"bytes,4,opt,name=internal_addr,json=internalAddr,proto3" json:"internal_addr,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RegisterBrokerCommand) Reset() {
+	*x = RegisterBrokerCommand{}
+	mi := &file_v1_internal_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegisterBrokerCommand) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegisterBrokerCommand) ProtoMessage() {}
+
+func (x *RegisterBrokerCommand) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_internal_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegisterBrokerCommand.ProtoReflect.Descriptor instead.
+func (*RegisterBrokerCommand) Descriptor() ([]byte, []int) {
+	return file_v1_internal_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *RegisterBrokerCommand) GetBrokerId() int32 {
+	if x != nil {
+		return x.BrokerId
+	}
+	return 0
+}
+
+func (x *RegisterBrokerCommand) GetHost() string {
+	if x != nil {
+		return x.Host
+	}
+	return ""
+}
+
+func (x *RegisterBrokerCommand) GetPort() int32 {
+	if x != nil {
+		return x.Port
+	}
+	return 0
+}
+
+func (x *RegisterBrokerCommand) GetInternalAddr() string {
+	if x != nil {
+		return x.InternalAddr
+	}
+	return ""
+}
+
+// FenceBrokerCommand fences a broker that missed heartbeats: it leaves every ISR (except as the
+// last member) and loses leadership (SPEC §2.3, §4.4).
+type FenceBrokerCommand struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	BrokerId int32                  `protobuf:"varint,1,opt,name=broker_id,json=brokerId,proto3" json:"broker_id,omitempty"`
+	// The incarnation being fenced; a mismatch with the current epoch makes this a no-op.
+	BrokerEpoch   int64 `protobuf:"varint,2,opt,name=broker_epoch,json=brokerEpoch,proto3" json:"broker_epoch,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FenceBrokerCommand) Reset() {
+	*x = FenceBrokerCommand{}
+	mi := &file_v1_internal_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FenceBrokerCommand) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FenceBrokerCommand) ProtoMessage() {}
+
+func (x *FenceBrokerCommand) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_internal_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FenceBrokerCommand.ProtoReflect.Descriptor instead.
+func (*FenceBrokerCommand) Descriptor() ([]byte, []int) {
+	return file_v1_internal_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *FenceBrokerCommand) GetBrokerId() int32 {
+	if x != nil {
+		return x.BrokerId
+	}
+	return 0
+}
+
+func (x *FenceBrokerCommand) GetBrokerEpoch() int64 {
+	if x != nil {
+		return x.BrokerEpoch
+	}
+	return 0
+}
+
+// UnfenceBrokerCommand unfences a caught-up broker; offline partitions it can lead re-elect it.
+type UnfenceBrokerCommand struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	BrokerId int32                  `protobuf:"varint,1,opt,name=broker_id,json=brokerId,proto3" json:"broker_id,omitempty"`
+	// The incarnation being unfenced; a mismatch with the current epoch makes this a no-op.
+	BrokerEpoch   int64 `protobuf:"varint,2,opt,name=broker_epoch,json=brokerEpoch,proto3" json:"broker_epoch,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UnfenceBrokerCommand) Reset() {
+	*x = UnfenceBrokerCommand{}
+	mi := &file_v1_internal_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UnfenceBrokerCommand) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UnfenceBrokerCommand) ProtoMessage() {}
+
+func (x *UnfenceBrokerCommand) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_internal_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UnfenceBrokerCommand.ProtoReflect.Descriptor instead.
+func (*UnfenceBrokerCommand) Descriptor() ([]byte, []int) {
+	return file_v1_internal_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *UnfenceBrokerCommand) GetBrokerId() int32 {
+	if x != nil {
+		return x.BrokerId
+	}
+	return 0
+}
+
+func (x *UnfenceBrokerCommand) GetBrokerEpoch() int64 {
+	if x != nil {
+		return x.BrokerEpoch
+	}
+	return 0
+}
+
+type RegisterBrokerRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	BrokerId      int32                  `protobuf:"varint,1,opt,name=broker_id,json=brokerId,proto3" json:"broker_id,omitempty"`
+	Host          string                 `protobuf:"bytes,2,opt,name=host,proto3" json:"host,omitempty"`
+	Port          int32                  `protobuf:"varint,3,opt,name=port,proto3" json:"port,omitempty"`
+	InternalAddr  string                 `protobuf:"bytes,4,opt,name=internal_addr,json=internalAddr,proto3" json:"internal_addr,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RegisterBrokerRequest) Reset() {
+	*x = RegisterBrokerRequest{}
+	mi := &file_v1_internal_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegisterBrokerRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegisterBrokerRequest) ProtoMessage() {}
+
+func (x *RegisterBrokerRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_internal_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegisterBrokerRequest.ProtoReflect.Descriptor instead.
+func (*RegisterBrokerRequest) Descriptor() ([]byte, []int) {
+	return file_v1_internal_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *RegisterBrokerRequest) GetBrokerId() int32 {
+	if x != nil {
+		return x.BrokerId
+	}
+	return 0
+}
+
+func (x *RegisterBrokerRequest) GetHost() string {
+	if x != nil {
+		return x.Host
+	}
+	return ""
+}
+
+func (x *RegisterBrokerRequest) GetPort() int32 {
+	if x != nil {
+		return x.Port
+	}
+	return 0
+}
+
+func (x *RegisterBrokerRequest) GetInternalAddr() string {
+	if x != nil {
+		return x.InternalAddr
+	}
+	return ""
+}
+
+type RegisterBrokerResponse struct {
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	ErrorCode    ErrorCode              `protobuf:"varint,1,opt,name=error_code,json=errorCode,proto3,enum=streamq.v1.ErrorCode" json:"error_code,omitempty"`
+	ErrorMessage string                 `protobuf:"bytes,2,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	BrokerEpoch  int64                  `protobuf:"varint,3,opt,name=broker_epoch,json=brokerEpoch,proto3" json:"broker_epoch,omitempty"`
+	// Controller hint for NOT_CONTROLLER; -1 if unknown.
+	ControllerId int32 `protobuf:"varint,4,opt,name=controller_id,json=controllerId,proto3" json:"controller_id,omitempty"`
+	// The broker must have processed metadata up to this index before opening its partitions.
+	CatchUpIndex  uint64 `protobuf:"varint,5,opt,name=catch_up_index,json=catchUpIndex,proto3" json:"catch_up_index,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RegisterBrokerResponse) Reset() {
+	*x = RegisterBrokerResponse{}
+	mi := &file_v1_internal_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegisterBrokerResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegisterBrokerResponse) ProtoMessage() {}
+
+func (x *RegisterBrokerResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_internal_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegisterBrokerResponse.ProtoReflect.Descriptor instead.
+func (*RegisterBrokerResponse) Descriptor() ([]byte, []int) {
+	return file_v1_internal_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *RegisterBrokerResponse) GetErrorCode() ErrorCode {
+	if x != nil {
+		return x.ErrorCode
+	}
+	return ErrorCode_ERROR_CODE_NONE
+}
+
+func (x *RegisterBrokerResponse) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
+func (x *RegisterBrokerResponse) GetBrokerEpoch() int64 {
+	if x != nil {
+		return x.BrokerEpoch
+	}
+	return 0
+}
+
+func (x *RegisterBrokerResponse) GetControllerId() int32 {
+	if x != nil {
+		return x.ControllerId
+	}
+	return 0
+}
+
+func (x *RegisterBrokerResponse) GetCatchUpIndex() uint64 {
+	if x != nil {
+		return x.CatchUpIndex
+	}
+	return 0
+}
+
+type BrokerHeartbeatRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	BrokerId      int32                  `protobuf:"varint,1,opt,name=broker_id,json=brokerId,proto3" json:"broker_id,omitempty"`
+	BrokerEpoch   int64                  `protobuf:"varint,2,opt,name=broker_epoch,json=brokerEpoch,proto3" json:"broker_epoch,omitempty"`
+	AppliedIndex  uint64                 `protobuf:"varint,3,opt,name=applied_index,json=appliedIndex,proto3" json:"applied_index,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BrokerHeartbeatRequest) Reset() {
+	*x = BrokerHeartbeatRequest{}
+	mi := &file_v1_internal_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BrokerHeartbeatRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BrokerHeartbeatRequest) ProtoMessage() {}
+
+func (x *BrokerHeartbeatRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_internal_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BrokerHeartbeatRequest.ProtoReflect.Descriptor instead.
+func (*BrokerHeartbeatRequest) Descriptor() ([]byte, []int) {
+	return file_v1_internal_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *BrokerHeartbeatRequest) GetBrokerId() int32 {
+	if x != nil {
+		return x.BrokerId
+	}
+	return 0
+}
+
+func (x *BrokerHeartbeatRequest) GetBrokerEpoch() int64 {
+	if x != nil {
+		return x.BrokerEpoch
+	}
+	return 0
+}
+
+func (x *BrokerHeartbeatRequest) GetAppliedIndex() uint64 {
+	if x != nil {
+		return x.AppliedIndex
+	}
+	return 0
+}
+
+type BrokerHeartbeatResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ErrorCode     ErrorCode              `protobuf:"varint,1,opt,name=error_code,json=errorCode,proto3,enum=streamq.v1.ErrorCode" json:"error_code,omitempty"`
+	ErrorMessage  string                 `protobuf:"bytes,2,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	Fenced        bool                   `protobuf:"varint,3,opt,name=fenced,proto3" json:"fenced,omitempty"`
+	ControllerId  int32                  `protobuf:"varint,4,opt,name=controller_id,json=controllerId,proto3" json:"controller_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BrokerHeartbeatResponse) Reset() {
+	*x = BrokerHeartbeatResponse{}
+	mi := &file_v1_internal_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BrokerHeartbeatResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BrokerHeartbeatResponse) ProtoMessage() {}
+
+func (x *BrokerHeartbeatResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_internal_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BrokerHeartbeatResponse.ProtoReflect.Descriptor instead.
+func (*BrokerHeartbeatResponse) Descriptor() ([]byte, []int) {
+	return file_v1_internal_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *BrokerHeartbeatResponse) GetErrorCode() ErrorCode {
+	if x != nil {
+		return x.ErrorCode
+	}
+	return ErrorCode_ERROR_CODE_NONE
+}
+
+func (x *BrokerHeartbeatResponse) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
+func (x *BrokerHeartbeatResponse) GetFenced() bool {
+	if x != nil {
+		return x.Fenced
+	}
+	return false
+}
+
+func (x *BrokerHeartbeatResponse) GetControllerId() int32 {
+	if x != nil {
+		return x.ControllerId
+	}
+	return 0
+}
+
+type ForwardMetadataRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Command       *MetadataCommand       `protobuf:"bytes,1,opt,name=command,proto3" json:"command,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ForwardMetadataRequest) Reset() {
+	*x = ForwardMetadataRequest{}
+	mi := &file_v1_internal_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ForwardMetadataRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ForwardMetadataRequest) ProtoMessage() {}
+
+func (x *ForwardMetadataRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_internal_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ForwardMetadataRequest.ProtoReflect.Descriptor instead.
+func (*ForwardMetadataRequest) Descriptor() ([]byte, []int) {
+	return file_v1_internal_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *ForwardMetadataRequest) GetCommand() *MetadataCommand {
+	if x != nil {
+		return x.Command
+	}
+	return nil
+}
+
+type ForwardMetadataResponse struct {
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	ErrorCode    ErrorCode              `protobuf:"varint,1,opt,name=error_code,json=errorCode,proto3,enum=streamq.v1.ErrorCode" json:"error_code,omitempty"`
+	ErrorMessage string                 `protobuf:"bytes,2,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	ControllerId int32                  `protobuf:"varint,3,opt,name=controller_id,json=controllerId,proto3" json:"controller_id,omitempty"`
+	// Raft index of the applied command; the forwarder waits until it has applied it locally.
+	Index         uint64 `protobuf:"varint,4,opt,name=index,proto3" json:"index,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ForwardMetadataResponse) Reset() {
+	*x = ForwardMetadataResponse{}
+	mi := &file_v1_internal_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ForwardMetadataResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ForwardMetadataResponse) ProtoMessage() {}
+
+func (x *ForwardMetadataResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_internal_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ForwardMetadataResponse.ProtoReflect.Descriptor instead.
+func (*ForwardMetadataResponse) Descriptor() ([]byte, []int) {
+	return file_v1_internal_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *ForwardMetadataResponse) GetErrorCode() ErrorCode {
+	if x != nil {
+		return x.ErrorCode
+	}
+	return ErrorCode_ERROR_CODE_NONE
+}
+
+func (x *ForwardMetadataResponse) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
+func (x *ForwardMetadataResponse) GetControllerId() int32 {
+	if x != nil {
+		return x.ControllerId
+	}
+	return 0
+}
+
+func (x *ForwardMetadataResponse) GetIndex() uint64 {
+	if x != nil {
+		return x.Index
+	}
+	return 0
+}
+
 var File_v1_internal_proto protoreflect.FileDescriptor
 
 const file_v1_internal_proto_rawDesc = "" +
 	"\n" +
 	"\x11v1/internal.proto\x12\n" +
-	"streamq.v1\x1a\x10v1/streamq.proto\"\xaa\x02\n" +
+	"streamq.v1\x1a\x10v1/streamq.proto\"\xb3\x04\n" +
 	"\x0fMetadataCommand\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\x05R\aversion\x12!\n" +
-	"\ftimestamp_ms\x18\x02 \x01(\x03R\vtimestampMs\x12C\n" +
+	"\ftimestamp_ms\x18\x02 \x01(\x03R\vtimestampMs\x12)\n" +
+	"\x10controller_epoch\x18\x03 \x01(\x04R\x0fcontrollerEpoch\x12C\n" +
 	"\fcreate_topic\x18\n" +
 	" \x01(\v2\x1e.streamq.v1.CreateTopicCommandH\x00R\vcreateTopic\x12C\n" +
 	"\fdelete_topic\x18\v \x01(\v2\x1e.streamq.v1.DeleteTopicCommandH\x00R\vdeleteTopic\x12I\n" +
-	"\x0ecommit_offsets\x18\f \x01(\v2 .streamq.v1.CommitOffsetsCommandH\x00R\rcommitOffsetsB\x05\n" +
+	"\x0ecommit_offsets\x18\f \x01(\v2 .streamq.v1.CommitOffsetsCommandH\x00R\rcommitOffsets\x12L\n" +
+	"\x0fregister_broker\x18\r \x01(\v2!.streamq.v1.RegisterBrokerCommandH\x00R\x0eregisterBroker\x12C\n" +
+	"\ffence_broker\x18\x0e \x01(\v2\x1e.streamq.v1.FenceBrokerCommandH\x00R\vfenceBroker\x12I\n" +
+	"\x0eunfence_broker\x18\x0f \x01(\v2 .streamq.v1.UnfenceBrokerCommandH\x00R\runfenceBrokerB\x05\n" +
 	"\x03cmd\"\x87\x02\n" +
 	"\x12CreateTopicCommand\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12E\n" +
@@ -387,7 +1015,52 @@ const file_v1_internal_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tR\x04name\"e\n" +
 	"\x14CommitOffsetsCommand\x12\x19\n" +
 	"\bgroup_id\x18\x01 \x01(\tR\agroupId\x122\n" +
-	"\aoffsets\x18\x02 \x03(\v2\x18.streamq.v1.OffsetCommitR\aoffsetsB\x96\x01\n" +
+	"\aoffsets\x18\x02 \x03(\v2\x18.streamq.v1.OffsetCommitR\aoffsets\"\x81\x01\n" +
+	"\x15RegisterBrokerCommand\x12\x1b\n" +
+	"\tbroker_id\x18\x01 \x01(\x05R\bbrokerId\x12\x12\n" +
+	"\x04host\x18\x02 \x01(\tR\x04host\x12\x12\n" +
+	"\x04port\x18\x03 \x01(\x05R\x04port\x12#\n" +
+	"\rinternal_addr\x18\x04 \x01(\tR\finternalAddr\"T\n" +
+	"\x12FenceBrokerCommand\x12\x1b\n" +
+	"\tbroker_id\x18\x01 \x01(\x05R\bbrokerId\x12!\n" +
+	"\fbroker_epoch\x18\x02 \x01(\x03R\vbrokerEpoch\"V\n" +
+	"\x14UnfenceBrokerCommand\x12\x1b\n" +
+	"\tbroker_id\x18\x01 \x01(\x05R\bbrokerId\x12!\n" +
+	"\fbroker_epoch\x18\x02 \x01(\x03R\vbrokerEpoch\"\x81\x01\n" +
+	"\x15RegisterBrokerRequest\x12\x1b\n" +
+	"\tbroker_id\x18\x01 \x01(\x05R\bbrokerId\x12\x12\n" +
+	"\x04host\x18\x02 \x01(\tR\x04host\x12\x12\n" +
+	"\x04port\x18\x03 \x01(\x05R\x04port\x12#\n" +
+	"\rinternal_addr\x18\x04 \x01(\tR\finternalAddr\"\xe1\x01\n" +
+	"\x16RegisterBrokerResponse\x124\n" +
+	"\n" +
+	"error_code\x18\x01 \x01(\x0e2\x15.streamq.v1.ErrorCodeR\terrorCode\x12#\n" +
+	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\x12!\n" +
+	"\fbroker_epoch\x18\x03 \x01(\x03R\vbrokerEpoch\x12#\n" +
+	"\rcontroller_id\x18\x04 \x01(\x05R\fcontrollerId\x12$\n" +
+	"\x0ecatch_up_index\x18\x05 \x01(\x04R\fcatchUpIndex\"}\n" +
+	"\x16BrokerHeartbeatRequest\x12\x1b\n" +
+	"\tbroker_id\x18\x01 \x01(\x05R\bbrokerId\x12!\n" +
+	"\fbroker_epoch\x18\x02 \x01(\x03R\vbrokerEpoch\x12#\n" +
+	"\rapplied_index\x18\x03 \x01(\x04R\fappliedIndex\"\xb1\x01\n" +
+	"\x17BrokerHeartbeatResponse\x124\n" +
+	"\n" +
+	"error_code\x18\x01 \x01(\x0e2\x15.streamq.v1.ErrorCodeR\terrorCode\x12#\n" +
+	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\x12\x16\n" +
+	"\x06fenced\x18\x03 \x01(\bR\x06fenced\x12#\n" +
+	"\rcontroller_id\x18\x04 \x01(\x05R\fcontrollerId\"O\n" +
+	"\x16ForwardMetadataRequest\x125\n" +
+	"\acommand\x18\x01 \x01(\v2\x1b.streamq.v1.MetadataCommandR\acommand\"\xaf\x01\n" +
+	"\x17ForwardMetadataResponse\x124\n" +
+	"\n" +
+	"error_code\x18\x01 \x01(\x0e2\x15.streamq.v1.ErrorCodeR\terrorCode\x12#\n" +
+	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\x12#\n" +
+	"\rcontroller_id\x18\x03 \x01(\x05R\fcontrollerId\x12\x14\n" +
+	"\x05index\x18\x04 \x01(\x04R\x05index2\xa9\x02\n" +
+	"\x16StreamQInternalService\x12W\n" +
+	"\x0eRegisterBroker\x12!.streamq.v1.RegisterBrokerRequest\x1a\".streamq.v1.RegisterBrokerResponse\x12Z\n" +
+	"\x0fBrokerHeartbeat\x12\".streamq.v1.BrokerHeartbeatRequest\x1a#.streamq.v1.BrokerHeartbeatResponse\x12Z\n" +
+	"\x0fForwardMetadata\x12\".streamq.v1.ForwardMetadataRequest\x1a#.streamq.v1.ForwardMetadataResponseB\x96\x01\n" +
 	"\x0ecom.streamq.v1B\rInternalProtoP\x01Z,github.com/sudo-ss1/streamq/gen/v1;streamqv1\xa2\x02\x03SXX\xaa\x02\n" +
 	"Streamq.V1\xca\x02\n" +
 	"Streamq\\V1\xe2\x02\x16Streamq\\V1\\GPBMetadata\xea\x02\vStreamq::V1b\x06proto3"
@@ -404,28 +1077,51 @@ func file_v1_internal_proto_rawDescGZIP() []byte {
 	return file_v1_internal_proto_rawDescData
 }
 
-var file_v1_internal_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_v1_internal_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
 var file_v1_internal_proto_goTypes = []any{
-	(*MetadataCommand)(nil),      // 0: streamq.v1.MetadataCommand
-	(*CreateTopicCommand)(nil),   // 1: streamq.v1.CreateTopicCommand
-	(*PartitionAssignment)(nil),  // 2: streamq.v1.PartitionAssignment
-	(*DeleteTopicCommand)(nil),   // 3: streamq.v1.DeleteTopicCommand
-	(*CommitOffsetsCommand)(nil), // 4: streamq.v1.CommitOffsetsCommand
-	nil,                          // 5: streamq.v1.CreateTopicCommand.ConfigsEntry
-	(*OffsetCommit)(nil),         // 6: streamq.v1.OffsetCommit
+	(*MetadataCommand)(nil),         // 0: streamq.v1.MetadataCommand
+	(*CreateTopicCommand)(nil),      // 1: streamq.v1.CreateTopicCommand
+	(*PartitionAssignment)(nil),     // 2: streamq.v1.PartitionAssignment
+	(*DeleteTopicCommand)(nil),      // 3: streamq.v1.DeleteTopicCommand
+	(*CommitOffsetsCommand)(nil),    // 4: streamq.v1.CommitOffsetsCommand
+	(*RegisterBrokerCommand)(nil),   // 5: streamq.v1.RegisterBrokerCommand
+	(*FenceBrokerCommand)(nil),      // 6: streamq.v1.FenceBrokerCommand
+	(*UnfenceBrokerCommand)(nil),    // 7: streamq.v1.UnfenceBrokerCommand
+	(*RegisterBrokerRequest)(nil),   // 8: streamq.v1.RegisterBrokerRequest
+	(*RegisterBrokerResponse)(nil),  // 9: streamq.v1.RegisterBrokerResponse
+	(*BrokerHeartbeatRequest)(nil),  // 10: streamq.v1.BrokerHeartbeatRequest
+	(*BrokerHeartbeatResponse)(nil), // 11: streamq.v1.BrokerHeartbeatResponse
+	(*ForwardMetadataRequest)(nil),  // 12: streamq.v1.ForwardMetadataRequest
+	(*ForwardMetadataResponse)(nil), // 13: streamq.v1.ForwardMetadataResponse
+	nil,                             // 14: streamq.v1.CreateTopicCommand.ConfigsEntry
+	(*OffsetCommit)(nil),            // 15: streamq.v1.OffsetCommit
+	(ErrorCode)(0),                  // 16: streamq.v1.ErrorCode
 }
 var file_v1_internal_proto_depIdxs = []int32{
-	1, // 0: streamq.v1.MetadataCommand.create_topic:type_name -> streamq.v1.CreateTopicCommand
-	3, // 1: streamq.v1.MetadataCommand.delete_topic:type_name -> streamq.v1.DeleteTopicCommand
-	4, // 2: streamq.v1.MetadataCommand.commit_offsets:type_name -> streamq.v1.CommitOffsetsCommand
-	5, // 3: streamq.v1.CreateTopicCommand.configs:type_name -> streamq.v1.CreateTopicCommand.ConfigsEntry
-	2, // 4: streamq.v1.CreateTopicCommand.partitions:type_name -> streamq.v1.PartitionAssignment
-	6, // 5: streamq.v1.CommitOffsetsCommand.offsets:type_name -> streamq.v1.OffsetCommit
-	6, // [6:6] is the sub-list for method output_type
-	6, // [6:6] is the sub-list for method input_type
-	6, // [6:6] is the sub-list for extension type_name
-	6, // [6:6] is the sub-list for extension extendee
-	0, // [0:6] is the sub-list for field type_name
+	1,  // 0: streamq.v1.MetadataCommand.create_topic:type_name -> streamq.v1.CreateTopicCommand
+	3,  // 1: streamq.v1.MetadataCommand.delete_topic:type_name -> streamq.v1.DeleteTopicCommand
+	4,  // 2: streamq.v1.MetadataCommand.commit_offsets:type_name -> streamq.v1.CommitOffsetsCommand
+	5,  // 3: streamq.v1.MetadataCommand.register_broker:type_name -> streamq.v1.RegisterBrokerCommand
+	6,  // 4: streamq.v1.MetadataCommand.fence_broker:type_name -> streamq.v1.FenceBrokerCommand
+	7,  // 5: streamq.v1.MetadataCommand.unfence_broker:type_name -> streamq.v1.UnfenceBrokerCommand
+	14, // 6: streamq.v1.CreateTopicCommand.configs:type_name -> streamq.v1.CreateTopicCommand.ConfigsEntry
+	2,  // 7: streamq.v1.CreateTopicCommand.partitions:type_name -> streamq.v1.PartitionAssignment
+	15, // 8: streamq.v1.CommitOffsetsCommand.offsets:type_name -> streamq.v1.OffsetCommit
+	16, // 9: streamq.v1.RegisterBrokerResponse.error_code:type_name -> streamq.v1.ErrorCode
+	16, // 10: streamq.v1.BrokerHeartbeatResponse.error_code:type_name -> streamq.v1.ErrorCode
+	0,  // 11: streamq.v1.ForwardMetadataRequest.command:type_name -> streamq.v1.MetadataCommand
+	16, // 12: streamq.v1.ForwardMetadataResponse.error_code:type_name -> streamq.v1.ErrorCode
+	8,  // 13: streamq.v1.StreamQInternalService.RegisterBroker:input_type -> streamq.v1.RegisterBrokerRequest
+	10, // 14: streamq.v1.StreamQInternalService.BrokerHeartbeat:input_type -> streamq.v1.BrokerHeartbeatRequest
+	12, // 15: streamq.v1.StreamQInternalService.ForwardMetadata:input_type -> streamq.v1.ForwardMetadataRequest
+	9,  // 16: streamq.v1.StreamQInternalService.RegisterBroker:output_type -> streamq.v1.RegisterBrokerResponse
+	11, // 17: streamq.v1.StreamQInternalService.BrokerHeartbeat:output_type -> streamq.v1.BrokerHeartbeatResponse
+	13, // 18: streamq.v1.StreamQInternalService.ForwardMetadata:output_type -> streamq.v1.ForwardMetadataResponse
+	16, // [16:19] is the sub-list for method output_type
+	13, // [13:16] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_v1_internal_proto_init() }
@@ -438,6 +1134,9 @@ func file_v1_internal_proto_init() {
 		(*MetadataCommand_CreateTopic)(nil),
 		(*MetadataCommand_DeleteTopic)(nil),
 		(*MetadataCommand_CommitOffsets)(nil),
+		(*MetadataCommand_RegisterBroker)(nil),
+		(*MetadataCommand_FenceBroker)(nil),
+		(*MetadataCommand_UnfenceBroker)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -445,9 +1144,9 @@ func file_v1_internal_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_internal_proto_rawDesc), len(file_v1_internal_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   15,
 			NumExtensions: 0,
-			NumServices:   0,
+			NumServices:   1,
 		},
 		GoTypes:           file_v1_internal_proto_goTypes,
 		DependencyIndexes: file_v1_internal_proto_depIdxs,

@@ -93,13 +93,24 @@ func clonePartitions(ps []PartitionState) []PartitionState {
 // unchanged. Create: the topic name must be valid (ErrInvalidTopic), new (ErrTopicExists), have
 // at least one partition numbered 0..n-1, and every partition's replicas must be distinct
 // registered brokers with the same count for all partitions (ErrInvalidReplicationFactor). New
-// partitions start with leader = replicas[0], leader epoch 0, ISR = replicas, partition epoch 0.
+// partitions start with ISR = the unfenced replicas in replica order and leader = the first of
+// them (none unfenced is ErrInvalidReplicationFactor), leader epoch 0, partition epoch 0.
 // Delete: the topic must exist (ErrUnknownTopic); its committed offsets are dropped from every
 // group (DECISIONS D27). CommitOffsets: the group id must be non-empty and the offset list
 // non-empty, every partition must exist (ErrUnknownTopic) and every offset be >= 0
 // (ErrInvalidCommand). A version other than CommandVersion or an empty command returns
 // ErrInvalidCommand.
 func (s *State) Apply(cmd *streamqv1.MetadataCommand) ([]Change, error) {
+	return s.ApplyInTerm(cmd, 0)
+}
+
+// ApplyInTerm is Apply for a command committed in Raft term term. A term-bound command (non-zero
+// controller_epoch) issued in a different term is rejected with ErrNotController, so a deposed
+// controller's or coordinator's write can never land in a later term (DECISIONS D33).
+func (s *State) ApplyInTerm(cmd *streamqv1.MetadataCommand, term uint64) ([]Change, error) {
+	if e := cmd.GetControllerEpoch(); e != 0 && e != term {
+		return nil, fmt.Errorf("command issued in term %d committed in term %d: %w", e, term, ErrNotController)
+	}
 	if cmd == nil {
 		return nil, fmt.Errorf("nil command: %w", ErrInvalidCommand)
 	}
@@ -113,6 +124,12 @@ func (s *State) Apply(cmd *streamqv1.MetadataCommand) ([]Change, error) {
 		return s.applyDelete(c.DeleteTopic)
 	case *streamqv1.MetadataCommand_CommitOffsets:
 		return s.applyCommitOffsets(c.CommitOffsets)
+	case *streamqv1.MetadataCommand_RegisterBroker:
+		return s.applyRegisterBroker(c.RegisterBroker)
+	case *streamqv1.MetadataCommand_FenceBroker:
+		return s.applyFenceBroker(c.FenceBroker)
+	case *streamqv1.MetadataCommand_UnfenceBroker:
+		return s.applyUnfenceBroker(c.UnfenceBroker)
 	default:
 		return nil, fmt.Errorf("empty command: %w", ErrInvalidCommand)
 	}
@@ -165,12 +182,23 @@ func (s *State) applyCreate(c *streamqv1.CreateTopicCommand) ([]Change, error) {
 			}
 			seen[id] = struct{}{}
 		}
+		var isr []int32
+		for _, id := range replicas {
+			if !s.fenced(id) {
+				isr = append(isr, id)
+			}
+		}
+		if len(isr) == 0 {
+			return nil, fmt.Errorf("create topic %q partition %d: every replica is fenced: %w",
+				name, i, ErrInvalidReplicationFactor)
+		}
+		leader := isr[0]
 		parts = append(parts, PartitionState{
 			Partition:      int32(i),
 			Replicas:       slices.Clone(replicas),
-			Leader:         replicas[0],
+			Leader:         leader,
 			LeaderEpoch:    0,
-			ISR:            slices.Clone(replicas),
+			ISR:            isr,
 			PartitionEpoch: 0,
 		})
 	}
@@ -294,4 +322,139 @@ func ValidateTopicName(name string) error {
 		}
 	}
 	return nil
+}
+
+// brokerIndex returns the index of broker id in s.Brokers, or -1.
+func (s *State) brokerIndex(id int32) int {
+	for i, b := range s.Brokers {
+		if b.ID == id {
+			return i
+		}
+	}
+	return -1
+}
+
+func (s *State) fenced(id int32) bool {
+	i := s.brokerIndex(id)
+	return i < 0 || s.Brokers[i].Fenced
+}
+
+// electLeader returns the first replica (in replica order) that is in the ISR and unfenced, or
+// NoLeader (SPEC §4.4; unclean election is disabled).
+func (s *State) electLeader(ps PartitionState) int32 {
+	for _, r := range ps.Replicas {
+		if slices.Contains(ps.ISR, r) && !s.fenced(r) {
+			return r
+		}
+	}
+	return NoLeader
+}
+
+// sortedTopicNames returns topic names in order, so changes are emitted deterministically.
+func (s *State) sortedTopicNames() []string {
+	names := make([]string, 0, len(s.Topics))
+	for n := range s.Topics {
+		names = append(names, n)
+	}
+	slices.Sort(names)
+	return names
+}
+
+// fencePartitions applies fencing of broker id to every partition: it leaves each ISR unless it is the
+// last member (DECISIONS D34) and, where it led, a new leader is elected (leader epoch++). Any
+// change bumps the partition epoch. The broker must already be marked fenced.
+func (s *State) fencePartitions(id int32) []Change {
+	var changes []Change
+	for _, name := range s.sortedTopicNames() {
+		t := s.Topics[name]
+		var changed []PartitionState
+		for i := range t.Partitions {
+			ps := &t.Partitions[i]
+			dirty := false
+			if j := slices.Index(ps.ISR, id); j >= 0 && len(ps.ISR) > 1 {
+				ps.ISR = slices.Delete(slices.Clone(ps.ISR), j, j+1)
+				dirty = true
+			}
+			if ps.Leader == id {
+				ps.Leader = s.electLeader(*ps)
+				ps.LeaderEpoch++
+				dirty = true
+			}
+			if dirty {
+				ps.PartitionEpoch++
+				changed = append(changed, clonePartitions([]PartitionState{*ps})...)
+			}
+		}
+		if len(changed) > 0 {
+			changes = append(changes, Change{Kind: PartitionChanged, Topic: name, TopicID: t.ID, Partitions: changed})
+		}
+	}
+	return changes
+}
+
+// applyRegisterBroker adds or re-registers a broker. It is (re)registered fenced: a broker that
+// re-registers lost its previous incarnation's state, so it gives up leadership and ISR
+// membership exactly as if fenced, and is unfenced once caught up (SPEC §2.3, DECISIONS D35).
+func (s *State) applyRegisterBroker(c *streamqv1.RegisterBrokerCommand) ([]Change, error) {
+	if c == nil || c.GetBrokerId() <= 0 || c.GetHost() == "" || c.GetPort() <= 0 {
+		return nil, fmt.Errorf("register_broker needs id, host and port: %w", ErrInvalidCommand)
+	}
+	b := Broker{ID: c.GetBrokerId(), Host: c.GetHost(), Port: c.GetPort(), InternalAddr: c.GetInternalAddr(), Fenced: true, Epoch: 1}
+	if i := s.brokerIndex(b.ID); i >= 0 {
+		b.Epoch = s.Brokers[i].Epoch + 1
+		s.Brokers[i] = b
+	} else {
+		s.Brokers = append(s.Brokers, b)
+		slices.SortFunc(s.Brokers, func(x, y Broker) int { return int(x.ID) - int(y.ID) })
+	}
+	changes := []Change{{Kind: BrokersChanged}}
+	return append(changes, s.fencePartitions(b.ID)...), nil
+}
+
+// applyFenceBroker fences a registered broker (idempotent).
+func (s *State) applyFenceBroker(c *streamqv1.FenceBrokerCommand) ([]Change, error) {
+	i := s.brokerIndex(c.GetBrokerId())
+	if c == nil || i < 0 {
+		return nil, fmt.Errorf("fence unknown broker %d: %w", c.GetBrokerId(), ErrInvalidCommand)
+	}
+	if s.Brokers[i].Fenced || s.Brokers[i].Epoch != c.GetBrokerEpoch() {
+		return nil, nil // already fenced, or a decision about an older incarnation (D34)
+	}
+	s.Brokers[i].Fenced = true
+	changes := []Change{{Kind: BrokersChanged}}
+	return append(changes, s.fencePartitions(c.GetBrokerId())...), nil
+}
+
+// applyUnfenceBroker unfences a registered broker; every offline partition whose ISR contains it
+// elects a leader again (DECISIONS D34).
+func (s *State) applyUnfenceBroker(c *streamqv1.UnfenceBrokerCommand) ([]Change, error) {
+	i := s.brokerIndex(c.GetBrokerId())
+	if c == nil || i < 0 {
+		return nil, fmt.Errorf("unfence unknown broker %d: %w", c.GetBrokerId(), ErrInvalidCommand)
+	}
+	if !s.Brokers[i].Fenced || s.Brokers[i].Epoch != c.GetBrokerEpoch() {
+		return nil, nil // already unfenced, or a decision about an older incarnation (D34)
+	}
+	s.Brokers[i].Fenced = false
+	changes := []Change{{Kind: BrokersChanged}}
+	for _, name := range s.sortedTopicNames() {
+		t := s.Topics[name]
+		var changed []PartitionState
+		for j := range t.Partitions {
+			ps := &t.Partitions[j]
+			if ps.Leader != NoLeader {
+				continue
+			}
+			if leader := s.electLeader(*ps); leader != NoLeader {
+				ps.Leader = leader
+				ps.LeaderEpoch++
+				ps.PartitionEpoch++
+				changed = append(changed, clonePartitions([]PartitionState{*ps})...)
+			}
+		}
+		if len(changed) > 0 {
+			changes = append(changes, Change{Kind: PartitionChanged, Topic: name, TopicID: t.ID, Partitions: changed})
+		}
+	}
+	return changes, nil
 }

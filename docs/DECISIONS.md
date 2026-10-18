@@ -248,3 +248,68 @@ Older files without the key load with no offsets. Negative offsets are rejected 
 shape), so a deleted topic does not fail the commits of other partitions. Empty group ids and
 unknown or no common assignors are invalid requests (gRPC InvalidArgument). A stopped coordinator
 answers NOT_COORDINATOR.
+
+## D30. Two metadata modes, no migration (M5)
+
+Single-node mode (empty `cluster`) keeps the local JSON store (`metadata.json`). Cluster mode uses
+the Raft store (`<data_dir>/raft/`). A data dir is never migrated between modes. Starting with the
+other mode's metadata present fails fast, so partition directories are never misclassified as
+stray.
+
+## D31. Internal gRPC service on `internal_addr` (M5)
+
+`StreamQInternalService` (RegisterBroker, BrokerHeartbeat, ForwardMetadata; replication RPCs in
+M6) is a separate gRPC server on `internal_addr`, apart from the client API. Raft uses its own
+TCP transport on `raft_addr`.
+
+## D32. Raft timing knobs (M5)
+
+Optional config keys `raft_heartbeat_timeout_ms` and `raft_election_timeout_ms` (default 1000) and
+`raft_snapshot_threshold` (default 8192). Validation requires election ≥ heartbeat timeout. Tests
+use 300 ms.
+
+## D33. Forwarding and leader-only writes (M5)
+
+A follower forwards CreateTopic/DeleteTopic proposals to the controller (KIP-590-like) and waits
+until it has applied the resulting index locally, so `Store.Propose` means "applied here". It
+retries only when the entry certainly was not appended (not leader before Apply, dial failure, no
+leader known). Unknown outcomes such as leadership lost mid-apply or a deadline are returned. A
+client-level CreateTopic retry after an unknown outcome can therefore report TOPIC_ALREADY_EXISTS
+for a create that succeeded (as in Kafka); Admin treats that as success after a transport error
+when the partition count matches. Controller commands and group offset commits are leader-only
+(`ProposeAsLeader`). They carry the Raft term their issuer activated in (`controller_epoch`), and
+the FSM rejects them if they commit in another term. A deposed controller or coordinator can never
+write.
+
+## D34. Fencing semantics (M5)
+
+Fencing removes the broker from every ISR except as the last member, so unclean election stays
+impossible. Partitions it led elect the first unfenced ISR member in replica order (leader
+epoch++), or go offline (leader -1). Unfencing re-elects offline partitions whose ISR contains the
+broker. Fence and unfence carry the broker epoch and are no-ops for another incarnation, or when
+the broker is already in the target state.
+
+## D35. Registration and catch-up (M5)
+
+`RegisterBroker` (re-)registers a broker fenced, with partition effects identical to fencing, and
+bumps its epoch. The broker opens its partitions only after its FSM has applied up to the
+registration entry's index. The controller unfences it once its heartbeat reports a processed
+metadata index at or beyond that index.
+
+## D36. Replication factor counts unfenced brokers (M5)
+
+CreateTopic requires RF ≤ the number of unfenced registered brokers (Kafka's usable brokers)
+rather than all registered ones. New partitions start with ISR = the unfenced replicas.
+
+## D37. On-disk additions and go-hclog (M5; approved by the plan-reviewer)
+
+Broker records gain `internal_addr`, `fenced` and `epoch` (optional JSON keys). The Raft FSM
+snapshot is JSON `{"version": 1, "state": {...}}`, and Restore rejects unknown versions. Raft data
+lives in `<data_dir>/raft/` (bolt log/stable store, file snapshots). `github.com/hashicorp/go-hclog`
+is imported directly: it is hashicorp/raft's logger interface, already in the module graph, and
+the slog adapter needs it.
+
+## D38. `STALE_BROKER_EPOCH` error code (M5)
+
+Code 22, internal API only, Kafka's name. A heartbeat from an old broker incarnation gets it, and
+the broker re-registers.
