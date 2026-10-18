@@ -256,3 +256,23 @@ func TestClear(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, offs)
 }
+
+// TestRebuildKeepsUnreadableSnapshot: an I/O error (not corruption) fails the rebuild without
+// deleting the snapshot; the caller retries later.
+func TestRebuildKeepsUnreadableSnapshot(t *testing.T) {
+	ctx := context.Background()
+	l := testLog(t)
+	s := New(l.Dir(), time.Hour)
+	appendTo(t, l, s, 1, 0)
+	require.NoError(t, s.WriteSnapshot(ctx, l.LogEndOffset()))
+	path := filepath.Join(l.Dir(), snapshotName(l.LogEndOffset()))
+	require.NoError(t, os.Chmod(path, 0o000))
+	t.Cleanup(func() { _ = os.Chmod(path, 0o600) })
+	if _, err := os.ReadFile(path); err == nil { //nolint:gosec // test file under t.TempDir()
+		t.Skip("running with permissions that ignore file modes")
+	}
+	r := New(l.Dir(), time.Hour)
+	require.Error(t, r.Rebuild(ctx, l, 0, l.LogEndOffset()))
+	_, err := os.Stat(path)
+	require.NoError(t, err, "not deleted")
+}

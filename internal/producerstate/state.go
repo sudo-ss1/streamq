@@ -44,6 +44,10 @@ var (
 // MaxBatchesPerProducer is how many recent batches are kept per producer for duplicate detection.
 const MaxBatchesPerProducer = 5
 
+// errCorruptSnapshot marks a snapshot whose content is invalid (it is deleted); other read errors
+// are returned so the rebuild fails and is retried (review finding).
+var errCorruptSnapshot = errors.New("producerstate: corrupt snapshot")
+
 const (
 	snapshotSuffix  = ".snapshot"
 	tmpSuffix       = ".tmp"
@@ -230,22 +234,22 @@ func readSnapshot(path string, offset int64) (map[int64]*entry, error) {
 		return nil, fmt.Errorf("read producer snapshot: %w", err)
 	}
 	if len(data) < 4 {
-		return nil, fmt.Errorf("producer snapshot %s: too short", path)
+		return nil, fmt.Errorf("%w %s: too short", errCorruptSnapshot, path)
 	}
 	if crc32.Checksum(data[4:], crcTable()) != binary.BigEndian.Uint32(data) {
-		return nil, fmt.Errorf("producer snapshot %s: crc mismatch", path)
+		return nil, fmt.Errorf("%w %s: crc mismatch", errCorruptSnapshot, path)
 	}
 	var f snapshotFile
 	if err := json.Unmarshal(data[4:], &f); err != nil {
-		return nil, fmt.Errorf("producer snapshot %s: %w", path, err)
+		return nil, fmt.Errorf("%w %s: %w", errCorruptSnapshot, path, err)
 	}
 	if f.Version != snapshotVersion || f.Offset != offset {
-		return nil, fmt.Errorf("producer snapshot %s: version %d offset %d", path, f.Version, f.Offset)
+		return nil, fmt.Errorf("%w %s: version %d offset %d", errCorruptSnapshot, path, f.Version, f.Offset)
 	}
 	out := make(map[int64]*entry, len(f.Producers))
 	for _, p := range f.Producers {
 		if len(p.Batches) == 0 || len(p.Batches) > MaxBatchesPerProducer {
-			return nil, fmt.Errorf("producer snapshot %s: producer %d has %d batches", path, p.ID, len(p.Batches))
+			return nil, fmt.Errorf("%w %s: producer %d has %d batches", errCorruptSnapshot, path, p.ID, len(p.Batches))
 		}
 		out[p.ID] = &entry{epoch: p.Epoch, batches: p.Batches, lastTimestamp: p.LastTimestamp}
 	}
@@ -365,7 +369,10 @@ func (s *State) rebuild(ctx context.Context, src BatchReader, logStart, leo int6
 			producers, from = loaded, offs[i]
 			break
 		}
-		// Corrupt or unreadable: drop it and fall back to an older one (or a full replay).
+		if !errors.Is(err, errCorruptSnapshot) {
+			return err // transient I/O error: keep the snapshot, fail the rebuild, retry later
+		}
+		// Corrupt: drop it and fall back to an older one (or a full replay).
 		off := offs[i]
 		if derr := s.deleteSnapshots(ctx, func(o int64) bool { return o == off }); derr != nil {
 			return errors.Join(err, derr)
