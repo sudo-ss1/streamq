@@ -89,3 +89,66 @@ first, A and B merged with `--no-ff`, C committed after tests passed on the merg
   - No fault-injection tests for an index-append failure or read I/O errors during recovery
     (both handled by code paths reviewed by hand).
   - `testHookAfterFsync` is a test-only field on `Log`.
+
+## M2 — Single-node broker (2026-10-18)
+
+**Built**
+- `api/v1/streamq.proto` (`StreamQService`: CreateTopic, DeleteTopic, ListTopics, Metadata,
+  Produce, Fetch, ListOffsets; `ErrorCode`, `Acks`) and `api/v1/internal.proto`
+  (`MetadataCommand` with CreateTopic/DeleteTopic, versioned, with `topic_id`).
+- `internal/config`:
+  - SPEC §10 config with defaults → YAML (strict) → `STREAMQ_*` env → flags precedence;
+  - validation;
+  - per-topic config resolution;
+  - `FlagKeys` (one broker flag per scalar key).
+- `internal/metadata`: model, `Store` interface (atomic `Subscribe` handoff), deterministic
+  `State.Apply`, `AssignReplicas`, topic-name rules. `internal/metadata/local` is a single-node
+  store persisted as `metadata.json` (copy → persist → swap) with an owned notifier goroutine.
+- `internal/partition`: leader replica — epoch checks (D11/D12), min.insync check for acks=all, HW
+  (= LEO with ISR {self}), HW-change channel, ListOffsets (earliest/latest/timestamp).
+- `internal/broker` (D14), the replica manager:
+  - stray/topic-id directory cleanup (D17);
+  - partitions opened from metadata;
+  - topic create/delete handlers, with `WaitTopicReady`/`WaitTopicDeleted` (D18);
+  - HW checkpoint (D15);
+  - produce;
+  - long-poll fetch (capture-then-read, `reflect.Select`, byte budget; D19);
+  - ListOffsets.
+- `internal/server`: thin gRPC handlers plus a single error-code mapping table.
+- `internal/node`: process wiring with ordered shutdown. `cmd/streamq-broker`: cobra, signals,
+  JSON logs. `deploy/single-node.yaml`.
+- `internal/partitioner` (Kafka murmur2, verified against Kafka vectors). `cmd/streamqctl`: topics
+  create/delete/list/describe, produce, consume.
+- Storage: `Manager.DeleteLog` (checkpoint cleanup before rename, NAME_MAX-safe names) and
+  `PartitionDirs`. `OffsetForTimestamp` returns the found record's timestamp.
+
+**Decisions**: D10–D19. Lint config: G304/G204 path exclusions; `unparam` off in tests;
+the `integration` build tag is linted.
+
+**Process**:
+- plan-reviewer REVISE → APPROVE (round 2);
+- three implementers in parallel: config, metadata, partitioner + CLI;
+- the main session did storage deletion, partition, broker, server, node, binaries and
+  integration;
+- code-reviewer CHANGES REQUIRED (2 MAJOR: checkpoint writer races; delete-dir names over
+  NAME_MAX) → fixed (`41e531c`).
+
+**Verification**
+- `make lint test test-int` all green.
+- `TestSingleNode100kKeyed` (§9): 100k records, 1000 keys, 6 partitions, batches of 500.
+  Per-key order and partition placement verified, then the same data re-read after a graceful
+  restart. Runs in about 3 s under `-race`.
+- `TestKillAndRestartKeepsAcknowledgedRecords`: the real broker binary is SIGKILLed after 20k
+  acked records and restarted. Every acked record is present and in order, and writes continue.
+
+**Known limitations**
+- go.mod says `go 1.26.0`: `go mod tidy` with the installed 1.27 toolchain rewrites `go 1.26` to
+  that form. It is the same language version.
+- `local.Store` detects re-entrant `Unsubscribe`/`Close` from a callback by parsing goroutine IDs
+  from `runtime.Stack`. It works, but it's unusual.
+- `TestShutdownWithIdleLongPollIsPrompt` can't prove the fetch was already waiting when Close
+  started (no hook across packages); the broker-level `TestFetchWokenByClose` does prove it.
+- Every topic create/delete wakes all parked fetches (correct, but extra reads). Revisit with
+  leadership changes in M6.
+- The checkpoint-vs-delete race tests depend on the scheduler; the lock fix is correct by
+  inspection.

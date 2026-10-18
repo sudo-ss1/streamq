@@ -182,7 +182,7 @@ make chaos      # chaos scripts against the compose cluster
 
 - [x] M0 Scaffolding
 - [x] M1 Storage engine
-- [ ] M2 Single-node broker
+- [x] M2 Single-node broker
 - [ ] M3 Client library
 - [ ] M4 Consumer groups (single node)
 - [ ] M5 Metadata Raft
