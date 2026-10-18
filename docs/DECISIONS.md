@@ -486,3 +486,27 @@ Idempotence is on when `Acks == AcksAll` and `DisableIdempotence` is false, whic
   `github.com/prometheus/client_model` (the parsed metric types) are used directly by the metrics
   tests. It comes from the same project as the approved client_golang, was approved by the M8
   plan-reviewer, and was already transitive.
+
+## D53. Controlled shutdown (M8)
+
+- **Mechanism (KRaft-like):** a controller-applied fence. A stopping broker calls
+  `ControlledShutdown`. The controller marks it `shuttingDown`, so heartbeats never unfence it,
+  and applies `FenceBroker`. The existing fence logic elects new leaders from the remaining ISR.
+- **Order in `Node.Close`**, with steps 1–4 sharing one deadline
+  (`controlled_shutdown_timeout_ms`, default 30000):
+  1. Stop and join the liveness loop.
+  2. Request controlled shutdown, retrying. This is skipped once no controller has been visible
+     for 2 × the Raft election timeout.
+  3. Wait until no local partition is led here.
+  4. Transfer Raft leadership if this node is the controller.
+  5. The existing graceful drain, flush and checkpoints.
+- **Failures:** never block Close beyond the deadline.
+- **Residual race:** a heartbeat already in flight to a newly activated controller can unfence
+  the broker. It self-heals by the session timeout. A `want_shutdown` heartbeat flag is
+  deferred.
+- **Tests:** in-process clusters use 2 s, so teardown stays fast.
+
+## D55. Log level (M8)
+
+`log_level` is a new config key: debug, info (the default), warn or error, applied to the
+broker's JSON slog handler. Request-error logs added later belong at debug level.
