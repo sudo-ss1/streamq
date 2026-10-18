@@ -18,3 +18,6 @@ coverage.*
 
 # Chaos run output (M9)
 /test/chaos/results/
+
+# Benchmark output (M10)
+/bench/results/

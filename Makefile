@@ -57,7 +57,7 @@ test-int:
 ifeq ($(wildcard test/integration),)
 	@echo "test-int: no integration tests until M2; skipping"
 else
-	go test -race -count=1 -tags=integration ./test/integration/... ./test/linearizability/...
+	go test -race -count=1 -tags=integration ./test/integration/... ./test/linearizability/... ./bench/...
 endif
 
 lint: $(GOLANGCI_STAMP)
@@ -71,6 +71,7 @@ fuzz:
 
 bench:
 	go test -run='^$$' -bench=. -benchmem ./internal/storage/...
+	go run ./bench/cmd/streamq-bench -preset quick
 
 cluster-up:
 	docker compose -f deploy/docker-compose.yml up -d --build
