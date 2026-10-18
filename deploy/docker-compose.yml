@@ -1,0 +1,101 @@
+# Local 3-broker streamq cluster with toxiproxy, Prometheus and Grafana (M8, DECISIONS D54).
+#
+#   make cluster-up     # docker compose -f deploy/docker-compose.yml up -d --build
+#   make cluster-down   # docker compose -f deploy/docker-compose.yml down -v
+#
+# Host ports:
+#   9092, 9192, 9292  broker 1..3 client API (advertised as localhost:<port>)
+#   8474              toxiproxy API (fault injection for M9)
+#   9090              Prometheus
+#   3000              Grafana (anonymous viewer access; dashboard "streamq")
+#
+# Broker-to-broker traffic (internal RPCs and Raft) flows through toxiproxy; see
+# deploy/toxiproxy.json and the cluster lists in deploy/broker{1,2,3}.yaml.
+
+name: streamq
+
+x-broker: &broker
+  build:
+    context: ..
+    dockerfile: Dockerfile
+  image: streamq:dev
+  command: ["--config", "/etc/streamq/broker.yaml"]
+  depends_on:
+    - toxiproxy
+  # Controlled shutdown (10 s budget) + graceful drain (10 s) + margin (plan M8 R4).
+  stop_grace_period: 30s
+  stop_signal: SIGTERM
+
+services:
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.12.0
+    command: ["-host=0.0.0.0", "-config=/config/toxiproxy.json"]
+    volumes:
+      - ./toxiproxy.json:/config/toxiproxy.json:ro
+    ports:
+      - "8474:8474"
+
+  broker1:
+    <<: *broker
+    hostname: broker1
+    volumes:
+      - ./broker1.yaml:/etc/streamq/broker.yaml:ro
+      - broker1-data:/var/lib/streamq
+    ports:
+      - "9092:9092"
+
+  broker2:
+    <<: *broker
+    hostname: broker2
+    volumes:
+      - ./broker2.yaml:/etc/streamq/broker.yaml:ro
+      - broker2-data:/var/lib/streamq
+    ports:
+      - "9192:9192"
+
+  broker3:
+    <<: *broker
+    hostname: broker3
+    volumes:
+      - ./broker3.yaml:/etc/streamq/broker.yaml:ro
+      - broker3-data:/var/lib/streamq
+    ports:
+      - "9292:9292"
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    depends_on:
+      - broker1
+      - broker2
+      - broker3
+
+  grafana:
+    image: grafana/grafana:12.1.1
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_USERS_DEFAULT_THEME: dark
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/streamq.json
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+
+volumes:
+  broker1-data:
+  broker2-data:
+  broker3-data:
+  prometheus-data:
+  grafana-data:

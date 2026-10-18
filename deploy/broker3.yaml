@@ -1,0 +1,36 @@
+# Broker 3 of the Docker Compose cluster (deploy/docker-compose.yml, DECISIONS D54).
+#
+# Client traffic is direct: the broker listens on and publishes port 9292, advertised as
+# "localhost", so clients on the host reach it at localhost:9292. Clients inside the compose
+# network are unsupported.
+#
+# Broker-to-broker traffic (internal RPCs and Raft) goes through toxiproxy so M9 can inject
+# faults: the internal and raft listeners bind locally on 9093/9094, while every member below is
+# addressed through its toxiproxy proxy (deploy/toxiproxy.json). The bind and advertised Raft
+# addresses therefore differ by design. The cluster list is identical on every broker.
+broker_id: 3
+listen_addr: ":9292"
+advertised_host: "localhost"
+internal_addr: ":9093"
+raft_addr: ":9094"
+metrics_addr: ":9100"
+data_dir: "/var/lib/streamq"
+controlled_shutdown_timeout_ms: 10000
+log_level: "info"
+topic_defaults:
+  partitions: 3
+  replication_factor: 3
+  min_insync_replicas: 2
+cluster:
+  - id: 1
+    client: "localhost:9092"
+    internal: "toxiproxy:21093"
+    raft: "toxiproxy:21094"
+  - id: 2
+    client: "localhost:9192"
+    internal: "toxiproxy:22093"
+    raft: "toxiproxy:22094"
+  - id: 3
+    client: "localhost:9292"
+    internal: "toxiproxy:23093"
+    raft: "toxiproxy:23094"

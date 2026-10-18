@@ -72,8 +72,11 @@ fuzz:
 bench:
 	go test -run='^$$' -bench=. -benchmem ./internal/storage/...
 
-cluster-up cluster-down:
-	@echo "$@: not implemented until M8"
+cluster-up:
+	docker compose -f deploy/docker-compose.yml up -d --build
+
+cluster-down:
+	docker compose -f deploy/docker-compose.yml down -v
 
 chaos:
 	@echo "chaos: not implemented until M9"

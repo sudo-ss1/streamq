@@ -1,0 +1,15 @@
+# Prometheus scrape config for the compose cluster (M8).
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: streamq
+    scrape_interval: 5s
+    static_configs:
+      - targets: ["broker1:9100"]
+        labels: {broker_id: "1"}
+      - targets: ["broker2:9100"]
+        labels: {broker_id: "2"}
+      - targets: ["broker3:9100"]
+        labels: {broker_id: "3"}

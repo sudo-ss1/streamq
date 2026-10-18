@@ -1,0 +1,8 @@
+[
+  {"name": "broker1_internal", "listen": "0.0.0.0:21093", "upstream": "broker1:9093", "enabled": true},
+  {"name": "broker1_raft", "listen": "0.0.0.0:21094", "upstream": "broker1:9094", "enabled": true},
+  {"name": "broker2_internal", "listen": "0.0.0.0:22093", "upstream": "broker2:9093", "enabled": true},
+  {"name": "broker2_raft", "listen": "0.0.0.0:22094", "upstream": "broker2:9094", "enabled": true},
+  {"name": "broker3_internal", "listen": "0.0.0.0:23093", "upstream": "broker3:9093", "enabled": true},
+  {"name": "broker3_raft", "listen": "0.0.0.0:23094", "upstream": "broker3:9094", "enabled": true}
+]
