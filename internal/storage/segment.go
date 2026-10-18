@@ -356,6 +356,11 @@ func (s *segment) loadState() (truncated bool, err error) {
 	if err := s.index.sanityCheck(fileSize); err != nil {
 		return s.recover(false)
 	}
+	if s.index.isFull() || s.timeIndex.isFull() {
+		// Possibly capped by a lowered max.index.bytes: the kept entries would understate the max
+		// timestamp and leave no slot for the sealing entry, so rebuild from the data.
+		return s.recover(false)
+	}
 	_, pos := s.index.lookup(math.MaxInt64)
 	next := s.baseOffset
 	maxTs, offOfMax := s.timeIndex.lastEntry()

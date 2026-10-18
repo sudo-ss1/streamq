@@ -299,3 +299,29 @@ func TestRecoveryEmptyActiveSegmentAfterRoll(t *testing.T) {
 	appendRecords(t, l.Log, 1, 1000)
 	require.Equal(t, leo+1, l.LogEndOffset())
 }
+
+func TestRecoveryTrustedSegmentWithLoweredIndexSettings(t *testing.T) {
+	dir := t.TempDir()
+	cfg := smallConfig()
+	cfg.SegmentBytes = 64 << 10
+	cfg.IndexIntervalBytes = 1
+	cfg.MaxIndexBytes = 1 << 20
+	l := openTestLog(t, dir, cfg, newFakeClock(), 0)
+	for i := 0; l.SegmentCount() < 3; i++ {
+		appendRecords(t, l.Log, 1, int64(1000+i))
+	}
+	leo := l.LogEndOffset()
+	firstMax := l.loadSegments()[0].maxTimestamp.Load()
+	l.close(t)
+
+	cfg.MaxIndexBytes = 48
+	l = openTestLog(t, dir, cfg, newFakeClock(), leo)
+	defer l.close(t)
+	require.Equal(t, leo, l.LogEndOffset())
+	require.Equal(t, firstMax, l.loadSegments()[0].maxTimestamp.Load())
+	requireEveryOffsetReadable(t, l.Log, leo)
+	off, found, err := l.OffsetForTimestamp(context.Background(), firstMax, leo)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, firstMax-1000, off)
+}

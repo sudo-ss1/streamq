@@ -306,11 +306,19 @@ func (m *Manager) Close(ctx context.Context) error {
 		return ErrClosed
 	}
 	m.closed = true
+	opening := make([]chan struct{}, 0, len(m.opening))
+	for _, ch := range m.opening {
+		opening = append(opening, ch)
+	}
 	logs := make([]*Log, 0, len(m.logs))
 	for _, l := range m.logs {
 		logs = append(logs, l)
 	}
 	m.mu.Unlock()
+	// Opens in progress see closed and close their own log; wait so no storage I/O outlives Close.
+	for _, ch := range opening {
+		<-ch
+	}
 	var errs []error
 	for _, l := range logs {
 		if err := l.Close(); err != nil {

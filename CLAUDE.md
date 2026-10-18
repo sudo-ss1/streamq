@@ -181,7 +181,7 @@ make chaos      # chaos scripts against the compose cluster
 ## Progress
 
 - [x] M0 Scaffolding
-- [ ] M1 Storage engine
+- [x] M1 Storage engine
 - [ ] M2 Single-node broker
 - [ ] M3 Client library
 - [ ] M4 Consumer groups (single node)

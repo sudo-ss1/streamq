@@ -21,7 +21,10 @@ import (
 // publishing the shortened segment slice; a roll publishes the grown slice before the append
 // stores the new LEO. Read loads logStartOffset, then LEO, then the slice.
 type Log struct {
-	mu       sync.Mutex // single writer; see the lock ordering in doc.go
+	mu sync.Mutex // single writer; see the lock ordering in doc.go
+	// fsyncMu serializes every fsync with the failure check that follows it, so a Flush can never
+	// advance the recovery point between another fsync's error and its fail() call (D7).
+	fsyncMu  sync.Mutex
 	segments atomic.Pointer[[]*segment]
 
 	logStartOffset atomic.Int64
@@ -94,6 +97,20 @@ func (l *Log) Size() int64 {
 // SegmentCount returns the number of live segments.
 func (l *Log) SegmentCount() int { return len(l.loadSegments()) }
 
+// syncAndCheck runs an fsync under fsyncMu and marks the log failed (inside the lock) if it
+// errors. A failed log rejects further syncs.
+func (l *Log) syncAndCheck(sync func() error) error {
+	l.fsyncMu.Lock()
+	defer l.fsyncMu.Unlock()
+	if l.failed.Load() {
+		return ErrLogFailed
+	}
+	if err := sync(); err != nil {
+		return l.fail(err)
+	}
+	return nil
+}
+
 // fail puts the log into the failed state (DECISIONS D7) and returns err wrapped in ErrLogFailed.
 func (l *Log) fail(err error) error {
 	if l.failed.CompareAndSwap(false, true) {
@@ -141,8 +158,8 @@ func (l *Log) Append(ctx context.Context, b record.Batch, leaderEpoch int32) (Ap
 	}
 	l.leo.Store(batch.NextOffset())
 	if l.cfg.FlushPolicy == FlushAlways {
-		if err := seg.log.Sync(); err != nil {
-			return AppendInfo{}, l.fail(fmt.Errorf("sync segment %d: %w", seg.baseOffset, err))
+		if err := l.syncAndCheck(func() error { return seg.log.Sync() }); err != nil {
+			return AppendInfo{}, fmt.Errorf("sync segment %d: %w", seg.baseOffset, err)
 		}
 		l.recoveryPoint.Store(batch.NextOffset())
 		l.lastFlushMs.Store(now.UnixMilli())
@@ -153,7 +170,7 @@ func (l *Log) Append(ctx context.Context, b record.Batch, leaderEpoch int32) (Ap
 // roll seals the active segment and publishes a new one starting at the LEO. Caller holds mu.
 func (l *Log) roll(now time.Time) (*segment, error) {
 	old := l.active()
-	if err := old.onRoll(); err != nil {
+	if err := l.syncAndCheck(old.onRoll); err != nil {
 		return nil, fmt.Errorf("seal segment %d: %w", old.baseOffset, err)
 	}
 	seg, err := createSegment(l.dir, l.leo.Load(), l.cfg, now)
@@ -275,6 +292,8 @@ func (l *Log) flushTo(leo int64, segs []*segment) error {
 	if leo <= rp {
 		return nil
 	}
+	l.fsyncMu.Lock()
+	defer l.fsyncMu.Unlock()
 	for _, s := range segs {
 		if s.nextOffset.Load() <= rp {
 			continue
@@ -290,8 +309,8 @@ func (l *Log) flushTo(leo int64, segs []*segment) error {
 	if l.testHookAfterFsync != nil {
 		l.testHookAfterFsync()
 	}
-	// Another fsync (roll, FlushAlways append, Close) may have failed meanwhile; Linux reports a
-	// writeback error to only one fsync caller, so ours succeeding proves nothing (D7).
+	// Another fsync (roll, FlushAlways append) may have failed before we took fsyncMu; Linux
+	// reports a writeback error to only one fsync caller, so ours succeeding proves nothing (D7).
 	if l.failed.Load() {
 		return ErrLogFailed
 	}
@@ -371,11 +390,14 @@ func (l *Log) DeleteOldSegments(ctx context.Context, now time.Time, limitOffset 
 		if err := s.renameForDelete(); err != nil {
 			errs = append(errs, err)
 		}
+		// Make each rename durable before the next, oldest first, so a crash can never leave an
+		// older segment un-renamed next to a renamed newer one (an offset gap that recovery
+		// would refuse to open, D9).
+		if err := syncDir(l.dir); err != nil {
+			errs = append(errs, err)
+		}
 		l.onDelete(s)
 	}
-	// Make the renames durable together, so a crash cannot leave an older segment un-renamed next
-	// to a renamed newer one (which recovery would see as an offset gap).
-	errs = append(errs, syncDir(l.dir))
 	l.logger.Info("deleted old segments",
 		slog.Int("count", n), slog.Int64("log_start_offset", remaining[0].baseOffset))
 	if err := errors.Join(errs...); err != nil {
