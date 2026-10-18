@@ -575,3 +575,26 @@ Possible follow-ups:
   no heartbeat from any other broker within the session timeout;
 - broker-side detection of a controller that never acknowledges heartbeats;
 - KIP-966-style eligible leader replicas to shorten the leaderless window after a fence.
+
+## D60. Benchmarks run in-process by default (M10)
+
+`streamq-bench` starts its brokers in-process with production timeouts. That is reproducible and
+needs no Docker. The numbers come from one memory-constrained WSL2 laptop over loopback, which
+is optimistic compared with real networks; the README says so. Compose runs go through toxiproxy
+and are labelled as such.
+
+## D61. Log-bucket latency histogram (M10)
+
+The bench tool's latency histogram uses log-spaced buckets with atomic counters, about 1 %
+relative error, sharded per producer. There is no new dependency (no HdrHistogram). Latency for
+rate-limited runs is measured from the intended send time, to avoid coordinated omission.
+
+## D62. NFR1 measured with min.insync 2 (M10)
+
+The `nfr1` preset uses RF 3 with min.insync 2 (SPEC §10), not the testnode default of 1. A run
+during which any leader or ISR changed is INVALID.
+
+## D63. NFR2 linger (M10)
+
+The `nfr2` preset uses `linger` = 1 ms, a latency-oriented setting; the client default is 5 ms
+(D22). The value is recorded next to the result.
