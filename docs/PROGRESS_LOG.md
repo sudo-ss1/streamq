@@ -152,3 +152,50 @@ the `integration` build tag is linted.
   leadership changes in M6.
 - The checkpoint-vs-delete race tests depend on the scheduler; the lock fix is correct by
   inspection.
+
+## M3 — Client library (2026-10-18)
+
+**Built** (`pkg/client`)
+- `Client`:
+  - lazy gRPC connections;
+  - metadata cache with age-based and error-driven invalidation;
+  - coalesced refreshes in client-owned goroutines (immune to one caller's cancellation);
+  - bootstrap failover;
+  - sentinel errors per ErrorCode, with `IsRetriable` / `NeedsMetadataRefresh`;
+  - full-jitter exponential backoff.
+- `Producer` (main session):
+  - per-partition accumulator with linger timers (injected clock);
+  - murmur2 for keys, sticky partitioning with Kafka's `abortOnNewBatch`;
+  - one in-flight batch per partition (D21);
+  - retries with metadata refresh until `DeliveryTimeout`;
+  - split and re-queue on MESSAGE_TOO_LARGE (D24), seal size capped by the topic's
+    `max_message_bytes`;
+  - `BufferMemory` backpressure, MaxBlock waits for unknown topics (D23);
+  - `Flush`, and `Close` that drains or aborts.
+- `Consumer` (implementer): manual assignment, auto offset reset, per-leader fetches, per-partition
+  error backoff with rotation, Seek/SeekToBeginning/SeekToEnd/Position.
+- `Admin` (implementer): create/delete/list/describe topics, ListOffsets, and transport-error retry
+  semantics for create/delete.
+- `record.Builder.AppendedSize`: exact size before append.
+- `examples/{producer,consumer,admin}`, each with an end-to-end test against an in-process broker.
+  `internal/testnode` is a test-only helper.
+- `test/integration/client_test.go`: 10k keyed records over 4 partitions via Producer/Consumer.
+
+**Decisions**: D20–D24.
+
+**Process**:
+- plan-reviewer REVISE → APPROVE (round 2); the split changed so the Producer is built by the main
+  session;
+- one implementer for Consumer+Admin;
+- code-reviewer CHANGES REQUIRED (1 MAJOR: a coalesced refresh inherited the first caller's
+  cancellation) → fixed (`f753ecf`).
+
+**Verification**: `make lint test test-int` green; `pkg/client` stable over 6 race runs.
+
+**Known limitations**
+- Without idempotence (M7), a retry after REQUEST_TIMED_OUT, or after a transport error whose
+  first attempt committed, can duplicate records (at-least-once).
+- The consumer sends fetches to different leaders in parallel goroutines that are joined within
+  Poll.
+- `Client.Close` waits for any in-flight shared metadata refresh, up to RequestTimeout per
+  candidate broker when brokers are unreachable.
