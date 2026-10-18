@@ -61,6 +61,14 @@ func TestConcurrentReadsDuringAppendRollAndRetention(t *testing.T) {
 					errs <- err
 					return
 				}
+				// No delete delay: close and unlink retired segments while readers may hold them.
+				for _, s := range l.deleted {
+					if err := s.deleteFiles(); err != nil {
+						errs <- err
+						return
+					}
+				}
+				l.deleted = nil
 			}
 		}
 	}()

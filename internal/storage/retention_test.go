@@ -112,7 +112,7 @@ func TestRetentionSafeDelete(t *testing.T) {
 	cfg := smallConfig()
 	cfg.RetentionMs = 1000
 	clock := newFakeClock()
-	m, err := OpenManager(context.Background(), ManagerConfig{DataDir: dir, FileDeleteDelay: time.Minute}, clock, discardLogger())
+	m, err := OpenManager(context.Background(), managerConfig(dir, time.Minute), clock, discardLogger())
 	require.NoError(t, err)
 	l, err := m.GetOrCreateLog(context.Background(), TopicPartition{Topic: "t", Partition: 0}, cfg)
 	require.NoError(t, err)
@@ -166,7 +166,7 @@ func TestStartupRemovesLeftoverDeletedFiles(t *testing.T) {
 	clock := newFakeClock()
 	ctx := context.Background()
 	tp := TopicPartition{Topic: "t", Partition: 1}
-	m, err := OpenManager(ctx, ManagerConfig{DataDir: dir, FileDeleteDelay: time.Hour}, clock, discardLogger())
+	m, err := OpenManager(ctx, managerConfig(dir, time.Hour), clock, discardLogger())
 	require.NoError(t, err)
 	l, err := m.GetOrCreateLog(ctx, tp, cfg)
 	require.NoError(t, err)
@@ -187,9 +187,27 @@ func TestStartupRemovesLeftoverDeletedFiles(t *testing.T) {
 	m.pendingMu.Unlock()
 	require.NoError(t, l.Close())
 
-	m2, err := OpenManager(ctx, ManagerConfig{DataDir: dir, FileDeleteDelay: time.Hour}, clock, discardLogger())
+	m2, err := OpenManager(ctx, managerConfig(dir, time.Hour), clock, discardLogger())
 	require.NoError(t, err)
 	_, err = os.Stat(deletedLog)
 	require.ErrorIs(t, err, os.ErrNotExist)
 	require.NoError(t, m2.Close(ctx))
+}
+
+func managerConfig(dir string, deleteDelay time.Duration) ManagerConfig {
+	cfg := DefaultManagerConfig(dir)
+	cfg.FileDeleteDelay = deleteDelay
+	return cfg
+}
+
+func TestAppendRejectsNegativeTimestamps(t *testing.T) {
+	cfg := smallConfig()
+	cfg.RetentionMs = 7 * 24 * time.Hour.Milliseconds()
+	l := openTestLog(t, t.TempDir(), cfg, newFakeClock(), 0)
+	defer l.close(t)
+	_, err := l.Append(context.Background(), buildBatch(t, -1, []byte("x")), 0)
+	require.ErrorIs(t, err, ErrInvalidTimestamp)
+	require.Equal(t, int64(0), l.LogEndOffset())
+	// Timestamp 0 is valid and is not deleted while within retention of a clock at epoch+1s.
+	appendRecords(t, l.Log, 1, 0)
 }

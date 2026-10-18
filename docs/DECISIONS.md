@@ -74,3 +74,15 @@ Storage creates files with mode 0640 and directories with 0750, which satisfies 
 G304 (file path from a variable) is excluded for `internal/storage/` only: every path there is
 built from the configured data directory. In `_test.go` files, `contextcheck` (test helpers use
 `context.Background()`) and gosec G404 (math/rand for workload generation) are excluded.
+
+## D9. Negative batch timestamps are rejected; trusted corruption keeps the log offline (M1)
+
+`Log.Append` rejects a batch whose maxTimestamp is negative (`ErrInvalidTimestamp`). Time-based
+retention and rolling compare segment timestamps against the wall clock, so a segment of
+timestamp -1 batches would be deleted on the next retention pass after it rolled. Kafka handles
+`NO_TIMESTAMP` with append-time fallbacks; streamq clients always set CreateTime, so it rejects
+the batch instead. Recovery never truncates data below the recovery point, since that data was
+fsynced and may be acknowledged. If such a segment is damaged (a partial batch, or an offset gap
+to the next segment), `openLog` fails with `ErrCorruptLog` and changes nothing, rather than
+deleting every newer segment to repair the log. Only segments that may hold unflushed data are
+truncated, together with any later segments.

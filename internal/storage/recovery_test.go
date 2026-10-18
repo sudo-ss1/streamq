@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -184,25 +185,87 @@ func TestRecoveryCleansDirectory(t *testing.T) {
 	require.Equal(t, int64(2), l.LogEndOffset())
 }
 
-func TestRecoveryOffsetGapDeletesLaterSegments(t *testing.T) {
+func TestRecoveryOffsetGap(t *testing.T) {
+	for _, trusted := range []bool{false, true} {
+		t.Run(fmt.Sprintf("trusted=%t", trusted), func(t *testing.T) {
+			dir := t.TempDir()
+			cfg := smallConfig()
+			l := openTestLog(t, dir, cfg, newFakeClock(), 0)
+			for l.SegmentCount() < 3 {
+				appendRecords(t, l.Log, 4, 1000)
+			}
+			second := l.loadSegments()[1].baseOffset
+			leo := l.LogEndOffset()
+			l.close(t)
+
+			// Fake a gap: rename the second segment so its base no longer follows the first.
+			for _, suffix := range []string{logSuffix, indexSuffix, timeIndexSuffix} {
+				require.NoError(t, os.Rename(segPath(dir, second, suffix), segPath(dir, second+100, suffix)))
+			}
+			if !trusted {
+				// Above the recovery point the later (unflushed) segments are discarded.
+				l = openTestLog(t, dir, cfg, newFakeClock(), 0)
+				defer l.close(t)
+				require.Equal(t, second, l.LogEndOffset())
+				require.Equal(t, 1, l.SegmentCount())
+				return
+			}
+			// Below the recovery point nothing is deleted: the log refuses to open.
+			_, err := openLog(context.Background(), dir, TopicPartition{Topic: "t", Partition: 0}, cfg, leo,
+				newFakeClock(), discardLogger(), func(*segment) {})
+			require.ErrorIs(t, err, ErrCorruptLog)
+			_, err = os.Stat(segPath(dir, second+100, logSuffix))
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestRecoveryCorruptionBelowRecoveryPointIsNotTruncated(t *testing.T) {
 	dir := t.TempDir()
 	cfg := smallConfig()
 	l := openTestLog(t, dir, cfg, newFakeClock(), 0)
-	for l.SegmentCount() < 2 {
+	for l.SegmentCount() < 3 {
 		appendRecords(t, l.Log, 4, 1000)
 	}
-	second := l.active().baseOffset
-	appendRecords(t, l.Log, 4, 1000)
+	leo := l.LogEndOffset()
+	first := l.loadSegments()[0]
+	size := first.size.Load()
 	l.close(t)
 
-	// Fake a gap: rename the second segment so its base no longer follows the first.
-	for _, suffix := range []string{logSuffix, indexSuffix, timeIndexSuffix} {
-		require.NoError(t, os.Rename(segPath(dir, second, suffix), segPath(dir, second+100, suffix)))
+	// Lose the tail of fsynced data in the first segment (e.g. a bad disk sector): its last batch
+	// becomes partial, which loadState's tail scan detects.
+	size -= 10
+	require.NoError(t, os.Truncate(segPath(dir, 0, logSuffix), size))
+
+	_, err := openLog(context.Background(), dir, TopicPartition{Topic: "t", Partition: 0}, cfg, leo,
+		newFakeClock(), discardLogger(), func(*segment) {})
+	require.ErrorIs(t, err, ErrCorruptLog)
+	st, err := os.Stat(segPath(dir, 0, logSuffix))
+	require.NoError(t, err)
+	require.Equal(t, size, st.Size(), "trusted data must not be truncated")
+}
+
+func TestRecoveryWithLoweredIndexSettings(t *testing.T) {
+	dir := t.TempDir()
+	cfg := smallConfig()
+	cfg.SegmentBytes = 256 << 10
+	cfg.MaxIndexBytes = 1 << 20
+	l := openTestLog(t, dir, cfg, newFakeClock(), 0)
+	for i := range 600 {
+		appendRecords(t, l.Log, 1, int64(1000+i))
 	}
+	leo := l.LogEndOffset()
+	require.Equal(t, 1, l.SegmentCount())
+	l.close(t)
+
+	cfg.IndexIntervalBytes = 1
+	cfg.MaxIndexBytes = 48
 	l = openTestLog(t, dir, cfg, newFakeClock(), 0)
 	defer l.close(t)
-	require.Equal(t, second, l.LogEndOffset())
-	require.Equal(t, 1, l.SegmentCount())
+	require.Equal(t, leo, l.LogEndOffset())
+	requireEveryOffsetReadable(t, l.Log, leo)
+	appendRecords(t, l.Log, 1, 5000) // the full index forces a roll
+	require.Equal(t, 2, l.SegmentCount())
 }
 
 func TestRecoveryClampsRecoveryPoint(t *testing.T) {

@@ -119,7 +119,10 @@ func (s *segment) append(b record.Batch) error {
 		}
 		return fmt.Errorf("write batch: %w", err)
 	}
-	if err := s.indexBatch(b, pos); err != nil {
+	if err := s.indexBatch(b, pos, false); err != nil {
+		if terr := s.log.Truncate(pos); terr != nil {
+			return fmt.Errorf("%w (truncate back failed: %w)", err, terr)
+		}
 		return err
 	}
 	if pos == 0 {
@@ -132,11 +135,18 @@ func (s *segment) append(b record.Batch) error {
 
 // indexBatch adds sparse index entries for a batch at position pos and updates the in-memory max
 // timestamp. Entries are added before the batch's own bytes are counted, so the first batch of a
-// segment (position 0) is never indexed (DECISIONS D3). It is shared by append and recover.
-func (s *segment) indexBatch(b record.Batch, pos int64) error {
+// segment (position 0) is never indexed (DECISIONS D3). It is shared by append and recover. When
+// recovering, a full index simply stops receiving entries (lookups stay correct, only slower), so a
+// lowered index.interval.bytes or max.index.bytes never makes a log unopenable; the next append
+// then rolls because needsRoll checks isFull.
+func (s *segment) indexBatch(b record.Batch, pos int64, recovering bool) error {
 	if ts := b.MaxTimestamp(); ts > s.maxTimestamp.Load() {
 		s.maxTimestamp.Store(ts)
 		s.offsetOfMaxTs = b.BaseOffset()
+	}
+	if recovering && (s.index.isFull() || s.timeIndex.isFull()) {
+		s.bytesSinceIndex += len(b)
+		return nil
 	}
 	if s.bytesSinceIndex >= s.cfg.IndexIntervalBytes {
 		if err := s.index.append(b.BaseOffset(), uint32(pos)); err != nil {
@@ -158,6 +168,12 @@ type batchInfo struct {
 	baseOffset   int64
 	lastOffset   int64
 	maxTimestamp int64
+}
+
+// isFramingError reports whether err from readBatchInfo means the bytes are not a valid batch
+// (as opposed to an I/O failure, which must never cause truncation).
+func isFramingError(err error) bool {
+	return errors.Is(err, record.ErrTruncated) || errors.Is(err, record.ErrCorrupt) || errors.Is(err, io.EOF)
 }
 
 // readBatchInfo reads the header of the batch at pos; end bounds the readable region.
@@ -228,8 +244,11 @@ func (s *segment) findOffsetByTimestamp(ts, maxOffset int64) (int64, bool, error
 	end := s.size.Load()
 	// The largest entry with timestamp < ts: every record before its offset has a timestamp < ts,
 	// so the earliest match is at or after that offset (DECISIONS D3).
-	_, off := s.timeIndex.lookup(ts - 1)
-	_, pos := s.index.lookup(off)
+	var pos uint32
+	if ts > math.MinInt64 {
+		_, off := s.timeIndex.lookup(ts - 1)
+		_, pos = s.index.lookup(off)
+	}
 	for p := int64(pos); p < end; {
 		bi, err := s.readBatchInfo(p, end)
 		if err != nil {
@@ -260,8 +279,9 @@ func (s *segment) findOffsetByTimestamp(ts, maxOffset int64) (int64, bool, error
 
 // recover rebuilds both indexes by validating every batch from the start of the file and cuts
 // the file at the first invalid, partial or non-contiguous batch (SPEC §3.4). It reports whether
-// the file was truncated.
-func (s *segment) recover() (truncated bool, err error) {
+// the file was truncated. With allowTruncate false (a segment below the recovery point, whose data
+// was fsynced and acknowledged) it never modifies the file and returns ErrCorruptLog instead.
+func (s *segment) recover(allowTruncate bool) (truncated bool, err error) {
 	s.index.reset()
 	s.timeIndex.reset()
 	s.bytesSinceIndex = 0
@@ -277,8 +297,11 @@ func (s *segment) recover() (truncated bool, err error) {
 	var buf []byte
 	for pos < fileSize {
 		bi, err := s.readBatchInfo(pos, fileSize)
-		if err != nil {
+		if isFramingError(err) {
 			break
+		}
+		if err != nil {
+			return false, err
 		}
 		if cap(buf) < int(bi.size) {
 			buf = make([]byte, bi.size)
@@ -297,13 +320,16 @@ func (s *segment) recover() (truncated bool, err error) {
 		if pos == 0 {
 			s.rollingBaseTs = b.MaxTimestamp()
 		}
-		if err := s.indexBatch(b, pos); err != nil {
+		if err := s.indexBatch(b, pos, true); err != nil {
 			return false, err
 		}
 		expected = b.NextOffset()
 		pos += bi.size
 	}
 	if pos < fileSize {
+		if !allowTruncate {
+			return false, fmt.Errorf("%w: segment %d invalid at position %d of %d", ErrCorruptLog, s.baseOffset, pos, fileSize)
+		}
 		if err := s.log.Truncate(pos); err != nil {
 			return false, fmt.Errorf("truncate segment %d at %d: %w", s.baseOffset, pos, err)
 		}
@@ -319,7 +345,8 @@ func (s *segment) recover() (truncated bool, err error) {
 
 // loadState restores in-memory state for a segment wholly below the recovery point without
 // validating every batch: it sanity-checks the indexes and scans only the tail after the last
-// offset-index entry. Any inconsistency falls back to recover.
+// offset-index entry. Any inconsistency falls back to a non-truncating recover (indexes are
+// rebuilt; damaged log data yields ErrCorruptLog).
 func (s *segment) loadState() (truncated bool, err error) {
 	st, err := s.log.Stat()
 	if err != nil {
@@ -327,7 +354,7 @@ func (s *segment) loadState() (truncated bool, err error) {
 	}
 	fileSize := st.Size()
 	if err := s.index.sanityCheck(fileSize); err != nil {
-		return s.recover()
+		return s.recover(false)
 	}
 	_, pos := s.index.lookup(math.MaxInt64)
 	next := s.baseOffset
@@ -335,8 +362,11 @@ func (s *segment) loadState() (truncated bool, err error) {
 	p := int64(pos)
 	for p < fileSize {
 		bi, err := s.readBatchInfo(p, fileSize)
+		if isFramingError(err) {
+			return s.recover(false)
+		}
 		if err != nil {
-			return s.recover()
+			return false, err
 		}
 		if bi.maxTimestamp > maxTs {
 			maxTs, offOfMax = bi.maxTimestamp, bi.baseOffset
@@ -345,12 +375,15 @@ func (s *segment) loadState() (truncated bool, err error) {
 		p += bi.size
 	}
 	if err := s.timeIndex.sanityCheck(next); err != nil {
-		return s.recover()
+		return s.recover(false)
 	}
 	if fileSize > 0 {
 		first, err := s.readBatchInfo(0, fileSize)
+		if isFramingError(err) {
+			return s.recover(false)
+		}
 		if err != nil {
-			return s.recover()
+			return false, err
 		}
 		s.rollingBaseTs = first.maxTimestamp
 	}
@@ -425,14 +458,14 @@ func (s *segment) deleteFiles() error {
 // idempotent.
 func (s *segment) close() error {
 	var errs []error
+	if s.log != nil {
+		errs = append(errs, s.log.Close())
+	}
 	if s.index != nil {
 		errs = append(errs, s.index.trim(), s.index.close())
 	}
 	if s.timeIndex != nil {
 		errs = append(errs, s.timeIndex.trim(), s.timeIndex.close())
-	}
-	if s.log != nil {
-		errs = append(errs, s.log.Close())
 	}
 	for i, err := range errs {
 		if errors.Is(err, ErrClosed) || errors.Is(err, os.ErrClosed) {

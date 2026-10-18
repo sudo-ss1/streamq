@@ -37,6 +37,10 @@ type Log struct {
 	clock    Clock
 	logger   *slog.Logger
 	onDelete func(*segment)
+
+	// testHookAfterFsync, if set, runs in flushTo after the fsyncs and before the recovery point
+	// is advanced.
+	testHookAfterFsync func()
 }
 
 // AppendInfo describes an appended batch.
@@ -110,6 +114,9 @@ func (l *Log) Append(ctx context.Context, b record.Batch, leaderEpoch int32) (Ap
 		return AppendInfo{}, fmt.Errorf("%w: %d bytes > %d", ErrMessageTooLarge, len(b), l.cfg.MaxMessageBytes)
 	case err != nil:
 		return AppendInfo{}, fmt.Errorf("%w: %w", ErrCorruptBatch, err)
+	}
+	if batch.MaxTimestamp() < 0 {
+		return AppendInfo{}, fmt.Errorf("%w: maxTimestamp %d", ErrInvalidTimestamp, batch.MaxTimestamp())
 	}
 
 	l.mu.Lock()
@@ -230,6 +237,9 @@ func (l *Log) OffsetForTimestamp(ctx context.Context, ts int64, maxOffset int64)
 		}
 		off, ok, err := s.findOffsetByTimestamp(ts, maxOffset)
 		if err != nil {
+			if errors.Is(err, os.ErrClosed) && !l.closed.Load() && !l.isLive(s) {
+				continue // removed by retention during the scan
+			}
 			return 0, false, l.readError(s.baseOffset, err)
 		}
 		if ok {
@@ -270,11 +280,20 @@ func (l *Log) flushTo(leo int64, segs []*segment) error {
 			continue
 		}
 		if err := s.flush(); err != nil {
-			if errors.Is(err, os.ErrClosed) && (l.closed.Load() || !l.isLive(s)) {
+			closedFile := errors.Is(err, os.ErrClosed) || errors.Is(err, ErrClosed)
+			if closedFile && !l.failed.Load() && (l.closed.Load() || !l.isLive(s)) {
 				continue // deleted by retention, or Close flushed it; nothing left to protect
 			}
 			return l.fail(err)
 		}
+	}
+	if l.testHookAfterFsync != nil {
+		l.testHookAfterFsync()
+	}
+	// Another fsync (roll, FlushAlways append, Close) may have failed meanwhile; Linux reports a
+	// writeback error to only one fsync caller, so ours succeeding proves nothing (D7).
+	if l.failed.Load() {
+		return ErrLogFailed
 	}
 	for {
 		cur := l.recoveryPoint.Load()
@@ -354,6 +373,9 @@ func (l *Log) DeleteOldSegments(ctx context.Context, now time.Time, limitOffset 
 		}
 		l.onDelete(s)
 	}
+	// Make the renames durable together, so a crash cannot leave an older segment un-renamed next
+	// to a renamed newer one (which recovery would see as an offset gap).
+	errs = append(errs, syncDir(l.dir))
 	l.logger.Info("deleted old segments",
 		slog.Int("count", n), slog.Int64("log_start_offset", remaining[0].baseOffset))
 	if err := errors.Join(errs...); err != nil {

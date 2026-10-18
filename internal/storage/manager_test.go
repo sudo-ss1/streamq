@@ -95,3 +95,45 @@ func TestManagerRunStopsOnCancel(t *testing.T) {
 	require.NoError(t, <-done)
 	require.NoError(t, m.Close(context.Background()))
 }
+
+func TestManagerConfigValidation(t *testing.T) {
+	ctx := context.Background()
+	for _, mod := range []func(*ManagerConfig){
+		func(c *ManagerConfig) { c.DataDir = "" },
+		func(c *ManagerConfig) { c.FlushCheckInterval = 0 },
+		func(c *ManagerConfig) { c.RetentionCheckInterval = 0 },
+		func(c *ManagerConfig) { c.CheckpointInterval = 0 },
+		func(c *ManagerConfig) { c.FileDeleteDelay = -1 },
+	} {
+		cfg := DefaultManagerConfig(t.TempDir())
+		mod(&cfg)
+		_, err := OpenManager(ctx, cfg, newFakeClock(), discardLogger())
+		require.Error(t, err)
+	}
+}
+
+func TestManagerConcurrentGetOrCreate(t *testing.T) {
+	ctx := context.Background()
+	m, err := OpenManager(ctx, DefaultManagerConfig(t.TempDir()), newFakeClock(), discardLogger())
+	require.NoError(t, err)
+	tp := TopicPartition{Topic: "t", Partition: 0}
+	logs := make(chan *Log, 8)
+	errs := make(chan error, 8)
+	for range 8 {
+		go func() {
+			l, err := m.GetOrCreateLog(ctx, tp, smallConfig())
+			errs <- err
+			logs <- l
+		}()
+	}
+	var first *Log
+	for range 8 {
+		require.NoError(t, <-errs)
+		l := <-logs
+		if first == nil {
+			first = l
+		}
+		require.Same(t, first, l)
+	}
+	require.NoError(t, m.Close(ctx))
+}

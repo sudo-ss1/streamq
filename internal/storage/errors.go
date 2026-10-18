@@ -15,6 +15,12 @@ var (
 	ErrMessageTooLarge = fmt.Errorf("storage: message too large: %w", record.ErrTooLarge)
 	// ErrCorruptBatch reports a batch that fails validation on append.
 	ErrCorruptBatch = fmt.Errorf("storage: corrupt batch: %w", record.ErrCorrupt)
+	// ErrInvalidTimestamp reports a batch whose maxTimestamp is negative; time-based retention and
+	// rolling depend on real timestamps (DECISIONS D9).
+	ErrInvalidTimestamp = errors.New("storage: invalid timestamp")
+	// ErrCorruptLog reports corruption in data below the recovery point (data that was fsynced and
+	// is trusted); the log is not opened so newer acknowledged data is never deleted to "repair" it.
+	ErrCorruptLog = errors.New("storage: corrupt log below recovery point")
 	// ErrClosed reports use of a closed log, segment or index.
 	ErrClosed = errors.New("storage: closed")
 	// ErrIndexFull reports an index with no room for another entry.

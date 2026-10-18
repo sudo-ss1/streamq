@@ -28,8 +28,15 @@ func openLog(ctx context.Context, dir string, tp TopicPartition, cfg LogConfig, 
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
+	_, statErr := os.Stat(dir)
 	if err := os.MkdirAll(dir, dirMode); err != nil {
 		return nil, fmt.Errorf("create log dir: %w", err)
+	}
+	if errors.Is(statErr, os.ErrNotExist) {
+		// Make the new partition directory's entry durable (Kafka flushes the parent dir).
+		if err := syncDir(filepath.Dir(dir)); err != nil {
+			return nil, err
+		}
 	}
 	l := &Log{
 		tp:       tp,
@@ -69,11 +76,12 @@ func openLog(ctx context.Context, dir string, tp TopicPartition, cfg LogConfig, 
 		}
 		segs = append(segs, s)
 		last := i == len(bases)-1
+		trusted := !last && bases[i+1] <= recoveryPoint // wholly below the recovery point
 		var truncated bool
-		if last || bases[i+1] > recoveryPoint {
-			truncated, err = s.recover()
-		} else {
+		if trusted {
 			truncated, err = s.loadState()
+		} else {
+			truncated, err = s.recover(true)
 		}
 		if err != nil {
 			closeAll()
@@ -83,6 +91,13 @@ func openLog(ctx context.Context, dir string, tp TopicPartition, cfg LogConfig, 
 			l.logger.Warn("truncated corrupt or partial log tail", slog.Int64("offset", s.nextOffset.Load()))
 		}
 		gap := !last && s.nextOffset.Load() != bases[i+1]
+		if trusted && gap {
+			// Fsynced data is inconsistent. Deleting every newer segment to "repair" it would
+			// destroy acknowledged data, so refuse to open and leave it to the operator.
+			closeAll()
+			return nil, fmt.Errorf("%w: segment %d ends at offset %d but the next segment starts at %d",
+				ErrCorruptLog, base, s.nextOffset.Load(), bases[i+1])
+		}
 		if !last && (truncated || gap) {
 			if gap {
 				l.logger.Warn("offset gap between segments; deleting later segments",

@@ -44,12 +44,13 @@ type pendingDelete struct {
 // recovery points, runs the background flush/retention/checkpoint/delete passes, and performs
 // delayed deletion of retired segments (SPEC §3.3).
 //
-// Lock ordering: Manager.mu → Log.mu → Manager.pendingMu. Manager.mu is never held across I/O on
-// existing logs; passes work on a snapshot of the logs.
+// Lock ordering: Manager.mu → Log.mu → Manager.pendingMu. Manager.mu is never held across log
+// I/O: opens/recovery run outside it and background passes work on a snapshot of the logs.
 type Manager struct {
 	mu             sync.Mutex
 	logs           map[TopicPartition]*Log
-	recoveryPoints map[TopicPartition]int64 // from the checkpoint read at open
+	opening        map[TopicPartition]chan struct{} // closed when the open finishes
+	recoveryPoints map[TopicPartition]int64         // from the checkpoint read at open
 	closed         bool
 
 	pendingMu sync.Mutex
@@ -66,6 +67,9 @@ func OpenManager(ctx context.Context, cfg ManagerConfig, clock Clock, logger *sl
 	if cfg.DataDir == "" {
 		return nil, errors.New("storage: empty data dir")
 	}
+	if cfg.FileDeleteDelay < 0 || cfg.FlushCheckInterval <= 0 || cfg.RetentionCheckInterval <= 0 || cfg.CheckpointInterval <= 0 {
+		return nil, fmt.Errorf("storage: invalid manager config: intervals must be > 0 and delete delay >= 0: %+v", cfg)
+	}
 	if err := os.MkdirAll(cfg.DataDir, dirMode); err != nil {
 		return nil, fmt.Errorf("create data dir: %w", err)
 	}
@@ -78,6 +82,7 @@ func OpenManager(ctx context.Context, cfg ManagerConfig, clock Clock, logger *sl
 	}
 	return &Manager{
 		logs:           map[TopicPartition]*Log{},
+		opening:        map[TopicPartition]chan struct{}{},
 		recoveryPoints: rps,
 		cfg:            cfg,
 		clock:          clock,
@@ -119,20 +124,47 @@ func removeDeletedFiles(dataDir string) error {
 }
 
 // GetOrCreateLog returns the open log for tp, opening (and recovering) or creating it with cfg
-// if needed. cfg is ignored when the log is already open.
+// if needed. cfg is ignored when the log is already open. Recovery runs outside Manager.mu, so
+// other partitions are not stalled; concurrent callers for the same tp wait for one open.
 func (m *Manager) GetOrCreateLog(ctx context.Context, tp TopicPartition, cfg LogConfig) (*Log, error) {
+	for {
+		m.mu.Lock()
+		if m.closed {
+			m.mu.Unlock()
+			return nil, ErrClosed
+		}
+		if l, ok := m.logs[tp]; ok {
+			m.mu.Unlock()
+			return l, nil
+		}
+		wait, busy := m.opening[tp]
+		if !busy {
+			break // holding m.mu
+		}
+		m.mu.Unlock()
+		select {
+		case <-wait:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	done := make(chan struct{})
+	m.opening[tp] = done
+	rp := m.recoveryPoints[tp]
+	m.mu.Unlock()
+
+	dir := filepath.Join(m.cfg.DataDir, tp.DirName())
+	l, err := openLog(ctx, dir, tp, cfg, rp, m.clock, m.logger, m.scheduleDelete)
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.closed {
-		return nil, ErrClosed
-	}
-	if l, ok := m.logs[tp]; ok {
-		return l, nil
-	}
-	dir := filepath.Join(m.cfg.DataDir, tp.DirName())
-	l, err := openLog(ctx, dir, tp, cfg, m.recoveryPoints[tp], m.clock, m.logger, m.scheduleDelete)
+	delete(m.opening, tp)
+	close(done)
 	if err != nil {
 		return nil, fmt.Errorf("open log %s: %w", tp, err)
+	}
+	if m.closed {
+		return nil, errors.Join(ErrClosed, l.Close())
 	}
 	m.logs[tp] = l
 	return l, nil
@@ -266,7 +298,7 @@ func (m *Manager) Run(ctx context.Context) error {
 }
 
 // Close closes every log (flushing it), writes the recovery-point checkpoint and unlinks all
-// retired segments. Run must have returned first.
+// retired segments. Run must have returned first: both write the checkpoint file.
 func (m *Manager) Close(ctx context.Context) error {
 	m.mu.Lock()
 	if m.closed {

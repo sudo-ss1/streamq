@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"log/slog"
+	"math"
 	"os"
 	"path/filepath"
 	"testing"
@@ -339,6 +340,7 @@ func TestLogOffsetForTimestamp(t *testing.T) {
 		want      int64
 		found     bool
 	}{
+		{ts: math.MinInt64, maxOffset: 13, want: 0, found: true},
 		{ts: 0, maxOffset: 13, want: 0, found: true},
 		{ts: 100, maxOffset: 13, want: 0, found: true},
 		{ts: 101, maxOffset: 13, want: 1, found: true},
@@ -477,4 +479,60 @@ func TestTopicPartitionDirName(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestLogFailedStateIsSticky(t *testing.T) {
+	dir := t.TempDir()
+	cfg := smallConfig()
+	l := openTestLog(t, dir, cfg, newFakeClock(), 0)
+	appendRecords(t, l.Log, 3, 1)
+	require.NoError(t, l.Flush(context.Background()))
+	require.Equal(t, int64(3), l.RecoveryPoint())
+	appendRecords(t, l.Log, 2, 1)
+
+	// Pull the file out from under the log: the write and its rollback both fail.
+	require.NoError(t, l.active().log.Close())
+	_, err := l.Append(context.Background(), buildBatch(t, 1, []byte("x")), 0)
+	require.ErrorIs(t, err, ErrLogFailed)
+	_, err = l.Append(context.Background(), buildBatch(t, 1, []byte("x")), 0)
+	require.ErrorIs(t, err, ErrLogFailed)
+	require.ErrorIs(t, l.Flush(context.Background()), ErrLogFailed)
+	require.Equal(t, int64(3), l.RecoveryPoint(), "recovery point must not pass a failure")
+	require.Equal(t, int64(5), l.LogEndOffset())
+	require.NoError(t, l.Close())
+	require.Equal(t, int64(3), l.RecoveryPoint())
+
+	// Reopening recovers everything that reached the file.
+	l = openTestLog(t, dir, cfg, newFakeClock(), 3)
+	defer l.close(t)
+	require.Equal(t, int64(5), l.LogEndOffset())
+	requireContiguous(t, readAll(t, l.Log, 0, 5), 0, 5)
+}
+
+func TestLogFlushDoesNotAdvanceAfterConcurrentFailure(t *testing.T) {
+	l := openTestLog(t, t.TempDir(), smallConfig(), newFakeClock(), 0)
+	defer l.close(t)
+	appendRecords(t, l.Log, 3, 1)
+	// Another fsync fails while this Flush is between its fsyncs and the recovery-point update.
+	l.testHookAfterFsync = func() { l.failed.Store(true) }
+	require.ErrorIs(t, l.Flush(context.Background()), ErrLogFailed)
+	require.Equal(t, int64(0), l.RecoveryPoint())
+}
+
+func TestLogFlushToleratesRetiredClosedSegment(t *testing.T) {
+	l := openTestLog(t, t.TempDir(), smallConfig(), newFakeClock(), 0)
+	defer l.close(t)
+	for l.SegmentCount() < 2 {
+		appendRecords(t, l.Log, 4, 1)
+	}
+	// Simulate Flush capturing a segment that retention then retires and DeleteExpired closes.
+	segs := l.loadSegments()
+	retired := segs[0]
+	remaining := []*segment{segs[1]}
+	l.segments.Store(&remaining)
+	require.NoError(t, retired.index.close()) // index closed first: storage.ErrClosed
+	require.NoError(t, l.flushTo(l.LogEndOffset(), segs))
+	require.False(t, l.failed.Load())
+	require.Equal(t, l.LogEndOffset(), l.RecoveryPoint())
+	require.NoError(t, retired.close())
 }
