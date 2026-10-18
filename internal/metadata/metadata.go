@@ -29,7 +29,7 @@ var (
 	// ErrInvalidISR reports an AlterISR with an ISR that is empty, not a subset of the replicas,
 	// missing the leader, or containing fenced brokers.
 	ErrInvalidISR = errors.New("metadata: invalid isr")
-	ErrClosed                   = errors.New("metadata: store closed")
+	ErrClosed     = errors.New("metadata: store closed")
 )
 
 // Broker is a registered broker.

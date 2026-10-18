@@ -52,8 +52,9 @@ func (c *EpochCache) Assign(ctx context.Context, epoch int32, startOffset int64)
 	if n := len(c.entries); n > 0 && epoch <= c.entries[n-1].Epoch {
 		return nil
 	}
-	// A consistent log never assigns below an existing start offset; drop any such entries.
-	c.entries = slices.DeleteFunc(c.entries, func(e storage.EpochEntry) bool { return e.StartOffset > startOffset })
+	// A consistent log never assigns below an existing start offset; drop any such entries, and any
+	// empty epoch starting at the same offset (it never received records).
+	c.entries = slices.DeleteFunc(c.entries, func(e storage.EpochEntry) bool { return e.StartOffset >= startOffset })
 	c.entries = append(c.entries, storage.EpochEntry{Epoch: epoch, StartOffset: startOffset})
 	return c.persist(ctx)
 }

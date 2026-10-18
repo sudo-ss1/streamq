@@ -28,13 +28,13 @@ func TestEpochCache(t *testing.T) {
 		wantEpoch int32
 		wantEnd   int64
 	}{
-		{1, 1, 100},  // exact
-		{2, 1, 100},  // between: the largest epoch <= 2 is 1
-		{3, 3, 200},  // exact
-		{4, 3, 200},  // between
-		{5, 5, 250},  // latest ends at the LEO
-		{9, 5, 250},  // newer than any
-		{0, -1, -1},  // below every entry
+		{1, 1, 100}, // exact
+		{2, 1, 100}, // between: the largest epoch <= 2 is 1
+		{3, 3, 200}, // exact
+		{4, 3, 200}, // between
+		{5, 5, 250}, // latest ends at the LEO
+		{9, 5, 250}, // newer than any
+		{0, -1, -1}, // below every entry
 	}
 	for _, tt := range tests {
 		e, end := c.EndOffsetFor(tt.req, 250)
