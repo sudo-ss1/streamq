@@ -56,7 +56,6 @@ func TestReadAll(t *testing.T) {
 		{"offset gap below the HW", fetchOnly{hw: 4, data: gapped}, nil, true, false},
 		{"corrupt batch", fetchOnly{hw: 3, data: corrupt}, nil, true, false},
 		{"no data below its own HW", fetchOnly{hw: 5, data: nil}, nil, true, false},
-		{"records below the requested offset are skipped", fetchOnly{hw: 3, data: append(batchAt(t, 0, "a", "b"), batchAt(t, 2, "c")...)}, []string{"a", "b", "c"}, false, false},
 		{"API error has no effect", fetchOnly{code: streamqv1.ErrorCode_ERROR_CODE_NOT_LEADER}, nil, false, true},
 	}
 	for _, tt := range tests {
@@ -82,4 +81,43 @@ func TestReadAll(t *testing.T) {
 	}
 	require.False(t, rec.Read(ctx, 0, leader, "t", 0))
 	require.Len(t, rec.Summary().Anomalies, 1, "anomalies are recorded, not discarded")
+}
+
+// scripted serves one canned response per Fetch call, in order.
+type scripted struct {
+	streamqv1.StreamQServiceClient
+	resps []fetchOnly
+	calls *int
+}
+
+func (s scripted) Fetch(ctx context.Context, r *streamqv1.FetchRequest, o ...grpc.CallOption) (*streamqv1.FetchResponse, error) {
+	i := *s.calls
+	*s.calls++
+	return s.resps[min(i, len(s.resps)-1)].Fetch(ctx, r, o...)
+}
+
+// TestReadAllAcrossFetches covers multi-fetch reads: records before the requested offset (a
+// fetch returns whole batches) are skipped, not reported as a gap; and a broker whose own HW
+// fell below the first response's (leadership lost and regained mid-read) ends the read without
+// an anomaly (plan R27).
+func TestReadAllAcrossFetches(t *testing.T) {
+	ctx := context.Background()
+	calls := 0
+	overlap := scripted{calls: &calls, resps: []fetchOnly{
+		{hw: 4, data: batchAt(t, 0, "a", "b")},
+		{hw: 4, data: append(batchAt(t, 0, "a", "b"), batchAt(t, 2, "c", "d")...)},
+	}}
+	got, err := ReadAll(ctx, overlap, "t", 0)
+	require.NoError(t, err)
+	require.Equal(t, []string{"a", "b", "c", "d"}, got)
+
+	calls = 0
+	hwDropped := scripted{calls: &calls, resps: []fetchOnly{
+		{hw: 4, data: batchAt(t, 0, "a", "b")},
+		{hw: 2, data: nil},
+	}}
+	_, err = ReadAll(ctx, hwDropped, "t", 0)
+	require.Error(t, err)
+	var a *Anomaly
+	require.NotErrorAs(t, err, &a, "a lower HW on a later response is not an integrity violation")
 }

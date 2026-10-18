@@ -208,18 +208,20 @@ func TestLinearizability(t *testing.T) {
 	// Settle (plan R16): sentinel appends with fresh values until one is acknowledged at offset s,
 	// then a final read that reaches past s.
 	sentinelAt := int64(-1)
-	for k := 0; sentinelAt < 0; k++ {
-		require.Less(t, k, 300, "a sentinel is acknowledged")
-		if rec.Append(context.Background(), clients, leader, topic, 0, fmt.Sprintf("sentinel-%d", k)) {
-			for _, op := range rec.History() {
-				if op.Input.(Input).Value == fmt.Sprintf("sentinel-%d", k) {
-					sentinelAt = op.Output.(Output).Offset
-				}
-			}
-			continue
+	k := 0
+	require.Eventually(t, func() bool {
+		v := fmt.Sprintf("sentinel-%d", k)
+		k++
+		if !rec.Append(context.Background(), clients, leader, topic, 0, v) {
+			return false
 		}
-		<-time.After(100 * time.Millisecond)
-	}
+		for _, op := range rec.History() {
+			if op.Input.(Input).Value == v {
+				sentinelAt = op.Output.(Output).Offset
+			}
+		}
+		return true
+	}, 30*time.Second, 100*time.Millisecond, "a sentinel is acknowledged")
 	var final []string
 	var anomaly *Anomaly
 	require.Eventually(t, func() bool {
@@ -245,7 +247,7 @@ func TestLinearizability(t *testing.T) {
 	require.NoError(t, VerifyFinal(final, ops))
 	prepared := Prepare(ops, final)
 	t.Logf("summary %+v, %d unknown appends dropped, final log %d entries", sum, len(ops)-len(prepared), len(final))
-	require.GreaterOrEqual(t, sum.Acked+sum.Unknown+sum.Reads, totalOps/2, "enough recorded operations")
+	require.GreaterOrEqual(t, sum.Acked+sum.Unknown+sum.Reads, 1000, "enough recorded operations (plan §1)")
 	res, info := Check(prepared, 60*time.Second)
 	if res != porcupine.Ok {
 		dir := os.Getenv("STREAMQ_LIN_OUT")

@@ -364,7 +364,7 @@ func finalStatus(res *scenarioResult) string {
 	case slices.ContainsFunc(res.Violations, func(v string) bool { return strings.Contains(v, "inconclusive") }) &&
 		len(res.Violations) == 1:
 		return StatusInconclusive
-	case len(res.Violations) > 0 || res.Lin.SettleError != "":
+	case len(res.Violations) > 0 || res.Lin.SettleError != "" || res.Bulk.SettleError != "": // unsettled reads prove nothing (R16)
 		return StatusFail
 	case !res.Availability.Healthy:
 		return StatusUnhealthy

@@ -168,6 +168,8 @@ func TestFinalStatus(t *testing.T) {
 		{name: "unhealthy", res: scenarioResult{Status: StatusPass}, want: StatusUnhealthy},
 		{name: "not exercised", res: scenarioResult{Status: StatusNotExercised, Availability: availability{Healthy: true}}, want: StatusNotExercised},
 		{name: "violation beats not exercised", res: scenarioResult{Status: StatusNotExercised, Violations: []string{"x"}}, want: StatusFail},
+		{name: "bulk not settled", res: scenarioResult{Status: StatusPass, Availability: availability{Healthy: true},
+			Bulk: bulkResult{SettleError: "partition 3: no sentinel acknowledged"}}, want: StatusFail},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
