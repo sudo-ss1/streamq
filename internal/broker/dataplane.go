@@ -90,7 +90,11 @@ func (b *Broker) Fetch(ctx context.Context, maxWait time.Duration, minBytes, max
 	timeout := b.clock.After(maxWait)
 	final := maxWait == 0
 	for {
-		var chans []<-chan struct{}
+		// Capture every wake-up channel before reading: HW advances, and partition
+		// creation/deletion (so a fetch on a partition deleted meanwhile returns promptly).
+		b.mu.RLock()
+		chans := []<-chan struct{}{b.changed}
+		b.mu.RUnlock()
 		for _, r := range reqs {
 			if p, ok := b.Partition(r.TP); ok {
 				chans = append(chans, p.HWChanged())
@@ -166,6 +170,7 @@ type ListOffsetsResult struct {
 	TP          storage.TopicPartition
 	Err         error
 	Offset      int64
+	Timestamp   int64 // found record's timestamp for a timestamp lookup, else -1
 	LeaderID    int32
 	LeaderEpoch int32
 }
@@ -174,7 +179,7 @@ type ListOffsetsResult struct {
 func (b *Broker) ListOffsets(ctx context.Context, reqs []ListOffsetsRequest) []ListOffsetsResult {
 	out := make([]ListOffsetsResult, len(reqs))
 	for i, r := range reqs {
-		res := ListOffsetsResult{TP: r.TP, Offset: -1, LeaderID: -1, LeaderEpoch: -1}
+		res := ListOffsetsResult{TP: r.TP, Offset: -1, Timestamp: -1, LeaderID: -1, LeaderEpoch: -1}
 		p, ok := b.Partition(r.TP)
 		if !ok {
 			res.Err = ErrUnknownPartition
@@ -182,7 +187,7 @@ func (b *Broker) ListOffsets(ctx context.Context, reqs []ListOffsetsRequest) []L
 			continue
 		}
 		res.LeaderID, res.LeaderEpoch = p.Leader()
-		res.Offset, res.Err = p.ListOffsets(ctx, r.LeaderEpoch, r.Timestamp)
+		res.Offset, res.Timestamp, res.Err = p.ListOffsets(ctx, r.LeaderEpoch, r.Timestamp)
 		out[i] = res
 	}
 	return out

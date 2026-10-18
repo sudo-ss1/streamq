@@ -3,7 +3,7 @@
 // topics change), writes the high-watermark checkpoint, and implements produce, the long-poll
 // fetch and list-offsets for the gRPC layer.
 //
-// Lock ordering: Broker.applyMu → Broker.mu → (partition and storage locks).
+// Lock ordering: Broker.applyMu → Broker.ckptMu → Broker.mu → (partition and storage locks).
 // applyMu serializes Open's processing of the initial metadata snapshot with every metadata change
 // handler, so changes are applied strictly in order and never interleave with startup. mu guards
 // the partitions and topics maps and the change-notification channel and is never held across I/O.
@@ -94,9 +94,14 @@ type Broker struct {
 
 	unsubscribe func()
 	done        chan struct{}
+	doneOnce    sync.Once
 	closeOnce   sync.Once
-	cancel      context.CancelFunc
-	group       *errgroup.Group
+
+	// ckptMu serializes writeHWCheckpoint from the map copy through the rename, so a periodic
+	// write can never resurrect an entry deletePartitionStorage just removed.
+	ckptMu sync.Mutex
+	cancel context.CancelFunc
+	group  *errgroup.Group
 
 	afterFetchRead func() // test hook: runs between a fetch's read and its wait
 }
@@ -170,7 +175,9 @@ func (b *Broker) applySnapshot(ctx context.Context, snap metadata.Snapshot) erro
 		b.logger.Warn("removing stray partition directory", slog.String("topic", tp.Topic),
 			slog.Int("partition", int(tp.Partition)), slog.String("dir_topic_id", id))
 		if err := b.deletePartitionStorage(ctx, tp, tag); err != nil {
-			return err
+			// Never block startup on cleanup; the directory is simply not opened.
+			b.logger.Error("failed to remove stray partition directory", slog.String("topic", tp.Topic),
+				slog.Int("partition", int(tp.Partition)), slog.Any("error", err))
 		}
 	}
 	names := make([]string, 0, len(snap.Topics))
@@ -304,9 +311,11 @@ func (b *Broker) deleteTopic(ctx context.Context, name, id string) {
 // deletePartitionStorage drops tp's HW checkpoint entry (rewriting the file) and then deletes its
 // log and directory, so a recreated partition never inherits stale offsets (DECISIONS D17).
 func (b *Broker) deletePartitionStorage(ctx context.Context, tp storage.TopicPartition, tag string) error {
+	b.ckptMu.Lock()
 	b.mu.Lock()
 	delete(b.hwCkpt, tp)
 	b.mu.Unlock()
+	b.ckptMu.Unlock()
 	if err := b.writeHWCheckpoint(ctx); err != nil {
 		return err
 	}
@@ -392,6 +401,8 @@ func (b *Broker) runHWCheckpoints(ctx context.Context) error {
 
 // writeHWCheckpoint writes every open partition's HW, keeping entries of partitions not open.
 func (b *Broker) writeHWCheckpoint(ctx context.Context) error {
+	b.ckptMu.Lock()
+	defer b.ckptMu.Unlock()
 	b.mu.Lock()
 	for tp, p := range b.partitions {
 		b.hwCkpt[tp] = p.HighWatermark()
@@ -407,13 +418,19 @@ func (b *Broker) writeHWCheckpoint(ctx context.Context) error {
 	return nil
 }
 
+// BeginShutdown wakes every waiting long-poll fetch (they return what they have) and makes new
+// ones return immediately, so the gRPC server can drain quickly. Idempotent; Close calls it.
+func (b *Broker) BeginShutdown() {
+	b.doneOnce.Do(func() { close(b.done) })
+}
+
 // Close stops following metadata, wakes waiting fetches, stops the background loops, writes the
 // final HW checkpoint and closes storage (flushing every log). Idempotent.
 func (b *Broker) Close(ctx context.Context) error {
 	var err error
 	b.closeOnce.Do(func() {
 		b.unsubscribe()
-		close(b.done)
+		b.BeginShutdown()
 		b.cancel()
 		errs := []error{b.group.Wait()}
 		errs = append(errs, b.writeHWCheckpoint(ctx), b.mgr.Close(ctx))

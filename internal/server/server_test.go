@@ -142,6 +142,7 @@ func TestProduceFetchListOffsets(t *testing.T) {
 		{"corrupt", "t", 0, -1, []byte("not a batch at all, definitely not one"), streamqv1.ErrorCode_ERROR_CODE_CORRUPT_MESSAGE},
 		{"negative timestamp", "t", 0, -1, batch(t, -5, "x"), streamqv1.ErrorCode_ERROR_CODE_INVALID_TIMESTAMP},
 		{"newer epoch", "t", 0, 4, batch(t, 1, "x"), streamqv1.ErrorCode_ERROR_CODE_NOT_LEADER},
+		{"older epoch", "t", 0, -2, batch(t, 1, "x"), streamqv1.ErrorCode_ERROR_CODE_FENCED_LEADER_EPOCH},
 	}
 	for _, tt := range errCases {
 		t.Run(tt.name, func(t *testing.T) {
@@ -176,7 +177,7 @@ func TestProduceFetchListOffsets(t *testing.T) {
 	require.NoError(t, err)
 	parts := lo.GetTopics()[0].GetPartitions()
 	require.Equal(t, []int64{0, 4, 2, -1}, []int64{parts[0].GetOffset(), parts[1].GetOffset(), parts[2].GetOffset(), parts[3].GetOffset()})
-	require.Equal(t, int64(150), parts[2].GetTimestamp())
+	require.Equal(t, int64(200), parts[2].GetTimestamp(), "the found record's timestamp")
 
 	_, err = c.ListOffsets(ctx, &streamqv1.ListOffsetsRequest{Topics: []*streamqv1.ListOffsetsTopic{{
 		Topic: "t", Partitions: []*streamqv1.ListOffsetsPartition{{Partition: 0, Timestamp: -3}},
@@ -229,4 +230,35 @@ func TestDeleteTopicAndFetchLongPoll(t *testing.T) {
 	require.Equal(t, streamqv1.ErrorCode_ERROR_CODE_UNKNOWN_TOPIC_OR_PARTITION, del.GetErrorCode())
 	pr := produce(t, c, streamqv1.Acks_ACKS_ALL, "t", 0, -1, batch(t, 1, "x"))
 	require.Equal(t, streamqv1.ErrorCode_ERROR_CODE_UNKNOWN_TOPIC_OR_PARTITION, pr.GetErrorCode())
+}
+
+func TestShutdownWithIdleLongPollIsPrompt(t *testing.T) {
+	cfg := config.Default()
+	cfg.DataDir = t.TempDir()
+	cfg.ListenAddr = "127.0.0.1:0"
+	cfg.TopicDefaults.ReplicationFactor = 1
+	cfg.TopicDefaults.MinInsyncReplicas = 1
+	n, err := node.Start(context.Background(), cfg, slog.New(slog.DiscardHandler))
+	require.NoError(t, err)
+	conn, err := grpc.NewClient(n.Addr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	require.NoError(t, err)
+	defer func() { require.NoError(t, conn.Close()) }()
+	c := streamqv1.NewStreamQServiceClient(conn)
+	ctx := ctxT(t)
+	_, err = c.CreateTopic(ctx, &streamqv1.CreateTopicRequest{Name: "t", Partitions: 1})
+	require.NoError(t, err)
+	fetched := make(chan error, 1)
+	go func() {
+		_, err := c.Fetch(ctx, &streamqv1.FetchRequest{MaxWaitMs: 30_000, MinBytes: 1, Topics: []*streamqv1.FetchTopic{{
+			Topic: "t", Partitions: []*streamqv1.FetchPartition{{Partition: 0, LeaderEpoch: -1}},
+		}}})
+		fetched <- err
+	}()
+	// Make sure the fetch is in flight: a second fetch on the same connection goes through after.
+	_, err = c.ListTopics(ctx, &streamqv1.ListTopicsRequest{})
+	require.NoError(t, err)
+	start := time.Now()
+	require.NoError(t, n.Close(context.Background()))
+	require.Less(t, time.Since(start), 5*time.Second, "shutdown waited for the idle long-poll")
+	<-fetched
 }

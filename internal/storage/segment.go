@@ -238,9 +238,10 @@ func (s *segment) read(startOffset int64, maxBytes int, maxOffset int64) ([]byte
 	return buf, nil
 }
 
-// findOffsetByTimestamp returns the earliest offset whose record timestamp is >= ts, considering
-// only batches with lastOffset < maxOffset, if this segment holds one.
-func (s *segment) findOffsetByTimestamp(ts, maxOffset int64) (int64, bool, error) {
+// findOffsetByTimestamp returns the earliest offset whose record timestamp is >= ts, and that
+// record's timestamp, considering only batches with lastOffset < maxOffset, if this segment holds
+// one.
+func (s *segment) findOffsetByTimestamp(ts, maxOffset int64) (int64, int64, bool, error) {
 	end := s.size.Load()
 	// The largest entry with timestamp < ts: every record before its offset has a timestamp < ts,
 	// so the earliest match is at or after that offset (DECISIONS D3).
@@ -252,29 +253,29 @@ func (s *segment) findOffsetByTimestamp(ts, maxOffset int64) (int64, bool, error
 	for p := int64(pos); p < end; {
 		bi, err := s.readBatchInfo(p, end)
 		if err != nil {
-			return 0, false, err
+			return 0, 0, false, err
 		}
 		if bi.lastOffset >= maxOffset {
-			return 0, false, nil
+			return 0, 0, false, nil
 		}
 		if bi.maxTimestamp >= ts {
 			buf := make([]byte, bi.size)
 			if _, err := s.log.ReadAt(buf, p); err != nil {
-				return 0, false, fmt.Errorf("read segment %d: %w", s.baseOffset, err)
+				return 0, 0, false, fmt.Errorf("read segment %d: %w", s.baseOffset, err)
 			}
 			recs, err := record.Batch(buf).Records()
 			if err != nil {
-				return 0, false, fmt.Errorf("decode batch at offset %d: %w", bi.baseOffset, err)
+				return 0, 0, false, fmt.Errorf("decode batch at offset %d: %w", bi.baseOffset, err)
 			}
 			for _, r := range recs {
 				if r.Timestamp >= ts {
-					return r.Offset, true, nil
+					return r.Offset, r.Timestamp, true, nil
 				}
 			}
 		}
 		p += bi.size
 	}
-	return 0, false, nil
+	return 0, 0, false, nil
 }
 
 // recover rebuilds both indexes by validating every batch from the start of the file and cuts

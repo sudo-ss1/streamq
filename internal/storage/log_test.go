@@ -355,11 +355,12 @@ func TestLogOffsetForTimestamp(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("ts=%d,max=%d", tt.ts, tt.maxOffset), func(t *testing.T) {
-			off, found, err := l.OffsetForTimestamp(ctx, tt.ts, tt.maxOffset)
+			off, recTs, found, err := l.OffsetForTimestamp(ctx, tt.ts, tt.maxOffset)
 			require.NoError(t, err)
 			require.Equal(t, tt.found, found)
 			if tt.found {
 				require.Equal(t, tt.want, off)
+				require.GreaterOrEqual(t, recTs, tt.ts)
 			}
 		})
 	}

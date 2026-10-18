@@ -90,6 +90,8 @@ func (n *Node) Broker() *broker.Broker { return n.broker }
 // storage), then close the metadata store. Idempotent.
 func (n *Node) Close(ctx context.Context) error {
 	n.closeOnce.Do(func() {
+		// Wake idle long-polls first so GracefulStop can drain promptly (NFR4).
+		n.broker.BeginShutdown()
 		stopped := make(chan struct{})
 		go func() {
 			n.grpc.GracefulStop()

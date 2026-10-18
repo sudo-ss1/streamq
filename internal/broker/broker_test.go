@@ -393,3 +393,71 @@ func TestWaitTopicReadyRespectsContext(t *testing.T) {
 	cancel()
 	require.ErrorIs(t, e.b.WaitTopicReady(ctx, "never", "x"), context.Canceled)
 }
+
+func TestLongTopicNameDeleteRestartRecreate(t *testing.T) {
+	dir := t.TempDir()
+	ctx := context.Background()
+	name := strings.Repeat("x", 249)
+	e := openEnv(t, dir)
+	e.createTopic(name, "id1", 2)
+	e.produce(name, 0, "a")
+	require.NoError(t, e.store.Propose(ctx, deleteCmd(name)))
+	require.NoError(t, e.b.WaitTopicDeleted(ctx, name, "id1"))
+	require.Empty(t, partitionDirs(t, dir))
+	e.close()
+	e = openEnv(t, dir)
+	e.createTopic(name, "id2", 2)
+	p, ok := e.b.Partition(tp(name, 0))
+	require.True(t, ok)
+	require.Equal(t, int64(0), p.Log().LogEndOffset())
+}
+
+func TestDeleteDropsCheckpointEntriesUnderConcurrentCheckpointing(t *testing.T) {
+	dir := t.TempDir()
+	ctx := context.Background()
+	e := openEnv(t, dir)
+	e.createTopic("t", "id1", 8)
+	for p := range int32(8) {
+		e.produce("t", p, "a", "b")
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for range 50 {
+			_ = e.b.writeHWCheckpoint(ctx)
+		}
+	}()
+	require.NoError(t, e.store.Propose(ctx, deleteCmd("t")))
+	require.NoError(t, e.b.WaitTopicDeleted(ctx, "t", "id1"))
+	<-done
+	for _, file := range []string{HWCheckpointFile, storage.RecoveryPointCheckpointFile} {
+		ckpt, err := storage.ReadOffsetCheckpoint(ctx, filepath.Join(dir, file))
+		require.NoError(t, err)
+		require.Empty(t, ckpt, file)
+	}
+
+	// Recreate: the new partitions must not inherit the old offsets in either checkpoint.
+	e.createTopic("t", "id2", 8)
+	e.produce("t", 0, "new")
+	require.NoError(t, e.b.writeHWCheckpoint(ctx))
+	ckpt, err := storage.ReadOffsetCheckpoint(ctx, filepath.Join(dir, HWCheckpointFile))
+	require.NoError(t, err)
+	require.Equal(t, int64(1), ckpt[tp("t", 0)])
+	require.Equal(t, int64(0), ckpt[tp("t", 1)])
+}
+
+func TestFetchWokenByTopicDeletion(t *testing.T) {
+	e := openEnv(t, t.TempDir())
+	ctx := context.Background()
+	e.createTopic("t", "id1", 1)
+	waiting := make(chan struct{})
+	var once sync.Once
+	e.b.afterFetchRead = func() { once.Do(func() { close(waiting) }) }
+	done := make(chan []FetchResult)
+	go func() {
+		done <- e.b.Fetch(ctx, time.Hour, 1, 0, []FetchRequest{{TP: tp("t", 0), LeaderEpoch: -1}})
+	}()
+	<-waiting
+	require.NoError(t, e.store.Propose(ctx, deleteCmd("t")))
+	require.ErrorIs(t, (<-done)[0].Err, ErrUnknownPartition)
+}

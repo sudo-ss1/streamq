@@ -81,9 +81,10 @@ func (p *brokerProc) kill(t *testing.T) {
 	t.Helper()
 	if p.cmd.ProcessState == nil {
 		_ = p.cmd.Process.Signal(syscall.SIGKILL)
+		// The dead process closes its end of the pipe: finish reading before Wait (os/exec rule).
+		p.drained.Wait()
 		_ = p.cmd.Wait()
 	}
-	p.drained.Wait()
 }
 
 // TestKillAndRestartKeepsAcknowledgedRecords kills the broker with SIGKILL (no flush, no

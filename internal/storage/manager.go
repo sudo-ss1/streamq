@@ -49,7 +49,7 @@ type pendingDelete struct {
 // recovery points, runs the background flush/retention/checkpoint/delete passes, and performs
 // delayed deletion of retired segments (SPEC §3.3).
 //
-// Lock ordering: Manager.mu → Log.mu → Manager.pendingMu. Manager.mu is never held across log
+// Lock ordering: Manager.ckptMu → Manager.mu → Log.mu → Manager.pendingMu. Manager.mu is never held across log
 // I/O: opens/recovery run outside it and background passes work on a snapshot of the logs.
 type Manager struct {
 	mu             sync.Mutex
@@ -60,6 +60,10 @@ type Manager struct {
 
 	pendingMu sync.Mutex
 	pending   []pendingDelete
+
+	// ckptMu serializes CheckpointRecoveryPoints from the map copy through the rename, so a
+	// periodic pass can never write back an entry DeleteLog just removed.
+	ckptMu sync.Mutex
 
 	cfg    ManagerConfig
 	clock  Clock
@@ -205,7 +209,7 @@ func (m *Manager) DeleteLog(ctx context.Context, tp TopicPartition, tag string) 
 	if _, err := rand.Read(rnd[:]); err != nil {
 		return fmt.Errorf("random suffix: %w", err)
 	}
-	target := fmt.Sprintf("%s.%s.%s%s", dir, tag, hex.EncodeToString(rnd[:]), deleteDirSuffix)
+	target := filepath.Join(m.cfg.DataDir, deleteDirName(tp.DirName(), tag, hex.EncodeToString(rnd[:])))
 	if err := os.Rename(dir, target); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return errors.Join(errs...)
@@ -217,6 +221,23 @@ func (m *Manager) DeleteLog(ctx context.Context, tp TopicPartition, tag string) 
 	}
 	m.logger.Info("deleted partition", slog.String("topic", tp.Topic), slog.Int("partition", int(tp.Partition)))
 	return errors.Join(errs...)
+}
+
+// maxFileName is the usual filesystem limit on one path component (NAME_MAX).
+const maxFileName = 255
+
+// deleteDirName returns "<dirName>.<tag>.<rnd>.delete", truncating dirName (and, if needed, tag)
+// so the name never exceeds NAME_MAX; topic names may be 249 bytes (Kafka had the same bug).
+// Uniqueness comes from rnd.
+func deleteDirName(dirName, tag, rnd string) string {
+	if len(tag) > 32 {
+		tag = tag[:32]
+	}
+	suffix := "." + tag + "." + rnd + deleteDirSuffix
+	if len(dirName)+len(suffix) > maxFileName {
+		dirName = dirName[:maxFileName-len(suffix)]
+	}
+	return dirName + suffix
 }
 
 // GetOrCreateLog returns the open log for tp, opening (and recovering) or creating it with cfg
@@ -322,6 +343,8 @@ func (m *Manager) RunRetention(ctx context.Context, now time.Time, limit func(To
 // CheckpointRecoveryPoints writes the recovery-point checkpoint. Partitions present in the
 // checkpoint read at open but not opened since keep their old value.
 func (m *Manager) CheckpointRecoveryPoints(ctx context.Context) error {
+	m.ckptMu.Lock()
+	defer m.ckptMu.Unlock()
 	m.mu.Lock()
 	rps := make(map[TopicPartition]int64, len(m.recoveryPoints)+len(m.logs))
 	for tp, rp := range m.recoveryPoints {

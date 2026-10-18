@@ -158,6 +158,12 @@ After `Propose`, the handler waits for the change to be applied locally. Create 
 local partition is open as leader; delete waits until they are removed. The wait is bounded by
 the request deadline, or 30 s if there is none. So a produce right after create succeeds on the
 broker that handled the create.
+The CreateTopic handler validates everything that `Apply` and the partition open check
+(`ResolveTopicConfig`, name, RF), so invalid input never reaches `Propose`. If opening a log still
+fails after the command is committed (an I/O error), the topic stays in metadata, the handler
+returns the error, and any partitions already opened keep serving. The operator deletes and
+recreates the topic. This is Kafka's behaviour as well: topic creation is not transactional with
+the logs.
 
 ## D19. Request limits (M2)
 

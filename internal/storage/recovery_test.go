@@ -320,8 +320,9 @@ func TestRecoveryTrustedSegmentWithLoweredIndexSettings(t *testing.T) {
 	require.Equal(t, leo, l.LogEndOffset())
 	require.Equal(t, firstMax, l.loadSegments()[0].maxTimestamp.Load())
 	requireEveryOffsetReadable(t, l.Log, leo)
-	off, found, err := l.OffsetForTimestamp(context.Background(), firstMax, leo)
+	off, recTs, found, err := l.OffsetForTimestamp(context.Background(), firstMax, leo)
 	require.NoError(t, err)
 	require.True(t, found)
 	require.Equal(t, firstMax-1000, off)
+	require.Equal(t, firstMax, recTs)
 }

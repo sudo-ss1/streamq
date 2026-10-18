@@ -200,28 +200,28 @@ func (p *Partition) Read(ctx context.Context, offset int64, maxBytes int, reques
 
 // ListOffsets resolves EarliestTimestamp (log start), LatestTimestamp (high watermark) or a
 // timestamp >= 0 (earliest offset below the high watermark whose record timestamp is >= it, or -1
-// if none).
-func (p *Partition) ListOffsets(ctx context.Context, requestEpoch int32, timestamp int64) (int64, error) {
+// if none). It also returns the found record's timestamp for a timestamp lookup, else -1.
+func (p *Partition) ListOffsets(ctx context.Context, requestEpoch int32, timestamp int64) (offset, recordTimestamp int64, err error) {
 	p.mu.RLock()
-	err := p.checkLeader(requestEpoch)
+	err = p.checkLeader(requestEpoch)
 	p.mu.RUnlock()
 	if err != nil {
-		return -1, err
+		return -1, -1, err
 	}
 	switch {
 	case timestamp == EarliestTimestamp:
-		return p.log.LogStartOffset(), nil
+		return p.log.LogStartOffset(), -1, nil
 	case timestamp == LatestTimestamp:
-		return p.hw.Load(), nil
+		return p.hw.Load(), -1, nil
 	case timestamp < 0:
-		return -1, fmt.Errorf("partition: invalid list offsets timestamp %d", timestamp)
+		return -1, -1, fmt.Errorf("partition: invalid list offsets timestamp %d", timestamp)
 	}
-	off, found, err := p.log.OffsetForTimestamp(ctx, timestamp, p.hw.Load())
+	off, ts, found, err := p.log.OffsetForTimestamp(ctx, timestamp, p.hw.Load())
 	if err != nil {
-		return -1, err
+		return -1, -1, err
 	}
 	if !found {
-		return -1, nil
+		return -1, -1, nil
 	}
-	return off, nil
+	return off, ts, nil
 }

@@ -57,7 +57,7 @@ func TestEpochChecks(t *testing.T) {
 			requireErr(t, tt.want, err)
 			_, _, err = p.Read(ctx, 0, 100, tt.epoch)
 			requireErr(t, tt.want, err)
-			_, err = p.ListOffsets(ctx, tt.epoch, LatestTimestamp)
+			_, _, err = p.ListOffsets(ctx, tt.epoch, LatestTimestamp)
 			requireErr(t, tt.want, err)
 		})
 	}
@@ -146,21 +146,23 @@ func TestListOffsets(t *testing.T) {
 		require.NoError(t, err)
 	}
 	tests := []struct {
-		ts   int64
-		want int64
+		ts     int64
+		want   int64
+		wantTs int64
 	}{
-		{EarliestTimestamp, 0},
-		{LatestTimestamp, 4},
-		{0, 0},
-		{150, 1},
-		{400, 3},
-		{401, -1},
+		{EarliestTimestamp, 0, -1},
+		{LatestTimestamp, 4, -1},
+		{0, 0, 100},
+		{150, 1, 200},
+		{400, 3, 400},
+		{401, -1, -1},
 	}
 	for _, tt := range tests {
-		off, err := p.ListOffsets(ctx, 0, tt.ts)
+		off, ts, err := p.ListOffsets(ctx, 0, tt.ts)
 		require.NoError(t, err)
 		require.Equal(t, tt.want, off, "ts %d", tt.ts)
+		require.Equal(t, tt.wantTs, ts, "ts %d", tt.ts)
 	}
-	_, err := p.ListOffsets(ctx, 0, -3)
+	_, _, err := p.ListOffsets(ctx, 0, -3)
 	require.Error(t, err)
 }

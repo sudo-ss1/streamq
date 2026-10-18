@@ -238,11 +238,12 @@ func (l *Log) readError(offset int64, err error) error {
 	return fmt.Errorf("%w: %w", ErrClosed, err)
 }
 
-// OffsetForTimestamp returns the earliest offset whose record timestamp is >= ts, considering
-// only batches whose last offset is below maxOffset. found is false if there is none.
-func (l *Log) OffsetForTimestamp(ctx context.Context, ts int64, maxOffset int64) (offset int64, found bool, err error) {
+// OffsetForTimestamp returns the earliest offset whose record timestamp is >= ts and that
+// record's timestamp, considering only batches whose last offset is below maxOffset. found is
+// false if there is none.
+func (l *Log) OffsetForTimestamp(ctx context.Context, ts int64, maxOffset int64) (offset, timestamp int64, found bool, err error) {
 	if err := ctx.Err(); err != nil {
-		return 0, false, err
+		return 0, 0, false, err
 	}
 	maxOffset = min(maxOffset, l.leo.Load())
 	for _, s := range l.loadSegments() {
@@ -252,18 +253,18 @@ func (l *Log) OffsetForTimestamp(ctx context.Context, ts int64, maxOffset int64)
 		if s.maxTimestamp.Load() < ts {
 			continue
 		}
-		off, ok, err := s.findOffsetByTimestamp(ts, maxOffset)
+		off, recTs, ok, err := s.findOffsetByTimestamp(ts, maxOffset)
 		if err != nil {
 			if errors.Is(err, os.ErrClosed) && !l.closed.Load() && !l.isLive(s) {
 				continue // removed by retention during the scan
 			}
-			return 0, false, l.readError(s.baseOffset, err)
+			return 0, 0, false, l.readError(s.baseOffset, err)
 		}
 		if ok {
-			return off, true, nil
+			return off, recTs, true, nil
 		}
 	}
-	return 0, false, nil
+	return 0, 0, false, nil
 }
 
 // Flush fsyncs every segment holding data above the recovery point and then advances the

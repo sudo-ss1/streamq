@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -182,4 +183,48 @@ func TestManagerDeleteLog(t *testing.T) {
 		require.NotContains(t, e.Name(), ".delete")
 	}
 	require.NoError(t, m.Close(ctx))
+}
+
+func TestManagerDeleteLogConcurrentWithCheckpoint(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	m, err := OpenManager(ctx, DefaultManagerConfig(dir), newFakeClock(), discardLogger())
+	require.NoError(t, err)
+	var tps []TopicPartition
+	for i := range 20 {
+		tp := TopicPartition{Topic: "t", Partition: int32(i)}
+		tps = append(tps, tp)
+		l, err := m.GetOrCreateLog(ctx, tp, smallConfig())
+		require.NoError(t, err)
+		appendRecords(t, l, 2, 1)
+		require.NoError(t, l.Flush(ctx))
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for range 50 {
+			_ = m.CheckpointRecoveryPoints(ctx)
+		}
+	}()
+	for _, tp := range tps[:10] {
+		require.NoError(t, m.DeleteLog(ctx, tp, "x"))
+	}
+	<-done
+	rps, err := ReadOffsetCheckpoint(ctx, filepath.Join(dir, RecoveryPointCheckpointFile))
+	require.NoError(t, err)
+	for _, tp := range tps[:10] {
+		require.NotContains(t, rps, tp, "deleted partition resurrected in the checkpoint")
+	}
+	require.Len(t, rps, 10)
+	require.NoError(t, m.Close(ctx))
+}
+
+func TestDeleteDirNameFitsNameMax(t *testing.T) {
+	long := strings.Repeat("a", 249) + "-12"
+	name := deleteDirName(long, strings.Repeat("f", 32), "0123abcd")
+	require.LessOrEqual(t, len(name), 255)
+	require.True(t, strings.HasSuffix(name, ".0123abcd.delete"))
+	_, ok := ParseDirName(name)
+	require.False(t, ok)
+	require.Equal(t, "t-0.x.01.delete", deleteDirName("t-0", "x", "01"))
 }

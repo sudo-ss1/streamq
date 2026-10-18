@@ -333,13 +333,10 @@ func (s *Server) ListOffsets(ctx context.Context, req *streamqv1.ListOffsetsRequ
 	results := s.broker.ListOffsets(ctx, reqs)
 	resp := &streamqv1.ListOffsetsResponse{}
 	byTopic := map[string]*streamqv1.ListOffsetsTopicResponse{}
-	for i, r := range results {
+	for _, r := range results {
 		pr := &streamqv1.ListOffsetsPartitionResponse{
-			Partition: r.TP.Partition, ErrorCode: s.errorCode(r.Err), Offset: r.Offset, Timestamp: -1,
+			Partition: r.TP.Partition, ErrorCode: s.errorCode(r.Err), Offset: r.Offset, Timestamp: r.Timestamp,
 			LeaderId: r.LeaderID, LeaderEpoch: r.LeaderEpoch,
-		}
-		if ts := reqs[i].Timestamp; ts >= 0 && r.Err == nil && r.Offset >= 0 {
-			pr.Timestamp = ts
 		}
 		tr, ok := byTopic[r.TP.Topic]
 		if !ok {
