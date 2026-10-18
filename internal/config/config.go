@@ -64,6 +64,10 @@ type Config struct {
 	RaftSnapshotThreshold  int64 `yaml:"raft_snapshot_threshold"`
 	FileDeleteDelayMs      int64 `yaml:"file_delete_delay_ms"`
 	ProducerIDExpirationMs int64 `yaml:"producer_id_expiration_ms"`
+	// ControlledShutdownTimeoutMs bounds moving leadership off a stopping broker (SPEC §4.6, D53).
+	ControlledShutdownTimeoutMs int64 `yaml:"controlled_shutdown_timeout_ms"`
+	// LogLevel is debug, info, warn or error (D55).
+	LogLevel string `yaml:"log_level"`
 }
 
 // Default returns the SPEC §10 defaults.
@@ -100,6 +104,8 @@ func Default() Config {
 		RaftSnapshotThreshold:        8_192,
 		FileDeleteDelayMs:            60_000,
 		ProducerIDExpirationMs:       604_800_000,
+		ControlledShutdownTimeoutMs:  30_000,
+		LogLevel:                     "info",
 	}
 }
 

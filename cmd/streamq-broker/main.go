@@ -55,7 +55,11 @@ func newRootCmd() *cobra.Command {
 func flagName(key string) string { return strings.ReplaceAll(key, "_", "-") }
 
 func run(ctx context.Context, cfg config.Config) error {
-	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
+	level, err := config.ParseLogLevel(cfg.LogLevel)
+	if err != nil {
+		return err // already validated by Load
+	}
+	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	n, err := node.Start(ctx, cfg, logger)

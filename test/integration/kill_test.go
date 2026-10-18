@@ -39,7 +39,7 @@ type brokerProc struct {
 func startProc(t *testing.T, bin, dataDir string) *brokerProc {
 	t.Helper()
 	cfgPath := filepath.Join(t.TempDir(), "broker.yaml")
-	cfg := fmt.Sprintf("broker_id: 1\nlisten_addr: \"127.0.0.1:0\"\nadvertised_host: \"127.0.0.1\"\ndata_dir: %q\n"+
+	cfg := fmt.Sprintf("broker_id: 1\nlisten_addr: \"127.0.0.1:0\"\nadvertised_host: \"127.0.0.1\"\ndata_dir: %q\nmetrics_addr: \"127.0.0.1:0\"\n"+
 		"topic_defaults:\n  replication_factor: 1\n  min_insync_replicas: 1\n  flush_policy: interval\n", dataDir)
 	require.NoError(t, os.WriteFile(cfgPath, []byte(cfg), 0o600))
 	cmd := exec.Command(bin, "--config", cfgPath) //nolint:noctx // lifetime managed explicitly via Kill/Wait in cleanup

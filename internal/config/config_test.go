@@ -52,6 +52,8 @@ func TestDefault(t *testing.T) {
 		RaftSnapshotThreshold:        8192,
 		FileDeleteDelayMs:            60000,
 		ProducerIDExpirationMs:       604800000,
+		ControlledShutdownTimeoutMs:  30000,
+		LogLevel:                     "info",
 	}
 	require.Equal(t, want, c)
 }
@@ -237,6 +239,8 @@ func TestValidate(t *testing.T) {
 		{"replica_lag_max_ms", func(c *Config) { c.ReplicaLagMaxMs = 0 }, "replica_lag_max_ms"},
 		{"broker_heartbeat_interval_ms", func(c *Config) { c.BrokerHeartbeatIntervalMs = 0 }, "broker_heartbeat_interval_ms"},
 		{"broker_session_timeout_ms", func(c *Config) { c.BrokerSessionTimeoutMs = -1 }, "broker_session_timeout_ms"},
+		{"controlled_shutdown_timeout_ms", func(c *Config) { c.ControlledShutdownTimeoutMs = 0 }, "controlled_shutdown_timeout_ms"},
+		{"log_level", func(c *Config) { c.LogLevel = "loud" }, "log_level"},
 		{"heartbeat not below session", func(c *Config) { c.BrokerHeartbeatIntervalMs = c.BrokerSessionTimeoutMs }, "must be < broker_session_timeout_ms"},
 		{"group_session_timeout_ms", func(c *Config) { c.GroupSessionTimeoutMs = 0 }, "group_session_timeout_ms"},
 		{"group_rebalance_timeout_ms", func(c *Config) { c.GroupRebalanceTimeoutMs = 0 }, "group_rebalance_timeout_ms"},
@@ -321,6 +325,7 @@ func TestFlagKeys(t *testing.T) {
 		"broker_heartbeat_interval_ms",
 		"broker_id",
 		"broker_session_timeout_ms",
+		"controlled_shutdown_timeout_ms",
 		"data_dir",
 		"file_delete_delay_ms",
 		"group_initial_rebalance_delay_ms",
@@ -328,6 +333,7 @@ func TestFlagKeys(t *testing.T) {
 		"group_session_timeout_ms",
 		"internal_addr",
 		"listen_addr",
+		"log_level",
 		"metrics_addr",
 		"producer_id_expiration_ms",
 		"raft_addr",

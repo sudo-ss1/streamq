@@ -55,6 +55,8 @@ func StartCluster(tb testing.TB, n int, mod func(*config.Config)) *Cluster {
 	}
 	for i := range n {
 		cfg := config.Default()
+		cfg.MetricsAddr = ""                   // tests bind no metrics port (M8 plan R1)
+		cfg.ControlledShutdownTimeoutMs = 2000 // fast teardown (M8 plan R2)
 		cfg.BrokerID = int32(i + 1)
 		cfg.DataDir = tb.TempDir()
 		cfg.ListenAddr, cfg.InternalAddr, cfg.RaftAddr = members[i].Client, members[i].Internal, members[i].Raft

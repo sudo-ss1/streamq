@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"strconv"
 
@@ -63,6 +64,7 @@ func (c Config) Validate() error {
 		{"group_session_timeout_ms", c.GroupSessionTimeoutMs},
 		{"group_rebalance_timeout_ms", c.GroupRebalanceTimeoutMs},
 		{"producer_id_expiration_ms", c.ProducerIDExpirationMs},
+		{"controlled_shutdown_timeout_ms", c.ControlledShutdownTimeoutMs},
 	} {
 		if t.ms <= 0 {
 			add("%s %d must be > 0", t.name, t.ms)
@@ -71,6 +73,9 @@ func (c Config) Validate() error {
 	if c.BrokerHeartbeatIntervalMs >= c.BrokerSessionTimeoutMs {
 		add("broker_heartbeat_interval_ms %d must be < broker_session_timeout_ms %d",
 			c.BrokerHeartbeatIntervalMs, c.BrokerSessionTimeoutMs)
+	}
+	if _, err := ParseLogLevel(c.LogLevel); err != nil {
+		add("log_level: %w", err)
 	}
 	if c.FileDeleteDelayMs < 0 {
 		add("file_delete_delay_ms %d must be >= 0", c.FileDeleteDelayMs)
@@ -151,4 +156,19 @@ func logConfig(td TopicDefaults) storage.LogConfig {
 	lc.FlushPolicy = storage.FlushPolicy(td.FlushPolicy)
 	lc.FlushMs = td.FlushMs
 	return lc
+}
+
+// ParseLogLevel maps a log_level value to a slog level.
+func ParseLogLevel(s string) (slog.Level, error) {
+	switch s {
+	case "debug":
+		return slog.LevelDebug, nil
+	case "info":
+		return slog.LevelInfo, nil
+	case "warn":
+		return slog.LevelWarn, nil
+	case "error":
+		return slog.LevelError, nil
+	}
+	return 0, fmt.Errorf("%q must be debug, info, warn or error", s)
 }

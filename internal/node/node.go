@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
@@ -26,6 +27,7 @@ import (
 	"github.com/sudo-ss1/streamq/internal/metadata"
 	"github.com/sudo-ss1/streamq/internal/metadata/local"
 	"github.com/sudo-ss1/streamq/internal/metadata/raftstore"
+	"github.com/sudo-ss1/streamq/internal/metrics"
 	"github.com/sudo-ss1/streamq/internal/server"
 )
 
@@ -38,6 +40,8 @@ type Options struct {
 	Client   net.Listener
 	Internal net.Listener
 	Raft     net.Listener
+	// Metrics, if set, serves /metrics even when metrics_addr is empty (tests).
+	Metrics net.Listener
 }
 
 // Node is a running broker process.
@@ -53,6 +57,11 @@ type Node struct {
 	ctrl        *controller.Controller
 	broker      *broker.Broker
 	groups      *group.Coordinator
+	metrics     *metrics.Metrics
+
+	metricsSrv  *http.Server // nil when metrics are disabled
+	metricsLis  net.Listener
+	metricsDone chan struct{}
 
 	grpc     *grpc.Server
 	lis      net.Listener
@@ -84,7 +93,8 @@ func StartWithOptions(ctx context.Context, cfg config.Config, logger *slog.Logge
 	if err := checkMode(cfg); err != nil {
 		return nil, err
 	}
-	n = &Node{cfg: cfg, logger: logger.With(slog.Int("broker_id", int(cfg.BrokerID))), serveErr: make(chan error, 1)}
+	n = &Node{cfg: cfg, logger: logger.With(slog.Int("broker_id", int(cfg.BrokerID))), serveErr: make(chan error, 1),
+		metrics: metrics.New()}
 	defer func() {
 		if err != nil {
 			n.abort(context.WithoutCancel(ctx)) // cleanup must run even if ctx is already cancelled
@@ -101,7 +111,7 @@ func StartWithOptions(ctx context.Context, cfg config.Config, logger *slog.Logge
 			return nil, fmt.Errorf("open metadata: %w", err)
 		}
 		n.store = ls
-	} else if err := n.startCluster(ctx, opts, port, logger); err != nil {
+	} else if err := n.startCluster(ctx, opts, port); err != nil {
 		return nil, err
 	}
 
@@ -120,7 +130,9 @@ func StartWithOptions(ctx context.Context, cfg config.Config, logger *slog.Logge
 	if n.broker, err = broker.Open(ctx, bcfg, n.store, broker.SystemClock{}, logger); err != nil {
 		return nil, fmt.Errorf("open broker: %w", err)
 	}
+	n.metrics.RegisterBroker(n.broker)
 	if n.raft != nil {
+		n.metrics.RegisterRaft(n.raft)
 		n.broker.SetBrokerEpoch(n.epoch.Load())
 		n.internalAPI.SetBroker(n.broker)
 		// The liveness loop outlives Start's ctx: it runs until Close (background context).
@@ -132,17 +144,74 @@ func StartWithOptions(ctx context.Context, cfg config.Config, logger *slog.Logge
 		DefaultRebalanceTimeout: time.Duration(cfg.GroupRebalanceTimeoutMs) * time.Millisecond,
 		InitialRebalanceDelay:   time.Duration(cfg.GroupInitialRebalanceDelayMs) * time.Millisecond,
 	}, n.store, group.SystemClock{}, n.logger)
-	n.grpc = grpc.NewServer(grpc.MaxRecvMsgSize(server.MaxMessageSize), grpc.MaxSendMsgSize(server.MaxMessageSize))
+	n.grpc = grpc.NewServer(grpc.MaxRecvMsgSize(server.MaxMessageSize), grpc.MaxSendMsgSize(server.MaxMessageSize),
+		grpc.ChainUnaryInterceptor(n.metrics.UnaryServerInterceptor("client")))
 	idSource := broker.LocalIDBlockSource(n.store, cfg.BrokerID)
 	if n.replicas != nil {
 		idSource = n.replicas.IDBlockSource(cfg.BrokerID, n.epoch.Load)
 	}
 	pids := broker.NewProducerIDs(idSource)
-	streamqv1.RegisterStreamQServiceServer(n.grpc, server.New(n.broker, pids, n.groups, n.store, cfg.TopicDefaults, broker.SystemClock{}, n.logger))
+	streamqv1.RegisterStreamQServiceServer(n.grpc, server.New(n.broker, pids, n.groups, n.store, cfg.TopicDefaults, broker.SystemClock{}, n.metrics, n.logger))
 	go func() { n.serveErr <- n.grpc.Serve(n.lis) }()
+	if err := n.startMetrics(ctx, opts.Metrics); err != nil {
+		n.grpc.Stop()
+		<-n.serveErr
+		return nil, err
+	}
 	n.logger.Info("serving", slog.String("addr", n.lis.Addr().String()))
 	return n, nil
 }
+
+// metricsReadHeaderTimeout bounds request headers on the metrics endpoint (gosec G112).
+const metricsReadHeaderTimeout = 5 * time.Second
+
+// startMetrics serves /metrics on metrics_addr (or the pre-bound listener); empty disables it.
+func (n *Node) startMetrics(ctx context.Context, pre net.Listener) error {
+	if pre == nil && n.cfg.MetricsAddr == "" {
+		return nil
+	}
+	lis, err := listen(ctx, pre, n.cfg.MetricsAddr)
+	if err != nil {
+		return fmt.Errorf("metrics: %w", err)
+	}
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", n.metrics.Handler())
+	n.metricsSrv = &http.Server{Handler: mux, ReadHeaderTimeout: metricsReadHeaderTimeout}
+	n.metricsLis = lis
+	n.metricsDone = make(chan struct{})
+	go func() {
+		defer close(n.metricsDone)
+		if err := n.metricsSrv.Serve(lis); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			n.logger.Error("metrics server failed", slog.Any("error", err))
+		}
+	}()
+	return nil
+}
+
+// stopMetrics shuts the metrics endpoint down; it runs first in Close so no scrape touches
+// closed components (M8 plan R8).
+func (n *Node) stopMetrics(ctx context.Context) {
+	if n.metricsSrv == nil {
+		return
+	}
+	sctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	if err := n.metricsSrv.Shutdown(sctx); err != nil {
+		_ = n.metricsSrv.Close()
+	}
+	<-n.metricsDone
+}
+
+// MetricsAddr returns the bound metrics address, or "" when metrics are disabled.
+func (n *Node) MetricsAddr() string {
+	if n.metricsLis == nil {
+		return ""
+	}
+	return n.metricsLis.Addr().String()
+}
+
+// Metrics returns the node's metrics (for tests).
+func (n *Node) Metrics() *metrics.Metrics { return n.metrics }
 
 func listen(ctx context.Context, pre net.Listener, addr string) (net.Listener, error) {
 	if pre != nil {
@@ -172,7 +241,7 @@ func (n *Node) bgCtx() context.Context { return n.bgContext }
 
 // startCluster opens the Raft store, the controller and the internal API, then registers with
 // the controller and waits until the local FSM has applied the registration (plan R1).
-func (n *Node) startCluster(ctx context.Context, opts Options, port int32, logger *slog.Logger) error {
+func (n *Node) startCluster(ctx context.Context, opts Options, port int32) error {
 	cfg := n.cfg
 	var err error
 	if n.internalLis, err = listen(ctx, opts.Internal, cfg.InternalAddr); err != nil {
@@ -188,7 +257,7 @@ func (n *Node) startCluster(ctx context.Context, opts Options, port int32, logge
 	}
 	n.forwarder = server.NewForwarder()
 	n.raft, err = raftstore.Open(ctx, raftstore.Config{
-		NodeID: cfg.BrokerID, Peers: peers, DataDir: cfg.DataDir, Listener: raftLis, Forwarder: n.forwarder, Logger: logger,
+		NodeID: cfg.BrokerID, Peers: peers, DataDir: cfg.DataDir, Listener: raftLis, Forwarder: n.forwarder, Logger: n.logger,
 		HeartbeatTimeout:  time.Duration(cfg.RaftHeartbeatTimeoutMs) * time.Millisecond,
 		ElectionTimeout:   time.Duration(cfg.RaftElectionTimeoutMs) * time.Millisecond,
 		SnapshotThreshold: uint64(cfg.RaftSnapshotThreshold),
@@ -204,7 +273,8 @@ func (n *Node) startCluster(ctx context.Context, opts Options, port int32, logge
 	}, n.raft, controller.SystemClock{}, n.logger)
 	n.replicas = server.NewReplicaClient(n.forwarder, n.raft)
 	n.internalAPI = server.NewInternal(n.ctrl, n.raft, n.logger)
-	n.internal = grpc.NewServer(grpc.MaxRecvMsgSize(server.MaxMessageSize), grpc.MaxSendMsgSize(server.MaxMessageSize))
+	n.internal = grpc.NewServer(grpc.MaxRecvMsgSize(server.MaxMessageSize), grpc.MaxSendMsgSize(server.MaxMessageSize),
+		grpc.ChainUnaryInterceptor(n.metrics.UnaryServerInterceptor("internal")))
 	streamqv1.RegisterStreamQInternalServiceServer(n.internal, n.internalAPI)
 
 	bgCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
@@ -286,6 +356,7 @@ func (n *Node) Raft() *raftstore.Store { return n.raft }
 // internal API, then the metadata store. Idempotent.
 func (n *Node) Close(ctx context.Context) error {
 	n.closeOnce.Do(func() {
+		n.stopMetrics(ctx)
 		n.broker.BeginShutdown()
 		n.groups.BeginShutdown()
 		stopped := make(chan struct{})

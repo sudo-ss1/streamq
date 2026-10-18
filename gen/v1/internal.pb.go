@@ -713,6 +713,118 @@ func (x *AlterISRCommand) GetNewIsr() []int32 {
 	return nil
 }
 
+type ControlledShutdownRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	BrokerId      int32                  `protobuf:"varint,1,opt,name=broker_id,json=brokerId,proto3" json:"broker_id,omitempty"`
+	BrokerEpoch   int64                  `protobuf:"varint,2,opt,name=broker_epoch,json=brokerEpoch,proto3" json:"broker_epoch,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ControlledShutdownRequest) Reset() {
+	*x = ControlledShutdownRequest{}
+	mi := &file_v1_internal_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ControlledShutdownRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ControlledShutdownRequest) ProtoMessage() {}
+
+func (x *ControlledShutdownRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_internal_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ControlledShutdownRequest.ProtoReflect.Descriptor instead.
+func (*ControlledShutdownRequest) Descriptor() ([]byte, []int) {
+	return file_v1_internal_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *ControlledShutdownRequest) GetBrokerId() int32 {
+	if x != nil {
+		return x.BrokerId
+	}
+	return 0
+}
+
+func (x *ControlledShutdownRequest) GetBrokerEpoch() int64 {
+	if x != nil {
+		return x.BrokerEpoch
+	}
+	return 0
+}
+
+type ControlledShutdownResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ErrorCode     ErrorCode              `protobuf:"varint,1,opt,name=error_code,json=errorCode,proto3,enum=streamq.v1.ErrorCode" json:"error_code,omitempty"`
+	ErrorMessage  string                 `protobuf:"bytes,2,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	ControllerId  int32                  `protobuf:"varint,3,opt,name=controller_id,json=controllerId,proto3" json:"controller_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ControlledShutdownResponse) Reset() {
+	*x = ControlledShutdownResponse{}
+	mi := &file_v1_internal_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ControlledShutdownResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ControlledShutdownResponse) ProtoMessage() {}
+
+func (x *ControlledShutdownResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_internal_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ControlledShutdownResponse.ProtoReflect.Descriptor instead.
+func (*ControlledShutdownResponse) Descriptor() ([]byte, []int) {
+	return file_v1_internal_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *ControlledShutdownResponse) GetErrorCode() ErrorCode {
+	if x != nil {
+		return x.ErrorCode
+	}
+	return ErrorCode_ERROR_CODE_NONE
+}
+
+func (x *ControlledShutdownResponse) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
+func (x *ControlledShutdownResponse) GetControllerId() int32 {
+	if x != nil {
+		return x.ControllerId
+	}
+	return 0
+}
+
 type ReplicaFetchRequest struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	ReplicaId   int32                  `protobuf:"varint,1,opt,name=replica_id,json=replicaId,proto3" json:"replica_id,omitempty"`
@@ -730,7 +842,7 @@ type ReplicaFetchRequest struct {
 
 func (x *ReplicaFetchRequest) Reset() {
 	*x = ReplicaFetchRequest{}
-	mi := &file_v1_internal_proto_msgTypes[9]
+	mi := &file_v1_internal_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -742,7 +854,7 @@ func (x *ReplicaFetchRequest) String() string {
 func (*ReplicaFetchRequest) ProtoMessage() {}
 
 func (x *ReplicaFetchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_internal_proto_msgTypes[9]
+	mi := &file_v1_internal_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -755,7 +867,7 @@ func (x *ReplicaFetchRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReplicaFetchRequest.ProtoReflect.Descriptor instead.
 func (*ReplicaFetchRequest) Descriptor() ([]byte, []int) {
-	return file_v1_internal_proto_rawDescGZIP(), []int{9}
+	return file_v1_internal_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ReplicaFetchRequest) GetReplicaId() int32 {
@@ -829,7 +941,7 @@ type ReplicaFetchResponse struct {
 
 func (x *ReplicaFetchResponse) Reset() {
 	*x = ReplicaFetchResponse{}
-	mi := &file_v1_internal_proto_msgTypes[10]
+	mi := &file_v1_internal_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -841,7 +953,7 @@ func (x *ReplicaFetchResponse) String() string {
 func (*ReplicaFetchResponse) ProtoMessage() {}
 
 func (x *ReplicaFetchResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_internal_proto_msgTypes[10]
+	mi := &file_v1_internal_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -854,7 +966,7 @@ func (x *ReplicaFetchResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReplicaFetchResponse.ProtoReflect.Descriptor instead.
 func (*ReplicaFetchResponse) Descriptor() ([]byte, []int) {
-	return file_v1_internal_proto_rawDescGZIP(), []int{10}
+	return file_v1_internal_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ReplicaFetchResponse) GetErrorCode() ErrorCode {
@@ -913,7 +1025,7 @@ type OffsetForLeaderEpochRequest struct {
 
 func (x *OffsetForLeaderEpochRequest) Reset() {
 	*x = OffsetForLeaderEpochRequest{}
-	mi := &file_v1_internal_proto_msgTypes[11]
+	mi := &file_v1_internal_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -925,7 +1037,7 @@ func (x *OffsetForLeaderEpochRequest) String() string {
 func (*OffsetForLeaderEpochRequest) ProtoMessage() {}
 
 func (x *OffsetForLeaderEpochRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_internal_proto_msgTypes[11]
+	mi := &file_v1_internal_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -938,7 +1050,7 @@ func (x *OffsetForLeaderEpochRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OffsetForLeaderEpochRequest.ProtoReflect.Descriptor instead.
 func (*OffsetForLeaderEpochRequest) Descriptor() ([]byte, []int) {
-	return file_v1_internal_proto_rawDescGZIP(), []int{11}
+	return file_v1_internal_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *OffsetForLeaderEpochRequest) GetTopic() string {
@@ -985,7 +1097,7 @@ type OffsetForLeaderEpochResponse struct {
 
 func (x *OffsetForLeaderEpochResponse) Reset() {
 	*x = OffsetForLeaderEpochResponse{}
-	mi := &file_v1_internal_proto_msgTypes[12]
+	mi := &file_v1_internal_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -997,7 +1109,7 @@ func (x *OffsetForLeaderEpochResponse) String() string {
 func (*OffsetForLeaderEpochResponse) ProtoMessage() {}
 
 func (x *OffsetForLeaderEpochResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_internal_proto_msgTypes[12]
+	mi := &file_v1_internal_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1010,7 +1122,7 @@ func (x *OffsetForLeaderEpochResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OffsetForLeaderEpochResponse.ProtoReflect.Descriptor instead.
 func (*OffsetForLeaderEpochResponse) Descriptor() ([]byte, []int) {
-	return file_v1_internal_proto_rawDescGZIP(), []int{12}
+	return file_v1_internal_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *OffsetForLeaderEpochResponse) GetErrorCode() ErrorCode {
@@ -1062,7 +1174,7 @@ type AlterISRRequest struct {
 
 func (x *AlterISRRequest) Reset() {
 	*x = AlterISRRequest{}
-	mi := &file_v1_internal_proto_msgTypes[13]
+	mi := &file_v1_internal_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1074,7 +1186,7 @@ func (x *AlterISRRequest) String() string {
 func (*AlterISRRequest) ProtoMessage() {}
 
 func (x *AlterISRRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_internal_proto_msgTypes[13]
+	mi := &file_v1_internal_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1087,7 +1199,7 @@ func (x *AlterISRRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AlterISRRequest.ProtoReflect.Descriptor instead.
 func (*AlterISRRequest) Descriptor() ([]byte, []int) {
-	return file_v1_internal_proto_rawDescGZIP(), []int{13}
+	return file_v1_internal_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *AlterISRRequest) GetLeaderId() int32 {
@@ -1143,7 +1255,7 @@ type AlterISRResponse struct {
 
 func (x *AlterISRResponse) Reset() {
 	*x = AlterISRResponse{}
-	mi := &file_v1_internal_proto_msgTypes[14]
+	mi := &file_v1_internal_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1155,7 +1267,7 @@ func (x *AlterISRResponse) String() string {
 func (*AlterISRResponse) ProtoMessage() {}
 
 func (x *AlterISRResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_internal_proto_msgTypes[14]
+	mi := &file_v1_internal_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1168,7 +1280,7 @@ func (x *AlterISRResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AlterISRResponse.ProtoReflect.Descriptor instead.
 func (*AlterISRResponse) Descriptor() ([]byte, []int) {
-	return file_v1_internal_proto_rawDescGZIP(), []int{14}
+	return file_v1_internal_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *AlterISRResponse) GetErrorCode() ErrorCode {
@@ -1202,7 +1314,7 @@ type AllocateProducerIDsCommand struct {
 
 func (x *AllocateProducerIDsCommand) Reset() {
 	*x = AllocateProducerIDsCommand{}
-	mi := &file_v1_internal_proto_msgTypes[15]
+	mi := &file_v1_internal_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1214,7 +1326,7 @@ func (x *AllocateProducerIDsCommand) String() string {
 func (*AllocateProducerIDsCommand) ProtoMessage() {}
 
 func (x *AllocateProducerIDsCommand) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_internal_proto_msgTypes[15]
+	mi := &file_v1_internal_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1227,7 +1339,7 @@ func (x *AllocateProducerIDsCommand) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AllocateProducerIDsCommand.ProtoReflect.Descriptor instead.
 func (*AllocateProducerIDsCommand) Descriptor() ([]byte, []int) {
-	return file_v1_internal_proto_rawDescGZIP(), []int{15}
+	return file_v1_internal_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *AllocateProducerIDsCommand) GetBrokerId() int32 {
@@ -1247,7 +1359,7 @@ type AllocateProducerIDsRequest struct {
 
 func (x *AllocateProducerIDsRequest) Reset() {
 	*x = AllocateProducerIDsRequest{}
-	mi := &file_v1_internal_proto_msgTypes[16]
+	mi := &file_v1_internal_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1259,7 +1371,7 @@ func (x *AllocateProducerIDsRequest) String() string {
 func (*AllocateProducerIDsRequest) ProtoMessage() {}
 
 func (x *AllocateProducerIDsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_internal_proto_msgTypes[16]
+	mi := &file_v1_internal_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1272,7 +1384,7 @@ func (x *AllocateProducerIDsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AllocateProducerIDsRequest.ProtoReflect.Descriptor instead.
 func (*AllocateProducerIDsRequest) Descriptor() ([]byte, []int) {
-	return file_v1_internal_proto_rawDescGZIP(), []int{16}
+	return file_v1_internal_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *AllocateProducerIDsRequest) GetBrokerId() int32 {
@@ -1302,7 +1414,7 @@ type AllocateProducerIDsResponse struct {
 
 func (x *AllocateProducerIDsResponse) Reset() {
 	*x = AllocateProducerIDsResponse{}
-	mi := &file_v1_internal_proto_msgTypes[17]
+	mi := &file_v1_internal_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1314,7 +1426,7 @@ func (x *AllocateProducerIDsResponse) String() string {
 func (*AllocateProducerIDsResponse) ProtoMessage() {}
 
 func (x *AllocateProducerIDsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_internal_proto_msgTypes[17]
+	mi := &file_v1_internal_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1327,7 +1439,7 @@ func (x *AllocateProducerIDsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AllocateProducerIDsResponse.ProtoReflect.Descriptor instead.
 func (*AllocateProducerIDsResponse) Descriptor() ([]byte, []int) {
-	return file_v1_internal_proto_rawDescGZIP(), []int{17}
+	return file_v1_internal_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *AllocateProducerIDsResponse) GetErrorCode() ErrorCode {
@@ -1377,7 +1489,7 @@ type RegisterBrokerRequest struct {
 
 func (x *RegisterBrokerRequest) Reset() {
 	*x = RegisterBrokerRequest{}
-	mi := &file_v1_internal_proto_msgTypes[18]
+	mi := &file_v1_internal_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1389,7 +1501,7 @@ func (x *RegisterBrokerRequest) String() string {
 func (*RegisterBrokerRequest) ProtoMessage() {}
 
 func (x *RegisterBrokerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_internal_proto_msgTypes[18]
+	mi := &file_v1_internal_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1402,7 +1514,7 @@ func (x *RegisterBrokerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterBrokerRequest.ProtoReflect.Descriptor instead.
 func (*RegisterBrokerRequest) Descriptor() ([]byte, []int) {
-	return file_v1_internal_proto_rawDescGZIP(), []int{18}
+	return file_v1_internal_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *RegisterBrokerRequest) GetBrokerId() int32 {
@@ -1448,7 +1560,7 @@ type RegisterBrokerResponse struct {
 
 func (x *RegisterBrokerResponse) Reset() {
 	*x = RegisterBrokerResponse{}
-	mi := &file_v1_internal_proto_msgTypes[19]
+	mi := &file_v1_internal_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1460,7 +1572,7 @@ func (x *RegisterBrokerResponse) String() string {
 func (*RegisterBrokerResponse) ProtoMessage() {}
 
 func (x *RegisterBrokerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_internal_proto_msgTypes[19]
+	mi := &file_v1_internal_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1473,7 +1585,7 @@ func (x *RegisterBrokerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterBrokerResponse.ProtoReflect.Descriptor instead.
 func (*RegisterBrokerResponse) Descriptor() ([]byte, []int) {
-	return file_v1_internal_proto_rawDescGZIP(), []int{19}
+	return file_v1_internal_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *RegisterBrokerResponse) GetErrorCode() ErrorCode {
@@ -1522,7 +1634,7 @@ type BrokerHeartbeatRequest struct {
 
 func (x *BrokerHeartbeatRequest) Reset() {
 	*x = BrokerHeartbeatRequest{}
-	mi := &file_v1_internal_proto_msgTypes[20]
+	mi := &file_v1_internal_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1534,7 +1646,7 @@ func (x *BrokerHeartbeatRequest) String() string {
 func (*BrokerHeartbeatRequest) ProtoMessage() {}
 
 func (x *BrokerHeartbeatRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_internal_proto_msgTypes[20]
+	mi := &file_v1_internal_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1547,7 +1659,7 @@ func (x *BrokerHeartbeatRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BrokerHeartbeatRequest.ProtoReflect.Descriptor instead.
 func (*BrokerHeartbeatRequest) Descriptor() ([]byte, []int) {
-	return file_v1_internal_proto_rawDescGZIP(), []int{20}
+	return file_v1_internal_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *BrokerHeartbeatRequest) GetBrokerId() int32 {
@@ -1583,7 +1695,7 @@ type BrokerHeartbeatResponse struct {
 
 func (x *BrokerHeartbeatResponse) Reset() {
 	*x = BrokerHeartbeatResponse{}
-	mi := &file_v1_internal_proto_msgTypes[21]
+	mi := &file_v1_internal_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1595,7 +1707,7 @@ func (x *BrokerHeartbeatResponse) String() string {
 func (*BrokerHeartbeatResponse) ProtoMessage() {}
 
 func (x *BrokerHeartbeatResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_internal_proto_msgTypes[21]
+	mi := &file_v1_internal_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1608,7 +1720,7 @@ func (x *BrokerHeartbeatResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BrokerHeartbeatResponse.ProtoReflect.Descriptor instead.
 func (*BrokerHeartbeatResponse) Descriptor() ([]byte, []int) {
-	return file_v1_internal_proto_rawDescGZIP(), []int{21}
+	return file_v1_internal_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *BrokerHeartbeatResponse) GetErrorCode() ErrorCode {
@@ -1648,7 +1760,7 @@ type ForwardMetadataRequest struct {
 
 func (x *ForwardMetadataRequest) Reset() {
 	*x = ForwardMetadataRequest{}
-	mi := &file_v1_internal_proto_msgTypes[22]
+	mi := &file_v1_internal_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1660,7 +1772,7 @@ func (x *ForwardMetadataRequest) String() string {
 func (*ForwardMetadataRequest) ProtoMessage() {}
 
 func (x *ForwardMetadataRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_internal_proto_msgTypes[22]
+	mi := &file_v1_internal_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1673,7 +1785,7 @@ func (x *ForwardMetadataRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ForwardMetadataRequest.ProtoReflect.Descriptor instead.
 func (*ForwardMetadataRequest) Descriptor() ([]byte, []int) {
-	return file_v1_internal_proto_rawDescGZIP(), []int{22}
+	return file_v1_internal_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ForwardMetadataRequest) GetCommand() *MetadataCommand {
@@ -1696,7 +1808,7 @@ type ForwardMetadataResponse struct {
 
 func (x *ForwardMetadataResponse) Reset() {
 	*x = ForwardMetadataResponse{}
-	mi := &file_v1_internal_proto_msgTypes[23]
+	mi := &file_v1_internal_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1708,7 +1820,7 @@ func (x *ForwardMetadataResponse) String() string {
 func (*ForwardMetadataResponse) ProtoMessage() {}
 
 func (x *ForwardMetadataResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_internal_proto_msgTypes[23]
+	mi := &file_v1_internal_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1721,7 +1833,7 @@ func (x *ForwardMetadataResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ForwardMetadataResponse.ProtoReflect.Descriptor instead.
 func (*ForwardMetadataResponse) Descriptor() ([]byte, []int) {
-	return file_v1_internal_proto_rawDescGZIP(), []int{23}
+	return file_v1_internal_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *ForwardMetadataResponse) GetErrorCode() ErrorCode {
@@ -1807,7 +1919,15 @@ const file_v1_internal_proto_rawDesc = "" +
 	"\tpartition\x18\x02 \x01(\x05R\tpartition\x12!\n" +
 	"\fleader_epoch\x18\x03 \x01(\x05R\vleaderEpoch\x12'\n" +
 	"\x0fpartition_epoch\x18\x04 \x01(\x05R\x0epartitionEpoch\x12\x17\n" +
-	"\anew_isr\x18\x05 \x03(\x05R\x06newIsr\"\x8e\x02\n" +
+	"\anew_isr\x18\x05 \x03(\x05R\x06newIsr\"[\n" +
+	"\x19ControlledShutdownRequest\x12\x1b\n" +
+	"\tbroker_id\x18\x01 \x01(\x05R\bbrokerId\x12!\n" +
+	"\fbroker_epoch\x18\x02 \x01(\x03R\vbrokerEpoch\"\x9c\x01\n" +
+	"\x1aControlledShutdownResponse\x124\n" +
+	"\n" +
+	"error_code\x18\x01 \x01(\x0e2\x15.streamq.v1.ErrorCodeR\terrorCode\x12#\n" +
+	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\x12#\n" +
+	"\rcontroller_id\x18\x03 \x01(\x05R\fcontrollerId\"\x8e\x02\n" +
 	"\x13ReplicaFetchRequest\x12\x1d\n" +
 	"\n" +
 	"replica_id\x18\x01 \x01(\x05R\treplicaId\x12\x14\n" +
@@ -1892,7 +2012,7 @@ const file_v1_internal_proto_rawDesc = "" +
 	"error_code\x18\x01 \x01(\x0e2\x15.streamq.v1.ErrorCodeR\terrorCode\x12#\n" +
 	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\x12#\n" +
 	"\rcontroller_id\x18\x03 \x01(\x05R\fcontrollerId\x12\x14\n" +
-	"\x05index\x18\x04 \x01(\x04R\x05index2\x96\x05\n" +
+	"\x05index\x18\x04 \x01(\x04R\x05index2\xfb\x05\n" +
 	"\x16StreamQInternalService\x12W\n" +
 	"\x0eRegisterBroker\x12!.streamq.v1.RegisterBrokerRequest\x1a\".streamq.v1.RegisterBrokerResponse\x12Z\n" +
 	"\x0fBrokerHeartbeat\x12\".streamq.v1.BrokerHeartbeatRequest\x1a#.streamq.v1.BrokerHeartbeatResponse\x12Z\n" +
@@ -1900,7 +2020,8 @@ const file_v1_internal_proto_rawDesc = "" +
 	"\fReplicaFetch\x12\x1f.streamq.v1.ReplicaFetchRequest\x1a .streamq.v1.ReplicaFetchResponse\x12i\n" +
 	"\x14OffsetForLeaderEpoch\x12'.streamq.v1.OffsetForLeaderEpochRequest\x1a(.streamq.v1.OffsetForLeaderEpochResponse\x12E\n" +
 	"\bAlterISR\x12\x1b.streamq.v1.AlterISRRequest\x1a\x1c.streamq.v1.AlterISRResponse\x12f\n" +
-	"\x13AllocateProducerIDs\x12&.streamq.v1.AllocateProducerIDsRequest\x1a'.streamq.v1.AllocateProducerIDsResponseB\x96\x01\n" +
+	"\x13AllocateProducerIDs\x12&.streamq.v1.AllocateProducerIDsRequest\x1a'.streamq.v1.AllocateProducerIDsResponse\x12c\n" +
+	"\x12ControlledShutdown\x12%.streamq.v1.ControlledShutdownRequest\x1a&.streamq.v1.ControlledShutdownResponseB\x96\x01\n" +
 	"\x0ecom.streamq.v1B\rInternalProtoP\x01Z,github.com/sudo-ss1/streamq/gen/v1;streamqv1\xa2\x02\x03SXX\xaa\x02\n" +
 	"Streamq.V1\xca\x02\n" +
 	"Streamq\\V1\xe2\x02\x16Streamq\\V1\\GPBMetadata\xea\x02\vStreamq::V1b\x06proto3"
@@ -1917,7 +2038,7 @@ func file_v1_internal_proto_rawDescGZIP() []byte {
 	return file_v1_internal_proto_rawDescData
 }
 
-var file_v1_internal_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
+var file_v1_internal_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
 var file_v1_internal_proto_goTypes = []any{
 	(*MetadataCommand)(nil),              // 0: streamq.v1.MetadataCommand
 	(*CreateTopicCommand)(nil),           // 1: streamq.v1.CreateTopicCommand
@@ -1928,24 +2049,26 @@ var file_v1_internal_proto_goTypes = []any{
 	(*FenceBrokerCommand)(nil),           // 6: streamq.v1.FenceBrokerCommand
 	(*UnfenceBrokerCommand)(nil),         // 7: streamq.v1.UnfenceBrokerCommand
 	(*AlterISRCommand)(nil),              // 8: streamq.v1.AlterISRCommand
-	(*ReplicaFetchRequest)(nil),          // 9: streamq.v1.ReplicaFetchRequest
-	(*ReplicaFetchResponse)(nil),         // 10: streamq.v1.ReplicaFetchResponse
-	(*OffsetForLeaderEpochRequest)(nil),  // 11: streamq.v1.OffsetForLeaderEpochRequest
-	(*OffsetForLeaderEpochResponse)(nil), // 12: streamq.v1.OffsetForLeaderEpochResponse
-	(*AlterISRRequest)(nil),              // 13: streamq.v1.AlterISRRequest
-	(*AlterISRResponse)(nil),             // 14: streamq.v1.AlterISRResponse
-	(*AllocateProducerIDsCommand)(nil),   // 15: streamq.v1.AllocateProducerIDsCommand
-	(*AllocateProducerIDsRequest)(nil),   // 16: streamq.v1.AllocateProducerIDsRequest
-	(*AllocateProducerIDsResponse)(nil),  // 17: streamq.v1.AllocateProducerIDsResponse
-	(*RegisterBrokerRequest)(nil),        // 18: streamq.v1.RegisterBrokerRequest
-	(*RegisterBrokerResponse)(nil),       // 19: streamq.v1.RegisterBrokerResponse
-	(*BrokerHeartbeatRequest)(nil),       // 20: streamq.v1.BrokerHeartbeatRequest
-	(*BrokerHeartbeatResponse)(nil),      // 21: streamq.v1.BrokerHeartbeatResponse
-	(*ForwardMetadataRequest)(nil),       // 22: streamq.v1.ForwardMetadataRequest
-	(*ForwardMetadataResponse)(nil),      // 23: streamq.v1.ForwardMetadataResponse
-	nil,                                  // 24: streamq.v1.CreateTopicCommand.ConfigsEntry
-	(*OffsetCommit)(nil),                 // 25: streamq.v1.OffsetCommit
-	(ErrorCode)(0),                       // 26: streamq.v1.ErrorCode
+	(*ControlledShutdownRequest)(nil),    // 9: streamq.v1.ControlledShutdownRequest
+	(*ControlledShutdownResponse)(nil),   // 10: streamq.v1.ControlledShutdownResponse
+	(*ReplicaFetchRequest)(nil),          // 11: streamq.v1.ReplicaFetchRequest
+	(*ReplicaFetchResponse)(nil),         // 12: streamq.v1.ReplicaFetchResponse
+	(*OffsetForLeaderEpochRequest)(nil),  // 13: streamq.v1.OffsetForLeaderEpochRequest
+	(*OffsetForLeaderEpochResponse)(nil), // 14: streamq.v1.OffsetForLeaderEpochResponse
+	(*AlterISRRequest)(nil),              // 15: streamq.v1.AlterISRRequest
+	(*AlterISRResponse)(nil),             // 16: streamq.v1.AlterISRResponse
+	(*AllocateProducerIDsCommand)(nil),   // 17: streamq.v1.AllocateProducerIDsCommand
+	(*AllocateProducerIDsRequest)(nil),   // 18: streamq.v1.AllocateProducerIDsRequest
+	(*AllocateProducerIDsResponse)(nil),  // 19: streamq.v1.AllocateProducerIDsResponse
+	(*RegisterBrokerRequest)(nil),        // 20: streamq.v1.RegisterBrokerRequest
+	(*RegisterBrokerResponse)(nil),       // 21: streamq.v1.RegisterBrokerResponse
+	(*BrokerHeartbeatRequest)(nil),       // 22: streamq.v1.BrokerHeartbeatRequest
+	(*BrokerHeartbeatResponse)(nil),      // 23: streamq.v1.BrokerHeartbeatResponse
+	(*ForwardMetadataRequest)(nil),       // 24: streamq.v1.ForwardMetadataRequest
+	(*ForwardMetadataResponse)(nil),      // 25: streamq.v1.ForwardMetadataResponse
+	nil,                                  // 26: streamq.v1.CreateTopicCommand.ConfigsEntry
+	(*OffsetCommit)(nil),                 // 27: streamq.v1.OffsetCommit
+	(ErrorCode)(0),                       // 28: streamq.v1.ErrorCode
 }
 var file_v1_internal_proto_depIdxs = []int32{
 	1,  // 0: streamq.v1.MetadataCommand.create_topic:type_name -> streamq.v1.CreateTopicCommand
@@ -1955,37 +2078,40 @@ var file_v1_internal_proto_depIdxs = []int32{
 	6,  // 4: streamq.v1.MetadataCommand.fence_broker:type_name -> streamq.v1.FenceBrokerCommand
 	7,  // 5: streamq.v1.MetadataCommand.unfence_broker:type_name -> streamq.v1.UnfenceBrokerCommand
 	8,  // 6: streamq.v1.MetadataCommand.alter_isr:type_name -> streamq.v1.AlterISRCommand
-	15, // 7: streamq.v1.MetadataCommand.allocate_producer_ids:type_name -> streamq.v1.AllocateProducerIDsCommand
-	24, // 8: streamq.v1.CreateTopicCommand.configs:type_name -> streamq.v1.CreateTopicCommand.ConfigsEntry
+	17, // 7: streamq.v1.MetadataCommand.allocate_producer_ids:type_name -> streamq.v1.AllocateProducerIDsCommand
+	26, // 8: streamq.v1.CreateTopicCommand.configs:type_name -> streamq.v1.CreateTopicCommand.ConfigsEntry
 	2,  // 9: streamq.v1.CreateTopicCommand.partitions:type_name -> streamq.v1.PartitionAssignment
-	25, // 10: streamq.v1.CommitOffsetsCommand.offsets:type_name -> streamq.v1.OffsetCommit
-	26, // 11: streamq.v1.ReplicaFetchResponse.error_code:type_name -> streamq.v1.ErrorCode
-	26, // 12: streamq.v1.OffsetForLeaderEpochResponse.error_code:type_name -> streamq.v1.ErrorCode
-	26, // 13: streamq.v1.AlterISRResponse.error_code:type_name -> streamq.v1.ErrorCode
-	26, // 14: streamq.v1.AllocateProducerIDsResponse.error_code:type_name -> streamq.v1.ErrorCode
-	26, // 15: streamq.v1.RegisterBrokerResponse.error_code:type_name -> streamq.v1.ErrorCode
-	26, // 16: streamq.v1.BrokerHeartbeatResponse.error_code:type_name -> streamq.v1.ErrorCode
-	0,  // 17: streamq.v1.ForwardMetadataRequest.command:type_name -> streamq.v1.MetadataCommand
-	26, // 18: streamq.v1.ForwardMetadataResponse.error_code:type_name -> streamq.v1.ErrorCode
-	18, // 19: streamq.v1.StreamQInternalService.RegisterBroker:input_type -> streamq.v1.RegisterBrokerRequest
-	20, // 20: streamq.v1.StreamQInternalService.BrokerHeartbeat:input_type -> streamq.v1.BrokerHeartbeatRequest
-	22, // 21: streamq.v1.StreamQInternalService.ForwardMetadata:input_type -> streamq.v1.ForwardMetadataRequest
-	9,  // 22: streamq.v1.StreamQInternalService.ReplicaFetch:input_type -> streamq.v1.ReplicaFetchRequest
-	11, // 23: streamq.v1.StreamQInternalService.OffsetForLeaderEpoch:input_type -> streamq.v1.OffsetForLeaderEpochRequest
-	13, // 24: streamq.v1.StreamQInternalService.AlterISR:input_type -> streamq.v1.AlterISRRequest
-	16, // 25: streamq.v1.StreamQInternalService.AllocateProducerIDs:input_type -> streamq.v1.AllocateProducerIDsRequest
-	19, // 26: streamq.v1.StreamQInternalService.RegisterBroker:output_type -> streamq.v1.RegisterBrokerResponse
-	21, // 27: streamq.v1.StreamQInternalService.BrokerHeartbeat:output_type -> streamq.v1.BrokerHeartbeatResponse
-	23, // 28: streamq.v1.StreamQInternalService.ForwardMetadata:output_type -> streamq.v1.ForwardMetadataResponse
-	10, // 29: streamq.v1.StreamQInternalService.ReplicaFetch:output_type -> streamq.v1.ReplicaFetchResponse
-	12, // 30: streamq.v1.StreamQInternalService.OffsetForLeaderEpoch:output_type -> streamq.v1.OffsetForLeaderEpochResponse
-	14, // 31: streamq.v1.StreamQInternalService.AlterISR:output_type -> streamq.v1.AlterISRResponse
-	17, // 32: streamq.v1.StreamQInternalService.AllocateProducerIDs:output_type -> streamq.v1.AllocateProducerIDsResponse
-	26, // [26:33] is the sub-list for method output_type
-	19, // [19:26] is the sub-list for method input_type
-	19, // [19:19] is the sub-list for extension type_name
-	19, // [19:19] is the sub-list for extension extendee
-	0,  // [0:19] is the sub-list for field type_name
+	27, // 10: streamq.v1.CommitOffsetsCommand.offsets:type_name -> streamq.v1.OffsetCommit
+	28, // 11: streamq.v1.ControlledShutdownResponse.error_code:type_name -> streamq.v1.ErrorCode
+	28, // 12: streamq.v1.ReplicaFetchResponse.error_code:type_name -> streamq.v1.ErrorCode
+	28, // 13: streamq.v1.OffsetForLeaderEpochResponse.error_code:type_name -> streamq.v1.ErrorCode
+	28, // 14: streamq.v1.AlterISRResponse.error_code:type_name -> streamq.v1.ErrorCode
+	28, // 15: streamq.v1.AllocateProducerIDsResponse.error_code:type_name -> streamq.v1.ErrorCode
+	28, // 16: streamq.v1.RegisterBrokerResponse.error_code:type_name -> streamq.v1.ErrorCode
+	28, // 17: streamq.v1.BrokerHeartbeatResponse.error_code:type_name -> streamq.v1.ErrorCode
+	0,  // 18: streamq.v1.ForwardMetadataRequest.command:type_name -> streamq.v1.MetadataCommand
+	28, // 19: streamq.v1.ForwardMetadataResponse.error_code:type_name -> streamq.v1.ErrorCode
+	20, // 20: streamq.v1.StreamQInternalService.RegisterBroker:input_type -> streamq.v1.RegisterBrokerRequest
+	22, // 21: streamq.v1.StreamQInternalService.BrokerHeartbeat:input_type -> streamq.v1.BrokerHeartbeatRequest
+	24, // 22: streamq.v1.StreamQInternalService.ForwardMetadata:input_type -> streamq.v1.ForwardMetadataRequest
+	11, // 23: streamq.v1.StreamQInternalService.ReplicaFetch:input_type -> streamq.v1.ReplicaFetchRequest
+	13, // 24: streamq.v1.StreamQInternalService.OffsetForLeaderEpoch:input_type -> streamq.v1.OffsetForLeaderEpochRequest
+	15, // 25: streamq.v1.StreamQInternalService.AlterISR:input_type -> streamq.v1.AlterISRRequest
+	18, // 26: streamq.v1.StreamQInternalService.AllocateProducerIDs:input_type -> streamq.v1.AllocateProducerIDsRequest
+	9,  // 27: streamq.v1.StreamQInternalService.ControlledShutdown:input_type -> streamq.v1.ControlledShutdownRequest
+	21, // 28: streamq.v1.StreamQInternalService.RegisterBroker:output_type -> streamq.v1.RegisterBrokerResponse
+	23, // 29: streamq.v1.StreamQInternalService.BrokerHeartbeat:output_type -> streamq.v1.BrokerHeartbeatResponse
+	25, // 30: streamq.v1.StreamQInternalService.ForwardMetadata:output_type -> streamq.v1.ForwardMetadataResponse
+	12, // 31: streamq.v1.StreamQInternalService.ReplicaFetch:output_type -> streamq.v1.ReplicaFetchResponse
+	14, // 32: streamq.v1.StreamQInternalService.OffsetForLeaderEpoch:output_type -> streamq.v1.OffsetForLeaderEpochResponse
+	16, // 33: streamq.v1.StreamQInternalService.AlterISR:output_type -> streamq.v1.AlterISRResponse
+	19, // 34: streamq.v1.StreamQInternalService.AllocateProducerIDs:output_type -> streamq.v1.AllocateProducerIDsResponse
+	10, // 35: streamq.v1.StreamQInternalService.ControlledShutdown:output_type -> streamq.v1.ControlledShutdownResponse
+	28, // [28:36] is the sub-list for method output_type
+	20, // [20:28] is the sub-list for method input_type
+	20, // [20:20] is the sub-list for extension type_name
+	20, // [20:20] is the sub-list for extension extendee
+	0,  // [0:20] is the sub-list for field type_name
 }
 
 func init() { file_v1_internal_proto_init() }
@@ -2010,7 +2136,7 @@ func file_v1_internal_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_internal_proto_rawDesc), len(file_v1_internal_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   25,
+			NumMessages:   27,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

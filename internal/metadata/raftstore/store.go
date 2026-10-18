@@ -53,7 +53,9 @@ type Config struct {
 	Peers  []Peer // identical on every node, including this one
 	// DataDir holds raft/ (bolt log and stable store, snapshots).
 	DataDir string
-	// Listener is the pre-bound Raft listener; its address must equal this node's Peer.RaftAddr.
+	// Listener is the pre-bound Raft listener. Peers dial this node's Peer.RaftAddr, which is
+	// normally the listener's address but may differ when traffic is proxied (DECISIONS D54); Raft
+	// identifies servers by ID.
 	Listener  net.Listener
 	Forwarder Forwarder
 	Logger    *slog.Logger

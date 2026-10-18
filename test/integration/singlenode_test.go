@@ -16,6 +16,7 @@ import (
 func startInProcess(t *testing.T, dir string) *node.Node {
 	t.Helper()
 	cfg := config.Default()
+	cfg.MetricsAddr = "" // tests bind no metrics port (M8 plan R1)
 	cfg.DataDir = dir
 	cfg.ListenAddr = "127.0.0.1:0"
 	n, err := node.Start(context.Background(), cfg, slog.New(slog.DiscardHandler))

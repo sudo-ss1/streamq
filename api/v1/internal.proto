@@ -101,6 +101,19 @@ service StreamQInternalService {
   rpc AlterISR(AlterISRRequest) returns (AlterISRResponse);
   // AllocateProducerIDs reserves a block of producer IDs for a broker (SPEC §6).
   rpc AllocateProducerIDs(AllocateProducerIDsRequest) returns (AllocateProducerIDsResponse);
+  // ControlledShutdown moves leadership off a stopping broker (SPEC §4.6).
+  rpc ControlledShutdown(ControlledShutdownRequest) returns (ControlledShutdownResponse);
+}
+
+message ControlledShutdownRequest {
+  int32 broker_id = 1;
+  int64 broker_epoch = 2;
+}
+
+message ControlledShutdownResponse {
+  ErrorCode error_code = 1;
+  string error_message = 2;
+  int32 controller_id = 3;
 }
 
 message ReplicaFetchRequest {

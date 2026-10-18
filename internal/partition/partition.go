@@ -569,3 +569,17 @@ func (p *Partition) ListOffsets(ctx context.Context, requestEpoch int32, timesta
 	}
 	return off, ts, nil
 }
+
+// ISRSize returns the size of the committed ISR (0 when not leader).
+func (p *Partition) ISRSize() int {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return len(p.isr)
+}
+
+// ReplicaCount returns the number of assigned replicas.
+func (p *Partition) ReplicaCount() int {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return len(p.replicas)
+}

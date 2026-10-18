@@ -25,6 +25,7 @@ const (
 func startNode(t *testing.T, dir string) streamqv1.StreamQServiceClient {
 	t.Helper()
 	cfg := config.Default()
+	cfg.MetricsAddr = "" // tests bind no metrics port (M8 plan R1)
 	cfg.DataDir = dir
 	cfg.ListenAddr = "127.0.0.1:0"
 	cfg.TopicDefaults.ReplicationFactor = 1
@@ -234,6 +235,7 @@ func TestDeleteTopicAndFetchLongPoll(t *testing.T) {
 
 func TestShutdownWithIdleLongPollIsPrompt(t *testing.T) {
 	cfg := config.Default()
+	cfg.MetricsAddr = "" // tests bind no metrics port (M8 plan R1)
 	cfg.DataDir = t.TempDir()
 	cfg.ListenAddr = "127.0.0.1:0"
 	cfg.TopicDefaults.ReplicationFactor = 1

@@ -20,6 +20,7 @@ import (
 	"github.com/sudo-ss1/streamq/internal/group"
 	"github.com/sudo-ss1/streamq/internal/metadata"
 	"github.com/sudo-ss1/streamq/internal/metadata/raftstore"
+	"github.com/sudo-ss1/streamq/internal/metrics"
 	"github.com/sudo-ss1/streamq/internal/partition"
 	"github.com/sudo-ss1/streamq/internal/producerstate"
 	"github.com/sudo-ss1/streamq/internal/storage"
@@ -41,14 +42,15 @@ type Server struct {
 	store    metadata.Store
 	defaults config.TopicDefaults
 	clock    broker.Clock
+	metrics  *metrics.Metrics // may be nil
 	logger   *slog.Logger
 }
 
 // New returns a Server.
 func New(b *broker.Broker, pids *broker.ProducerIDs, groups *group.Coordinator, store metadata.Store, defaults config.TopicDefaults,
-	clock broker.Clock, logger *slog.Logger,
+	clock broker.Clock, m *metrics.Metrics, logger *slog.Logger,
 ) *Server {
-	return &Server{broker: b, pids: pids, groups: groups, store: store, defaults: defaults, clock: clock, logger: logger}
+	return &Server{broker: b, pids: pids, groups: groups, store: store, defaults: defaults, clock: clock, metrics: m, logger: logger}
 }
 
 // errorCode maps an error to its API ErrorCode. Unexpected errors map to UNKNOWN and are logged.
@@ -301,7 +303,12 @@ func (s *Server) Produce(ctx context.Context, req *streamqv1.ProduceRequest) (*s
 	results := s.broker.Produce(ctx, acks, time.Duration(req.GetTimeoutMs())*time.Millisecond, reqs)
 	resp := &streamqv1.ProduceResponse{}
 	byTopic := map[string]*streamqv1.ProduceTopicResponse{}
-	for _, r := range results {
+	for i, r := range results {
+		if r.Err == nil {
+			s.metrics.AddBytesIn(r.TP.Topic, len(reqs[i].Records)) // accepted batches only (plan R6)
+		} else {
+			s.metrics.PartitionError("Produce", errorCode(r.Err).String())
+		}
 		pr := &streamqv1.ProducePartitionResponse{
 			Partition: r.TP.Partition, ErrorCode: s.errorCode(r.Err), ErrorMessage: errMessage(r.Err),
 			BaseOffset: r.BaseOffset, LogStartOffset: r.LogStartOffset,
@@ -343,6 +350,12 @@ func (s *Server) Fetch(ctx context.Context, req *streamqv1.FetchRequest) (*strea
 	resp := &streamqv1.FetchResponse{}
 	byTopic := map[string]*streamqv1.FetchTopicResponse{}
 	for _, r := range results {
+		switch {
+		case r.Err != nil:
+			s.metrics.PartitionError("Fetch", errorCode(r.Err).String())
+		case len(r.Records) > 0:
+			s.metrics.AddBytesOut(r.TP.Topic, len(r.Records))
+		}
 		pr := &streamqv1.FetchPartitionResponse{
 			Partition: r.TP.Partition, ErrorCode: s.errorCode(r.Err), HighWatermark: r.HighWatermark,
 			LogStartOffset: r.LogStartOffset, Records: r.Records, LeaderId: r.LeaderID, LeaderEpoch: r.LeaderEpoch,

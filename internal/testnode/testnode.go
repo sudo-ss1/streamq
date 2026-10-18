@@ -31,6 +31,7 @@ func StartIn(tb testing.TB, dataDir string) *node.Node {
 func StartWith(tb testing.TB, dataDir string, mod func(*config.Config)) *node.Node {
 	tb.Helper()
 	cfg := config.Default()
+	cfg.MetricsAddr = "" // tests bind no metrics port (M8 plan R1)
 	cfg.DataDir = dataDir
 	cfg.ListenAddr = "127.0.0.1:0"
 	cfg.AdvertisedHost = "127.0.0.1"
