@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -64,6 +65,10 @@ type ProducerConfig struct {
 	// Partitioner chooses partitions for records without UsePartition (default
 	// NewDefaultPartitioner()).
 	Partitioner Partitioner
+	// DisableIdempotence turns off the idempotent producer. Idempotence is on when Acks is AcksAll
+	// and this is false (Kafka's default): retried batches are never duplicated by the broker
+	// (SPEC §6, DECISIONS D48).
+	DisableIdempotence bool
 }
 
 func (c *ProducerConfig) setDefaults(requestTimeout time.Duration) error {
@@ -112,6 +117,11 @@ type batch struct {
 	created time.Time
 	gen     uint64 // open-batch generation, to ignore stale linger timers
 	stop    func() bool
+
+	// Idempotence identity, fixed on the first send attempt and kept for every retry (D48).
+	pid    int64
+	seq    int32 // -1 until assigned
+	pidGen uint64
 }
 
 // partitionState is the accumulator and send queue of one partition.
@@ -129,6 +139,10 @@ type partitionState struct {
 	completed uint64
 	progress  chan struct{} // closed and replaced when completed advances
 	signal    chan struct{} // 1-buffered: wakes the sender
+
+	// Sequence state, owned by the partition's sender goroutine (no lock).
+	seqPID  int64
+	nextSeq int32
 }
 
 // Producer batches records per partition and sends them with retries (FR12). Each partition has
@@ -136,8 +150,13 @@ type partitionState struct {
 // even by retries (DECISIONS D21). Callbacks run on the partition's sender goroutine in record
 // order; calling Flush, Close or ProduceSync from a callback deadlocks.
 //
-// Lock ordering: Producer.mu → partitionState.mu. No producer lock is held while calling the
-// Partitioner, blocking on buffer space or metadata, or running callbacks.
+// With idempotence (the default with AcksAll), the first send of each batch fixes its producer ID
+// and sequence; retries resend them, so a broker that appended a batch whose response was lost
+// answers the retry with the original offsets instead of appending again (SPEC §6, D48).
+//
+// Lock ordering: Producer.mu → partitionState.mu. pidMu is a leaf held across the InitProducer
+// RPC, never taken under either. No producer lock is held while calling the Partitioner, blocking
+// on buffer space or metadata, or running callbacks.
 type Producer struct {
 	client *Client
 	cfg    ProducerConfig
@@ -151,6 +170,12 @@ type Producer struct {
 
 	closedCh      chan struct{} // closed when the first Close has finished
 	bufferWaiters atomic.Int32  // Produce calls currently blocked on buffer space (tests observe it)
+
+	idempotent bool
+	pidMu      sync.Mutex
+	pid        int64
+	pidGen     uint64 // bumped on every InitProducer; batches remember theirs
+	needPID    bool   // no pid yet, or the last one must be replaced (D48)
 
 	closingCtx context.Context // done when Close begins: unblocks Produce
 	closing    context.CancelFunc
@@ -168,7 +193,8 @@ func newProducer(c *Client, cfg ProducerConfig, clk clock) (*Producer, error) {
 		return nil, err
 	}
 	p := &Producer{client: c, cfg: cfg, clock: clk, buf: semaphore.NewWeighted(int64(cfg.BufferMemory)),
-		parts: map[TopicPartition]*partitionState{}, closedCh: make(chan struct{})}
+		parts: map[TopicPartition]*partitionState{}, closedCh: make(chan struct{}),
+		idempotent: cfg.Acks == AcksAll && !cfg.DisableIdempotence, pid: record.NoProducerID, needPID: true}
 	p.closingCtx, p.closing = context.WithCancel(context.Background())
 	p.abortCtx, p.abort = context.WithCancel(context.Background())
 	return p, nil
@@ -340,7 +366,7 @@ func (p *Producer) partition(tp TopicPartition) (*partitionState, error) {
 	if ps, ok := p.parts[tp]; ok {
 		return ps, nil
 	}
-	ps := &partitionState{tp: tp, progress: make(chan struct{}), signal: make(chan struct{}, 1)}
+	ps := &partitionState{tp: tp, progress: make(chan struct{}), signal: make(chan struct{}, 1), seqPID: record.NoProducerID}
 	p.parts[tp] = ps
 	p.senders.Add(1)
 	go p.sendLoop(ps)
@@ -371,6 +397,7 @@ func (p *Producer) append(ps *partitionState, r pendingRecord, numParts int32, l
 			builder: record.NewBuilder(record.BuilderOptions{ProducerID: record.NoProducerID, BaseSequence: record.NoSequence}),
 			created: p.clock.Now(),
 			gen:     ps.gen,
+			seq:     -1,
 		}
 		gen := ps.gen
 		b.stop = p.clock.AfterFunc(p.cfg.Linger, func() { p.lingerExpired(ps, gen) })
@@ -434,7 +461,7 @@ func (p *Producer) sendLoop(ps *partitionState) {
 		b := ps.queue[0]
 		ps.mu.Unlock()
 
-		halves := p.send(ps.tp, b)
+		halves := p.send(ps, b)
 
 		ps.mu.Lock()
 		ps.queue = ps.queue[1:]
@@ -447,41 +474,59 @@ func (p *Producer) sendLoop(ps *partitionState) {
 
 // send delivers one batch with retries. If the broker rejects a multi-record batch as too large
 // it returns the two halves to send instead (DECISIONS D24); otherwise it completes the batch.
-func (p *Producer) send(tp TopicPartition, b *batch) []*batch {
+// It runs on ps's sender goroutine, which owns ps's sequence state.
+func (p *Producer) send(ps *partitionState, b *batch) []*batch {
+	tp := ps.tp
 	deadline := b.created.Add(p.cfg.DeliveryTimeout)
 	var lastErr error
+	fail := func(err error) {
+		if b.seq >= 0 {
+			// The broker may or may not have appended it: later batches must not sit behind a
+			// possible sequence gap, so the next one starts under a new producer ID (D48).
+			p.replacePID(b.pidGen)
+		}
+		p.complete(tp, b, -1, err)
+	}
 	for attempt := 0; ; attempt++ {
 		if p.abortCtx.Err() != nil {
-			p.complete(tp, b, -1, ErrProducerClosed)
+			fail(ErrProducerClosed)
 			return nil
 		}
 		if !p.clock.Now().Before(deadline) {
 			if lastErr == nil {
 				lastErr = ErrRequestTimedOut
 			}
-			p.complete(tp, b, -1, fmt.Errorf("client: delivery timeout %v exceeded: %w", p.cfg.DeliveryTimeout, lastErr))
+			fail(fmt.Errorf("client: delivery timeout %v exceeded: %w", p.cfg.DeliveryTimeout, lastErr))
 			return nil
 		}
-		base, err := p.sendOnce(tp, b)
+		var base int64
+		err := p.assignSequence(ps, b)
+		if err == nil {
+			base, err = p.sendOnce(tp, b)
+		}
 		if p.cfg.Acks == AcksNone && p.abortCtx.Err() == nil {
 			p.complete(tp, b, -1, err) // acks=0: a single attempt, as in Kafka
 			return nil
 		}
 		switch {
 		case err != nil && p.abortCtx.Err() != nil:
-			p.complete(tp, b, -1, ErrProducerClosed) // Close gave up; the RPC was cancelled
+			fail(ErrProducerClosed) // Close gave up; the RPC was cancelled
 			return nil
 		case err == nil:
 			p.complete(tp, b, base, nil)
 			return nil
 		case errors.Is(err, ErrMessageTooLarge) && len(b.recs) > 1:
+			if b.seq >= 0 && ps.seqPID == b.pid {
+				// Definitely not appended, and nothing later was sequenced: reuse the sequence.
+				ps.nextSeq = b.seq
+			}
 			mid := len(b.recs) / 2
 			return []*batch{
-				{recs: b.recs[:mid], created: b.created},
-				{recs: b.recs[mid:], created: b.created},
+				{recs: b.recs[:mid], created: b.created, seq: -1},
+				{recs: b.recs[mid:], created: b.created, seq: -1},
 			}
 		case !IsRetriable(err):
-			p.complete(tp, b, -1, err)
+			fail(err)
 			return nil
 		}
 		lastErr = err
@@ -500,7 +545,11 @@ func (p *Producer) sendOnce(tp TopicPartition, b *batch) (int64, error) {
 	if err != nil {
 		return -1, err
 	}
-	bld := record.NewBuilder(record.BuilderOptions{ProducerID: record.NoProducerID, BaseSequence: record.NoSequence})
+	opts := record.BuilderOptions{ProducerID: record.NoProducerID, BaseSequence: record.NoSequence}
+	if b.seq >= 0 {
+		opts = record.BuilderOptions{ProducerID: b.pid, BaseSequence: b.seq}
+	}
+	bld := record.NewBuilder(opts)
 	for _, r := range b.recs {
 		bld.Append(r.ts, r.key, r.value, r.headers)
 	}
@@ -535,6 +584,59 @@ func (p *Producer) sendOnce(tp TopicPartition, b *batch) (int64, error) {
 		}
 	}
 	return -1, fmt.Errorf("client: produce response missing %s/%d: %w", tp.Topic, tp.Partition, ErrRequestTimedOut)
+}
+
+// assignSequence gives b its producer ID and sequence on its first send attempt (idempotence
+// only). Called on ps's sender goroutine.
+func (p *Producer) assignSequence(ps *partitionState, b *batch) error {
+	if !p.idempotent || b.seq >= 0 {
+		return nil
+	}
+	pid, gen, err := p.producerID()
+	if err != nil {
+		return err
+	}
+	if ps.seqPID != pid {
+		ps.seqPID, ps.nextSeq = pid, 0
+	}
+	b.pid, b.pidGen, b.seq = pid, gen, ps.nextSeq
+	ps.nextSeq = int32((int64(ps.nextSeq) + int64(len(b.recs))) % (math.MaxInt32 + 1))
+	return nil
+}
+
+// producerID returns the current producer ID, obtaining a new one from any broker if there is
+// none yet or the last one was replaced.
+func (p *Producer) producerID() (int64, uint64, error) {
+	p.pidMu.Lock()
+	defer p.pidMu.Unlock()
+	if !p.needPID {
+		return p.pid, p.pidGen, nil
+	}
+	var id int64
+	err := p.client.callAny(p.abortCtx, func(ctx context.Context, api streamqv1.StreamQServiceClient) error {
+		resp, err := api.InitProducer(ctx, &streamqv1.InitProducerRequest{})
+		if err != nil {
+			return err
+		}
+		id = resp.GetProducerId()
+		return serverError(resp.GetErrorCode(), resp.GetErrorMessage())
+	})
+	if err != nil {
+		return 0, 0, fmt.Errorf("client: init producer: %w", err)
+	}
+	p.pid, p.needPID = id, false
+	p.pidGen++
+	return p.pid, p.pidGen, nil
+}
+
+// replacePID makes the next sequence assignment obtain a new producer ID, unless a newer one
+// than gen is already in use.
+func (p *Producer) replacePID(gen uint64) {
+	p.pidMu.Lock()
+	defer p.pidMu.Unlock()
+	if gen == p.pidGen {
+		p.needPID = true
+	}
 }
 
 // complete releases a batch's buffer bytes, runs its callbacks in order and records progress.

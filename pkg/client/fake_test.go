@@ -92,6 +92,8 @@ type fakeBroker struct {
 
 	produceReqs []*streamqv1.ProduceRequest
 	fetchReqs   []*streamqv1.FetchRequest
+	nextPID     int64
+	seqs        map[fakeSeqKey]int64 // idempotent batches seen: (tp, pid, seq) -> base offset
 
 	// Optional overrides; return (nil, nil) to fall through to the default behaviour.
 	onMetadata    func(*streamqv1.MetadataRequest) (*streamqv1.MetadataResponse, error)
@@ -102,7 +104,22 @@ type fakeBroker struct {
 
 func newFakeBroker(id int32, host string, port int32) *fakeBroker {
 	return &fakeBroker{id: id, host: host, port: port, topics: map[string]int32{},
-		logs: map[TopicPartition][]record.Record{}, calls: map[string]int{}}
+		logs: map[TopicPartition][]record.Record{}, calls: map[string]int{}, nextPID: 100, seqs: map[fakeSeqKey]int64{}}
+}
+
+type fakeSeqKey struct {
+	tp  TopicPartition
+	pid int64
+	seq int32
+}
+
+// InitProducer hands out increasing producer IDs.
+func (f *fakeBroker) InitProducer(context.Context, *streamqv1.InitProducerRequest) (*streamqv1.InitProducerResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls["InitProducer"]++
+	f.nextPID++
+	return &streamqv1.InitProducerResponse{ProducerId: f.nextPID}, nil
 }
 
 func (f *fakeBroker) count(name string) int {
@@ -162,6 +179,12 @@ func (f *fakeBroker) Produce(_ context.Context, req *streamqv1.ProduceRequest) (
 			return resp, err
 		}
 	}
+	return f.produce(req), nil
+}
+
+// produce is the default Produce behaviour (hooks may call it, e.g. to append and then drop the
+// response).
+func (f *fakeBroker) produce(req *streamqv1.ProduceRequest) *streamqv1.ProduceResponse {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	resp := &streamqv1.ProduceResponse{}
@@ -176,7 +199,12 @@ func (f *fakeBroker) Produce(_ context.Context, req *streamqv1.ProduceRequest) (
 				pr.ErrorCode = streamqv1.ErrorCode_ERROR_CODE_UNKNOWN_TOPIC_OR_PARTITION
 			case err != nil:
 				pr.ErrorCode = streamqv1.ErrorCode_ERROR_CODE_CORRUPT_MESSAGE
+			case b.ProducerID() >= 0 && f.hasSeq(tp, b):
+				pr.BaseOffset = f.seqs[fakeSeqKey{tp, b.ProducerID(), b.BaseSequence()}] // duplicate
 			default:
+				if b.ProducerID() >= 0 {
+					f.seqs[fakeSeqKey{tp, b.ProducerID(), b.BaseSequence()}] = int64(len(f.logs[tp]))
+				}
 				base := int64(len(f.logs[tp]))
 				recs, _ := b.Records()
 				for i, r := range recs {
@@ -190,7 +218,12 @@ func (f *fakeBroker) Produce(_ context.Context, req *streamqv1.ProduceRequest) (
 		}
 		resp.Topics = append(resp.Topics, tr)
 	}
-	return resp, nil
+	return resp
+}
+
+func (f *fakeBroker) hasSeq(tp TopicPartition, b record.Batch) bool {
+	_, ok := f.seqs[fakeSeqKey{tp, b.ProducerID(), b.BaseSequence()}]
+	return ok
 }
 
 func clone(b []byte) []byte {
