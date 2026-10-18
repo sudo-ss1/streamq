@@ -54,7 +54,11 @@ test:
 	go test -race -count=1 ./...
 
 test-int:
+ifeq ($(wildcard test/integration),)
+	@echo "test-int: no integration tests until M2; skipping"
+else
 	go test -race -count=1 -tags=integration ./test/integration/...
+endif
 
 lint: $(GOLANGCI_STAMP)
 	golangci-lint run ./...

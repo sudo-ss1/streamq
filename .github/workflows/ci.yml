@@ -25,6 +25,7 @@ jobs:
       - name: Check generated code is up to date
         run: |
           make gen
+          git add -N gen/
           git diff --exit-code gen/
 
   test:
