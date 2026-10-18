@@ -199,3 +199,49 @@ the `integration` build tag is linted.
   Poll.
 - `Client.Close` waits for any in-flight shared metadata refresh, up to RequestTimeout per
   candidate broker when brokers are unreachable.
+
+## M4 — Consumer groups, single node (2026-10-18)
+
+**Built**
+- API: FindCoordinator, JoinGroup, SyncGroup, Heartbeat, LeaveGroup, CommitOffset (with
+  per-partition results), FetchOffset, ListGroups, DescribeGroup. All additive; `buf breaking` is
+  clean.
+- Metadata FSM: the `CommitOffsetsCommand`, `State.Groups` persisted in `metadata.json` (D28), and
+  topic deletion dropping its offsets (D27).
+- `internal/group` (implementer):
+  - coordinator with Kafka's state machine and server-side assignment (D25);
+  - initial delay restarted per joiner, capped by the rebalance timeout;
+  - parked members kept alive, session expiry, abandoned-join cleanup;
+  - rebalances on topic create/delete;
+  - commits accepted during PreparingRebalance;
+  - range and roundrobin assignors.
+- `pkg/client` GroupConsumer (implementer): join/sync/fetch-offset/seek, a heartbeat goroutine per
+  generation, auto-commit (also before rejoin and on Close), coordinator rediscovery, and
+  concurrency-safe accessors.
+- `streamqctl groups list|describe|lag` (implementer).
+- Server handlers, node wiring (the coordinator shuts down before GracefulStop), config key
+  `group_initial_rebalance_delay_ms`.
+
+**Decisions**: D25–D29.
+
+**Process**:
+- plan-reviewer REVISE ×2 → APPROVE (round 3);
+- three implementers in parallel (coordinator, GroupConsumer, CLI);
+- the main session did the FSM, server, node and integration.
+
+**Verification**
+- `make lint test test-int` green.
+- `TestGroupsNoDoubleAssignmentAndKill`, `TestGroupsStaleGenerationCommitRejected` and
+  `TestGroupsResumeFromCommittedOffsets` (§9) are stable over 3 race runs.
+
+**Known limitations**
+- `metadata.Snapshot()` deep-copies all committed offsets, and the coordinator calls it on every
+  request for the controller check. Revisit in M5 with a single-group read if profiling shows a
+  cost.
+- Group operations call `store.Snapshot()` under the coordinator lock, and the local store holds
+  its lock across `metadata.json` fsyncs in `Propose`. So every offset commit briefly stalls all
+  group operations. Revisit with a cheaper controller-id/single-group read in M5.
+- An empty group is dropped from coordinator memory, so its generation restarts at 1. Its
+  committed offsets stay in metadata.
+- `streamqctl groups lag` sends one ListOffsets to the bootstrap broker; with replication (M6)
+  it must route by leader.

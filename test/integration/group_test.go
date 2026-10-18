@@ -239,9 +239,9 @@ func TestGroupsNoDoubleAssignmentAndKill(t *testing.T) {
 	// Kill the victim: no LeaveGroup, heartbeats just stop.
 	close(kill)
 	require.NoError(t, <-hbDone)
-	killed := time.Now()
-	require.Eventually(t, func() bool { return stableCover(gcs, topic, 6) }, groupSession+5*time.Second, 20*time.Millisecond)
-	require.Less(t, time.Since(killed), groupSession+5*time.Second)
+	// Within the session timeout (+ one heartbeat and a margin), well below the 5 s rebalance
+	// timeout, so eviction must come from session expiry.
+	require.Eventually(t, func() bool { return stableCover(gcs, topic, 6) }, groupSession+groupHeartbeat+time.Second, 20*time.Millisecond)
 
 	r1.stop(t)
 	r2.stop(t)

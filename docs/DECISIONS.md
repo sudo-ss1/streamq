@@ -219,7 +219,10 @@ group waits `group_initial_rebalance_delay_ms` (new key, default 3 s, Kafka's
 `group.initial.rebalance.delay.ms`), restarted per joiner but capped by the rebalance timeout.
 `group_session_timeout_ms` is the default and maximum session timeout: larger requests are
 clamped rather than rejected, because §7.3 has no INVALID_SESSION_TIMEOUT.
-`group_rebalance_timeout_ms` is the default rebalance timeout. Topic creation or deletion for a
+`group_rebalance_timeout_ms` is the default rebalance timeout. The PreparingRebalance cap is fixed
+when the phase starts, from the members present then. A later joiner with a larger rebalance
+timeout does not extend it, which is simpler than Kafka's max over current members; members still
+rejoin in the next round. Topic creation or deletion for a
 subscribed topic triggers a rebalance. A Join abandoned by its client removes a member that the
 same request created.
 

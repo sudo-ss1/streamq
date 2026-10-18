@@ -147,6 +147,9 @@ func newGroupConsumer(c *Client, cfg GroupConsumerConfig, clk clock) (*GroupCons
 }
 
 // Poll joins or rejoins the group when needed, then returns the next records of the assignment.
+// ctx must leave enough time for a join to complete (the broker's initial rebalance delay plus the
+// rebalance itself): a join abandoned by its ctx removes the member it created, so a too-short
+// ctx can never join a forming group.
 // Joining retries retriable failures (coordinator moved or unreachable, stale membership) with
 // backoff until ctx ends. With auto-commit on, positions are committed every AutoCommitInterval
 // before fetching, so only records already returned by earlier Polls are committed.
