@@ -85,6 +85,11 @@ type Snapshot struct {
 	ControllerID int32
 	Topics       map[string]Topic
 	Groups       map[string]GroupOffsets // committed offsets per group
+	// ControllerEpoch is the Raft term the current controller won (0 for the local store).
+	ControllerEpoch uint64
+	// Index is the index of the last command applied into this snapshot (the Raft log index, or
+	// the local store's command sequence number).
+	Index uint64
 }
 
 // GroupOffsets are a group's committed offsets: topic → partition → next offset to consume.
@@ -138,6 +143,10 @@ type Change struct {
 	Partitions []PartitionState  // created/changed partitions; for TopicDeleted, the deleted ones
 	Configs    map[string]string // topic configs (a copy); set for TopicCreated
 	Group      string            // group id; set for OffsetsCommitted
+	// Index is the index of the command that produced this change (see Snapshot.Index).
+	Index uint64
+	// Snapshot is the full state for Restored changes, captured at this change's position.
+	Snapshot *Snapshot
 }
 
 // Store is the metadata store (SPEC §2.2). Brokers and groups must not care which
@@ -148,6 +157,9 @@ type Store interface {
 	// Propose applies cmd; when it returns nil the command is applied and persisted, and its
 	// changes have been queued for subscribers.
 	Propose(ctx context.Context, cmd *streamqv1.MetadataCommand) error
+	// ProposeAsLeader applies cmd only if this node is the controller, never forwarding it
+	// (DECISIONS D33); otherwise it returns ErrNotController.
+	ProposeAsLeader(ctx context.Context, cmd *streamqv1.MetadataCommand) error
 	// Subscribe atomically registers fn and returns the snapshot it starts from: every change
 	// applied after that snapshot is delivered to fn exactly once, in order, on the store's
 	// notifier goroutine, with the store's lifetime ctx. The returned func unsubscribes; it blocks

@@ -73,6 +73,7 @@ type Store struct {
 	cond       *sync.Cond // on mu; signalled on new changes, delivery completion and Close
 	state      *metadata.State
 	nextSeq    uint64 // sequence number of the next applied change
+	applied    uint64 // number of commands applied since Open (Snapshot.Index / Change.Index)
 	queue      []queued
 	subs       []*subscriber
 	delivering *subscriber // subscriber whose callback is running, or nil
@@ -158,7 +159,18 @@ func load(path string, self metadata.Broker) (*metadata.State, error) {
 func (s *Store) Snapshot() metadata.Snapshot {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.state.Snapshot()
+	return s.snapshotLocked()
+}
+
+func (s *Store) snapshotLocked() metadata.Snapshot {
+	snap := s.state.Snapshot()
+	snap.Index = s.applied
+	return snap
+}
+
+// ProposeAsLeader implements metadata.Store; the local broker is always the controller.
+func (s *Store) ProposeAsLeader(ctx context.Context, cmd *streamqv1.MetadataCommand) error {
+	return s.Propose(ctx, cmd)
 }
 
 // Propose implements metadata.Store.
@@ -180,7 +192,9 @@ func (s *Store) Propose(ctx context.Context, cmd *streamqv1.MetadataCommand) err
 		return fmt.Errorf("propose: %w", err)
 	}
 	s.state = next
+	s.applied++
 	for _, c := range changes {
+		c.Index = s.applied
 		s.queue = append(s.queue, queued{seq: s.nextSeq, change: c})
 		s.nextSeq++
 	}
@@ -250,7 +264,7 @@ func (s *Store) Subscribe(fn func(context.Context, metadata.Change)) (metadata.S
 	sub := &subscriber{fn: fn, startSeq: s.nextSeq}
 	s.subs = append(s.subs, sub)
 	var once sync.Once
-	return s.state.Snapshot(), func() { once.Do(func() { s.unsubscribe(sub) }) }
+	return s.snapshotLocked(), func() { once.Do(func() { s.unsubscribe(sub) }) }
 }
 
 // unsubscribe removes sub and waits for its in-flight callback, unless it is called from the
