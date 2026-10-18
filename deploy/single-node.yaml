@@ -1,0 +1,10 @@
+# Single-node broker (M2–M4). RF and min.insync are 1 so acks=all works with one broker
+# (DECISIONS D16).
+broker_id: 1
+listen_addr: "127.0.0.1:9092"
+advertised_host: "localhost"
+data_dir: "./data/broker1"
+topic_defaults:
+  partitions: 3
+  replication_factor: 1
+  min_insync_replicas: 1

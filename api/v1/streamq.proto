@@ -224,6 +224,7 @@ message ListOffsetsPartitionResponse {
   ErrorCode error_code = 2;
   // -1 if no record matches the timestamp.
   int64 offset = 3;
+  // The requested timestamp when a timestamp lookup matched; -1 otherwise.
   int64 timestamp = 4;
   int32 leader_id = 5;
   int32 leader_epoch = 6;

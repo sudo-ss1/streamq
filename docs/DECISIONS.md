@@ -74,7 +74,7 @@ Storage creates files with mode 0640 and directories with 0750, which satisfies 
 G304 (file path from a variable) is excluded for `internal/storage/` only: every path there is
 built from the configured data directory (from M2 also `internal/config/`, `internal/metadata/local/`,
 `internal/broker/` and `test/`). In `_test.go` files, `contextcheck` (test helpers use
-`context.Background()`) and gosec G404 (math/rand for workload generation) are excluded.
+`context.Background()`), `unparam` (test helpers often take fixed arguments) and gosec G404 (math/rand for workload generation) are excluded.
 
 ## D9. Negative batch timestamps are rejected; trusted corruption keeps the log offline (M1)
 

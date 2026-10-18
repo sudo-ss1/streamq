@@ -1707,7 +1707,8 @@ type ListOffsetsPartitionResponse struct {
 	Partition int32                  `protobuf:"varint,1,opt,name=partition,proto3" json:"partition,omitempty"`
 	ErrorCode ErrorCode              `protobuf:"varint,2,opt,name=error_code,json=errorCode,proto3,enum=streamq.v1.ErrorCode" json:"error_code,omitempty"`
 	// -1 if no record matches the timestamp.
-	Offset        int64 `protobuf:"varint,3,opt,name=offset,proto3" json:"offset,omitempty"`
+	Offset int64 `protobuf:"varint,3,opt,name=offset,proto3" json:"offset,omitempty"`
+	// The requested timestamp when a timestamp lookup matched; -1 otherwise.
 	Timestamp     int64 `protobuf:"varint,4,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
 	LeaderId      int32 `protobuf:"varint,5,opt,name=leader_id,json=leaderId,proto3" json:"leader_id,omitempty"`
 	LeaderEpoch   int32 `protobuf:"varint,6,opt,name=leader_epoch,json=leaderEpoch,proto3" json:"leader_epoch,omitempty"`

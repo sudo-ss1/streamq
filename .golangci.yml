@@ -2,6 +2,7 @@ version: "2"
 
 run:
   timeout: 5m
+  build-tags: [integration]
 
 linters:
   default: standard # errcheck, govet, ineffassign, staticcheck, unused
@@ -54,9 +55,13 @@ linters:
       - path: ^(internal/(storage|config|broker|metadata/local)|test)/
         linters: [gosec]
         text: G304
-      # Tests use context.Background in helpers and math/rand for workload generation (D8).
+      # Integration and chaos tests launch the binaries they just built.
+      - path: ^test/
+        linters: [gosec]
+        text: G204
+      # Tests use context.Background in helpers, fixed-argument helpers, and math/rand (D8).
       - path: _test\.go$
-        linters: [contextcheck]
+        linters: [contextcheck, unparam]
       - path: _test\.go$
         linters: [gosec]
         text: G404
