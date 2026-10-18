@@ -388,3 +388,56 @@ Refinements from the M6 review:
 Code 23, internal API only. AlterISR content rejections (members that are not replicas, the leader
 missing, fenced members) are distinguished from FENCED_LEADER_EPOCH, because the leader clears
 its pending state only for the former.
+
+## D48. Client idempotence (M7)
+
+Idempotence is on when `Acks == AcksAll` and `DisableIdempotence` is false, which matches Kafka
+≥ 3.0's default.
+- **Producer ID:** obtained lazily via `InitProducer`. The producer epoch stays 0 (SPEC §3.5).
+- **Sequences:** a batch gets its sequence on its first send attempt and keeps it across retries.
+  One batch is in flight per partition (D21), which satisfies "≤ 5 in flight".
+- **Unknown outcome:** after a sequenced batch finally fails (timeout, OUT_OF_ORDER_SEQUENCE,
+  UNKNOWN_PRODUCER_ID, …), the producer obtains a new producer ID before the next sequence
+  assignment. This replaces Kafka's epoch bump.
+- **Reordering:** without epoch fencing, a timed-out batch still in flight on the server may land
+  after later batches. This is acceptable, because the application was already told it failed.
+- **Throughput:** one batch in flight per partition limits throughput; M10 measures it.
+
+## D49. Producer-state eviction (M7)
+
+- **Eviction:** producers are evicted only after `producer_id_expiration_ms`, measured on the
+  batch max timestamp. The timestamp is deterministic on replay. There is no eviction when the
+  log start moves.
+- **Unknown producers:** an unknown producer with sequence ≠ 0 gets UNKNOWN_PRODUCER_ID, which is
+  non-retriable for the batch; the client re-initializes.
+- **Known state-loss cases (Kafka-like):**
+  - a full truncation (`TruncateFullyAndStartAt`) on a follower that is later promoted;
+  - a missing roll snapshot at the log start after retention.
+
+  Producers whose batches survive only in deleted segments then get UNKNOWN_PRODUCER_ID.
+
+## D50. Producer-state snapshots (M7)
+
+- **Format:** `<20-digit offset>.snapshot` holds a 4-byte CRC32C followed by a JSON body. It covers
+  every batch with last offset < offset.
+- **When written:** synchronously on segment roll, and at the LEO on clean shutdown. A failed write
+  is logged and is not fatal.
+- **Rebuild:**
+  1. Delete snapshots outside [log start, LEO], corrupt snapshots and temp files.
+  2. Load the newest valid snapshot.
+  3. Replay the later batch headers.
+  4. Swap the result in only on success.
+- **Failed rebuild:** the producer state is marked invalid. Idempotent appends then get NOT_LEADER
+  until a retry succeeds.
+- **Full truncation:** deletes snapshots before the log.
+
+## D51. Producer-ID blocks (M7)
+
+- **Allocation:** the controller allocates blocks of 1000 through `AllocateProducerIDsCommand`.
+  The FSM keeps `next_producer_id` and `producer_id_blocks[broker]`.
+- **Result:** the controller reads the result after applying, under `allocMu`, and re-checks its
+  term (M7 plan R13).
+- **Single-node mode:** proposes to the local store under the broker allocator's mutex.
+- **On disk:** `metadata.json` and the Raft snapshot gain the two keys (additive). Older files load
+  as 0 and empty.
+- **Lost responses:** IDs lost to lost responses are wasted, never reused.
