@@ -38,8 +38,8 @@ describeCluster. A broker that is referenced as a partition replica but is not l
 as "down"; a stopped broker that hosts no replicas cannot be seen and is not listed.
 
 A partition is under-replicated when its ISR is smaller than its replica set, and offline when
-it has no leader. With --strict the command fails when any broker is down or any partition is
-under-replicated or offline.`,
+it has no leader. With --strict the command fails when no broker is live, there is no
+controller, any broker is down, or any partition is under-replicated or offline.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
@@ -59,14 +59,14 @@ under-replicated or offline.`,
 				return err
 			}
 			if strict && !st.healthy() {
-				return fmt.Errorf("%w: %d broker(s) down, %d partition(s) under-replicated, %d offline",
-					errClusterUnhealthy, st.down, st.underReplicated, st.offline)
+				return fmt.Errorf("%w: %d live broker(s), controller %d, %d broker(s) down, %d partition(s) under-replicated, %d offline",
+					errClusterUnhealthy, st.live(), st.controller, st.down, st.underReplicated, st.offline)
 			}
 			return nil
 		},
 	}
 	cmd.Flags().BoolVar(&strict, "strict", false,
-		"exit non-zero when a broker is down or a partition is under-replicated or offline")
+		"exit non-zero unless brokers are live with a controller, none is down, and no partition is under-replicated or offline")
 	return cmd
 }
 
@@ -97,7 +97,18 @@ type clusterStatus struct {
 }
 
 func (s clusterStatus) healthy() bool {
-	return s.down == 0 && s.underReplicated == 0 && s.offline == 0
+	return s.down == 0 && s.underReplicated == 0 && s.offline == 0 && s.live() > 0 && s.controller >= 0
+}
+
+// live counts brokers in the live state.
+func (s clusterStatus) live() int {
+	n := 0
+	for _, b := range s.brokers {
+		if b.live {
+			n++
+		}
+	}
+	return n
 }
 
 // summarizeCluster builds the broker table (live brokers plus replicas absent from the live

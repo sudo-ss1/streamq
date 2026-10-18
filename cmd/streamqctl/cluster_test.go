@@ -97,6 +97,18 @@ func TestClusterStatus(t *testing.T) {
 			strict:  true,
 			wantErr: "0 broker(s) down, 0 partition(s) under-replicated, 1 offline",
 		},
+		{
+			name:    "strict fails with no live brokers (cluster still forming)",
+			resp:    &streamqv1.MetadataResponse{ControllerId: 1},
+			strict:  true,
+			wantErr: "0 live broker(s)",
+		},
+		{
+			name:    "strict fails without a controller",
+			resp:    &streamqv1.MetadataResponse{ControllerId: -1, Brokers: brokers(1)},
+			strict:  true,
+			wantErr: "controller -1",
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
