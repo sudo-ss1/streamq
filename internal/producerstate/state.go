@@ -225,7 +225,7 @@ func (s *State) WriteSnapshot(ctx context.Context, offset int64) error {
 
 // readSnapshot loads one snapshot file.
 func readSnapshot(path string, offset int64) (map[int64]*entry, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // path is built from the partition dir and a parsed offset
 	if err != nil {
 		return nil, fmt.Errorf("read producer snapshot: %w", err)
 	}

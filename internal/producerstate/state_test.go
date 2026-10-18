@@ -170,10 +170,10 @@ func TestRebuildSkipsBadAndStaleSnapshots(t *testing.T) {
 	// Corrupt the newest snapshot, plant one above the LEO, one below the log start, and a temp
 	// leftover.
 	newest := filepath.Join(l.Dir(), snapshotName(4))
-	data, err := os.ReadFile(newest)
+	data, err := os.ReadFile(newest) //nolint:gosec // test file under t.TempDir()
 	require.NoError(t, err)
 	data[len(data)-2] ^= 0xff
-	require.NoError(t, os.WriteFile(newest, data, 0o600))
+	require.NoError(t, os.WriteFile(newest, data, 0o600)) //nolint:gosec // test file under t.TempDir()
 	require.NoError(t, s.WriteSnapshot(ctx, 99))
 	require.NoError(t, os.WriteFile(filepath.Join(l.Dir(), snapshotName(7)+tmpSuffix), []byte("x"), 0o600))
 
