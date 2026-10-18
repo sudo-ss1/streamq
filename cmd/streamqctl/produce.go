@@ -70,7 +70,7 @@ func (a *app) produceCmd() *cobra.Command {
 // producer accumulates per-partition batches and sends them.
 type producer struct {
 	a        *app
-	client   streamqv1.StreamQServiceClient
+	rt       *router
 	topic    string
 	acks     streamqv1.Acks
 	builders map[int32]*record.Builder
@@ -90,13 +90,14 @@ func (a *app) produce(ctx context.Context, f produceFlags) error {
 		return err
 	}
 	defer closeConn()
-	md, err := a.topicMetadata(ctx, c, f.topic)
+	rt, md, err := a.newRouter(ctx, c, f.topic)
 	if err != nil {
 		return err
 	}
+	defer rt.close()
 	numPartitions := int32(len(md.GetPartitions()))
 
-	p := &producer{a: a, client: c, topic: f.topic, acks: acks, builders: make(map[int32]*record.Builder)}
+	p := &producer{a: a, rt: rt, topic: f.topic, acks: acks, builders: make(map[int32]*record.Builder)}
 	var rr int32 // partition receiving unkeyed records; advances when its batch is sent
 	sc := bufio.NewScanner(a.in)
 	sc.Buffer(make([]byte, 0, 64<<10), maxLineBytes)
@@ -145,8 +146,18 @@ func (a *app) produce(ctx context.Context, f produceFlags) error {
 	return err
 }
 
-// send builds and sends the pending batch of each listed partition in one ProduceRequest.
+// send sends the pending batches of the listed partitions, one ProduceRequest per leader.
 func (p *producer) send(ctx context.Context, parts []int32) error {
+	order, groups := p.rt.group(ctx, parts)
+	var errs []error
+	for _, c := range order {
+		errs = append(errs, p.sendTo(ctx, c, groups[c]))
+	}
+	return errors.Join(errs...)
+}
+
+// sendTo builds and sends the pending batch of each listed partition in one ProduceRequest to c.
+func (p *producer) sendTo(ctx context.Context, c streamqv1.StreamQServiceClient, parts []int32) error {
 	req := &streamqv1.ProduceRequest{
 		Acks:      p.acks,
 		TimeoutMs: int32(p.a.timeout.Milliseconds()),
@@ -168,7 +179,7 @@ func (p *producer) send(ctx context.Context, parts []int32) error {
 
 	rctx, cancel := p.a.rpcCtx(ctx)
 	defer cancel()
-	resp, err := p.client.Produce(rctx, req)
+	resp, err := c.Produce(rctx, req)
 	if err != nil {
 		return fmt.Errorf("produce to topic %q: %w", p.topic, err)
 	}

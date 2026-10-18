@@ -115,7 +115,7 @@ func TestMetricsEndToEnd(t *testing.T) {
 		require.True(t, ok, "raft metrics on broker %d", id)
 		leaders += v
 	}
-	require.Equal(t, 1.0, leaders, "exactly one raft leader")
+	require.InDelta(t, 1.0, leaders, 0, "exactly one raft leader")
 
 	l0 := scrape(t, c.Node(leaderOf[0]).MetricsAddr())
 	v, _ := value(l0, "streamq_requests_total", map[string]string{"service": "client", "method": "Produce"})

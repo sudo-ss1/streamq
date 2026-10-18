@@ -98,25 +98,26 @@ func apiError(what string, code streamqv1.ErrorCode, msg string) error {
 	return fmt.Errorf("%s: %s", what, codeName(code))
 }
 
-// topicMetadata fetches metadata for one topic and fails on a topic-level error.
-func (a *app) topicMetadata(ctx context.Context, c streamqv1.StreamQServiceClient, topic string) (*streamqv1.TopicMetadata, error) {
+// topicMetadata fetches metadata for one topic, failing on a topic-level error, and returns the
+// live brokers too (for leader routing).
+func (a *app) topicMetadata(ctx context.Context, c streamqv1.StreamQServiceClient, topic string) (*streamqv1.TopicMetadata, []*streamqv1.Broker, error) {
 	rctx, cancel := a.rpcCtx(ctx)
 	defer cancel()
 	resp, err := c.Metadata(rctx, &streamqv1.MetadataRequest{Topics: []string{topic}})
 	if err != nil {
-		return nil, fmt.Errorf("metadata for topic %q: %w", topic, err)
+		return nil, nil, fmt.Errorf("metadata for topic %q: %w", topic, err)
 	}
 	for _, t := range resp.GetTopics() {
 		if t.GetName() != topic {
 			continue
 		}
 		if t.GetErrorCode() != streamqv1.ErrorCode_ERROR_CODE_NONE {
-			return nil, apiError(fmt.Sprintf("metadata for topic %q", topic), t.GetErrorCode(), "")
+			return nil, nil, apiError(fmt.Sprintf("metadata for topic %q", topic), t.GetErrorCode(), "")
 		}
 		if len(t.GetPartitions()) == 0 {
-			return nil, fmt.Errorf("metadata for topic %q: no partitions", topic)
+			return nil, nil, fmt.Errorf("metadata for topic %q: no partitions", topic)
 		}
-		return t, nil
+		return t, resp.GetBrokers(), nil
 	}
-	return nil, apiError(fmt.Sprintf("metadata for topic %q", topic), streamqv1.ErrorCode_ERROR_CODE_UNKNOWN_TOPIC_OR_PARTITION, "")
+	return nil, nil, apiError(fmt.Sprintf("metadata for topic %q", topic), streamqv1.ErrorCode_ERROR_CODE_UNKNOWN_TOPIC_OR_PARTITION, "")
 }

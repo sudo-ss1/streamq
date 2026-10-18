@@ -77,10 +77,11 @@ func (a *app) consume(ctx context.Context, f consumeFlags, offsetSet bool) error
 		return err
 	}
 	defer closeConn()
-	md, err := a.topicMetadata(ctx, c, f.topic)
+	rt, md, err := a.newRouter(ctx, c, f.topic)
 	if err != nil {
 		return err
 	}
+	defer rt.close()
 	var parts []int32
 	for _, p := range md.GetPartitions() {
 		if f.partition < 0 || p.GetPartition() == f.partition {
@@ -92,7 +93,7 @@ func (a *app) consume(ctx context.Context, f consumeFlags, offsetSet bool) error
 	}
 	slices.Sort(parts)
 
-	ends, err := a.listOffsets(ctx, c, f.topic, parts, latestTimestamp)
+	ends, err := a.listOffsets(ctx, rt, f.topic, parts, latestTimestamp)
 	if err != nil {
 		return err
 	}
@@ -104,7 +105,7 @@ func (a *app) consume(ctx context.Context, f consumeFlags, offsetSet bool) error
 			starts[p] = f.offset
 		}
 	case f.fromBeginning:
-		if starts, err = a.listOffsets(ctx, c, f.topic, parts, earliestTimestamp); err != nil {
+		if starts, err = a.listOffsets(ctx, rt, f.topic, parts, earliestTimestamp); err != nil {
 			return err
 		}
 	default:
@@ -125,7 +126,7 @@ func (a *app) consume(ctx context.Context, f consumeFlags, offsetSet bool) error
 				return nil
 			}
 		}
-		done, err := a.fetchOnce(ctx, c, f, active, &printed)
+		done, err := a.fetchOnce(ctx, rt, f, active, &printed)
 		if err != nil {
 			if f.follow && ctx.Err() != nil {
 				return nil // interrupted: a normal way to end --follow
@@ -138,9 +139,31 @@ func (a *app) consume(ctx context.Context, f consumeFlags, offsetSet bool) error
 	}
 }
 
-// fetchOnce issues one Fetch for the active partitions and prints the records it returns. It
-// reports done once --max-messages records have been printed.
-func (a *app) fetchOnce(ctx context.Context, c streamqv1.StreamQServiceClient, f consumeFlags,
+// fetchOnce issues one Fetch per leader for the active partitions and prints the records they
+// return. It reports done once --max-messages records have been printed.
+func (a *app) fetchOnce(ctx context.Context, rt *router, f consumeFlags, active []*partitionCursor, printed *int) (bool, error) {
+	byPart := make(map[int32]*partitionCursor, len(active))
+	parts := make([]int32, 0, len(active))
+	for _, pc := range active {
+		byPart[pc.partition] = pc
+		parts = append(parts, pc.partition)
+	}
+	order, groups := rt.group(ctx, parts)
+	for _, c := range order {
+		var group []*partitionCursor
+		for _, p := range groups[c] {
+			group = append(group, byPart[p])
+		}
+		done, err := a.fetchFrom(ctx, c, f, group, printed)
+		if err != nil || done {
+			return done, err
+		}
+	}
+	return false, nil
+}
+
+// fetchFrom issues one Fetch to c for the given partitions and prints the records it returns.
+func (a *app) fetchFrom(ctx context.Context, c streamqv1.StreamQServiceClient, f consumeFlags,
 	active []*partitionCursor, printed *int,
 ) (bool, error) {
 	ft := &streamqv1.FetchTopic{Topic: f.topic}
@@ -237,8 +260,24 @@ func (a *app) printRecord(f consumeFlags, r record.Record) error {
 	return err
 }
 
-// listOffsets resolves the offset for timestamp on each partition.
-func (a *app) listOffsets(ctx context.Context, c streamqv1.StreamQServiceClient, topic string, parts []int32,
+// listOffsets resolves the offset for timestamp on each partition, asking each partition's leader.
+func (a *app) listOffsets(ctx context.Context, rt *router, topic string, parts []int32, timestamp int64) (map[int32]int64, error) {
+	out := make(map[int32]int64, len(parts))
+	order, groups := rt.group(ctx, parts)
+	for _, c := range order {
+		got, err := a.listOffsetsFrom(ctx, c, topic, groups[c], timestamp)
+		if err != nil {
+			return nil, err
+		}
+		for p, off := range got {
+			out[p] = off
+		}
+	}
+	return out, nil
+}
+
+// listOffsetsFrom asks c for the offsets of parts.
+func (a *app) listOffsetsFrom(ctx context.Context, c streamqv1.StreamQServiceClient, topic string, parts []int32,
 	timestamp int64,
 ) (map[int32]int64, error) {
 	lt := &streamqv1.ListOffsetsTopic{Topic: topic}
