@@ -1,0 +1,14 @@
+# Build output and project-local tools
+/bin/
+/.tools/
+
+# Test and profiling artifacts
+*.out
+*.test
+*.prof
+coverage.*
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store

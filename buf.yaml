@@ -1,0 +1,12 @@
+version: v2
+modules:
+  - path: api
+lint:
+  use:
+    - STANDARD
+  except:
+    # Protos live in api/v1/ but use package streamq.v1 (see docs/DECISIONS.md).
+    - PACKAGE_DIRECTORY_MATCH
+breaking:
+  use:
+    - FILE
