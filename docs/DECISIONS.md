@@ -402,6 +402,14 @@ Idempotence is on when `Acks == AcksAll` and `DisableIdempotence` is false, whic
 - **Reordering:** without epoch fencing, a timed-out batch still in flight on the server may land
   after later batches. This is acceptable, because the application was already told it failed.
 - **Throughput:** one batch in flight per partition limits throughput; M10 measures it.
+- **Existing tests edited in M7 (none weakened):**
+  - `pkg/client/fake_test.go`: the fake gained InitProducer and (tp, pid, seq) dedup, and its
+    default Produce moved into `produce()`.
+  - `internal/metadata/state_test.go`: isolation checks were extended to the producer-ID fields.
+  - `raftstore/store_test.go`: the snapshot round trip applies one more command, so the expected
+    index went from 4 to 5.
+  - `pkg/client/admin_test.go`: a pre-existing data race on a call counter was fixed with an
+    atomic.
 
 ## D49. Producer-state eviction (M7)
 
@@ -415,6 +423,15 @@ Idempotence is on when `Acks == AcksAll` and `DisableIdempotence` is false, whic
   - a missing roll snapshot at the log start after retention.
 
   Producers whose batches survive only in deleted segments then get UNKNOWN_PRODUCER_ID.
+- **Expiry uses client timestamps (Kafka parity):** expiry is measured on batch CreateTime. A
+  producer backfilling old timestamps, or with a clock days behind, can expire right after an
+  append. Its next batch then gets UNKNOWN_PRODUCER_ID and the client re-initializes. A clock
+  running ahead keeps the entry until the timestamp passes.
+- **Size limit before dedup:** validation, including `max_message_bytes`, runs before the dedup
+  check (M7 plan R3). If a topic's `max_message_bytes` is lowered between a lost-response attempt
+  and its retry, the retry gets MESSAGE_TOO_LARGE although the batch is in the log. The client
+  then splits it and the halves fail with OUT_OF_ORDER_SEQUENCE. This is reported to the
+  application, and data is never silently lost.
 
 ## D50. Producer-state snapshots (M7)
 

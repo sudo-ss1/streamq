@@ -187,7 +187,7 @@ make chaos      # chaos scripts against the compose cluster
 - [x] M4 Consumer groups (single node)
 - [x] M5 Metadata Raft
 - [x] M6 Replication
-- [ ] M7 Idempotent producer
+- [x] M7 Idempotent producer
 - [ ] M8 Observability & ops
 - [ ] M9 Correctness & chaos
 - [ ] M10 Benchmarks & docs

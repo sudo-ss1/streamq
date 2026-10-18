@@ -400,3 +400,74 @@ the `integration` build tag is linted.
 - No crash-injection tests for truncation; durability ordering is reasoned and reviewed.
 - The leader is stopped gracefully in integration tests; hard kills and partitions come in M9.
 - One RPC per partition per fetch (no per-broker fetch batching, D42).
+
+## M7 — Idempotent producer (2026-10-18)
+
+**Built**
+- API:
+  - public `InitProducer`;
+  - internal `AllocateProducerIDs`;
+  - `AllocateProducerIDsCommand`, which keeps `next_producer_id` and `producer_id_blocks` in FSM
+    state (D51).
+- `internal/controller`: `AllocateProducerIDs` under `allocMu`, with term re-checks (plan R13).
+- `internal/broker`: the `ProducerIDs` allocator, which hands out IDs from 1000-ID blocks reserved
+  from the controller, or from the local store in single-node mode.
+- `internal/producerstate`:
+  - per-partition state keeping the last 5 batches per producer;
+  - `Check` (duplicate / in sequence / OUT_OF_ORDER_SEQUENCE / UNKNOWN_PRODUCER_ID, with
+    wraparound);
+  - CRC32C + JSON snapshots;
+  - atomic `Rebuild`: prunes snapshots, skips corrupt ones, replays the rest, and retries once on
+    a retention race;
+  - expiry (D49).
+- `internal/storage`: `ValidateForAppend` + `AppendValidated` (validate before any producer check),
+  and `AppendInfo.RolledAt`.
+- `internal/partition`:
+  - **Leader:** check → append → update under `prodMu`. A duplicate returns the original offsets
+    and is still subject to the acks=all wait.
+  - **Followers:** update state as they replicate.
+  - **Snapshots:** written on roll, only while the state is valid, and at the LEO on clean close.
+  - **Rebuild:** after truncation, at open, and on retry. Invalid state refuses idempotent appends
+    with NOT_LEADER.
+- `pkg/client`:
+  - idempotence is on by default with acks=all (`DisableIdempotence` turns it off);
+  - the pid is fetched lazily under a leaf `pidMu`, with a generation counter;
+  - the sequence is fixed on first send and kept for retries;
+  - a split rolls back the sequence;
+  - a final failure re-initializes the pid (D48).
+
+**Decisions**: D48–D51.
+
+**Process**
+- plan-reviewer: REVISE, then APPROVE (round 2).
+- Round 1:
+  - code-reviewer: CHANGES REQUIRED (stale-valid state after a partial truncation; a flaky
+    pre-existing admin test race);
+  - failure-reviewer: CHANGES REQUIRED (invalid state persisted on roll).
+- Fixes, then round 2: both APPROVE.
+- Details are in `docs/plans/M7.md`.
+
+**Verification**: `make lint test test-int` green. M7 + M6 integration tests passed 5/5 race runs.
+- `test/integration/idempotent_test.go`:
+  - **Lossy network:** 10% of responses lost after append and 5% of requests lost. All 3000
+    records are acked and stored exactly once in per-key order. Verified to fail with idempotence
+    disabled.
+  - **Leader failover:** a deterministic duplicate probe hits the new leader, which returns the
+    original offset with the LEO unchanged, while a lossy stream crosses the failover.
+  - **Rolling restart:** the last 5 batches are still duplicates.
+  - **SIGKILL:** recovery from a roll snapshot plus replay; duplicates are detected and the
+    sequence continues.
+- Unit tests: producerstate check/snapshot/rebuild tables; partition dedup, validation,
+  truncation, invalid-state and recovery cases; FSM field propagation through the local store,
+  raft FSM and snapshots; allocator concurrency; client lost-ack, re-init, split and
+  stale-generation tests.
+
+**Known limitations / deferred MINORs**
+- One batch in flight per partition (D21/D48). Throughput will be measured in M10.
+- Replay parses whole batches, not just headers. A long rebuild under `prodMu` stalls that
+  partition, notably the first open of a pre-M7 data dir with no snapshots.
+- Expiry uses client batch timestamps (Kafka parity, D49). Lowering `max_message_bytes` between a
+  lost-response attempt and its retry makes the retry fail visibly instead of deduplicating it.
+- No producer epoch fencing: the epoch is always 0, and a re-init gets a new pid instead (D48).
+- No test interleaves two controllers' ID allocations; the term check is unit-tested.
+- Fixed in passing: a data race in `pkg/client/admin_test.go` (an atomic counter).
