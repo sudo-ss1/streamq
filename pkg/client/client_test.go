@@ -42,6 +42,7 @@ func TestIsRetriable(t *testing.T) {
 		{serverError(streamqv1.ErrorCode_ERROR_CODE_UNKNOWN_TOPIC_OR_PARTITION, ""), true, true},
 		{serverError(streamqv1.ErrorCode_ERROR_CODE_NOT_ENOUGH_REPLICAS, ""), true, false},
 		{serverError(streamqv1.ErrorCode_ERROR_CODE_REQUEST_TIMED_OUT, ""), true, false},
+		{serverError(streamqv1.ErrorCode_ERROR_CODE_NOT_CONTROLLER, ""), true, true},
 		{serverError(streamqv1.ErrorCode_ERROR_CODE_MESSAGE_TOO_LARGE, ""), false, false},
 		{serverError(streamqv1.ErrorCode_ERROR_CODE_CORRUPT_MESSAGE, ""), false, false},
 		{serverError(streamqv1.ErrorCode_ERROR_CODE_INVALID_TIMESTAMP, ""), false, false},

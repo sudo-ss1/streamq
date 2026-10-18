@@ -120,7 +120,7 @@ func IsRetriable(err error) bool {
 		return false
 	case errors.Is(err, ErrNotLeader), errors.Is(err, ErrFencedLeaderEpoch),
 		errors.Is(err, ErrUnknownTopicOrPartition), errors.Is(err, ErrNotEnoughReplicas),
-		errors.Is(err, ErrRequestTimedOut):
+		errors.Is(err, ErrRequestTimedOut), errors.Is(err, ErrNotController):
 		return true
 	}
 	return isTransportError(err)
@@ -129,7 +129,7 @@ func IsRetriable(err error) bool {
 // NeedsMetadataRefresh reports whether err suggests the cached leadership is stale.
 func NeedsMetadataRefresh(err error) bool {
 	return errors.Is(err, ErrNotLeader) || errors.Is(err, ErrFencedLeaderEpoch) ||
-		errors.Is(err, ErrUnknownTopicOrPartition) || isTransportError(err)
+		errors.Is(err, ErrUnknownTopicOrPartition) || errors.Is(err, ErrNotController) || isTransportError(err)
 }
 
 // isTransportError reports a gRPC failure that is not a server ErrorCode and may be transient.

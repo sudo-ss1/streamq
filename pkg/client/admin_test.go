@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
@@ -118,7 +119,6 @@ func TestAdminCreateTopic(t *testing.T) {
 		{streamqv1.ErrorCode_ERROR_CODE_INVALID_REPLICATION_FACTOR, ErrInvalidReplicationFactor},
 		{streamqv1.ErrorCode_ERROR_CODE_INVALID_CONFIG, ErrInvalidConfig},
 		{streamqv1.ErrorCode_ERROR_CODE_INVALID_TOPIC, ErrInvalidTopic},
-		{streamqv1.ErrorCode_ERROR_CODE_NOT_CONTROLLER, ErrNotController},
 	}
 	for _, tt := range tests {
 		t.Run(tt.code.String(), func(t *testing.T) {
@@ -132,6 +132,22 @@ func TestAdminCreateTopic(t *testing.T) {
 			require.ErrorContains(t, err, "detail")
 		})
 	}
+
+	// NOT_CONTROLLER (no controller reachable during forwarding) is retried until ctx ends.
+	af.amu.Lock()
+	calls := 0
+	af.onCreate = func(context.Context, *streamqv1.CreateTopicRequest) (*streamqv1.CreateTopicResponse, error) {
+		calls++
+		return &streamqv1.CreateTopicResponse{ErrorCode: streamqv1.ErrorCode_ERROR_CODE_NOT_CONTROLLER, ErrorMessage: "detail"}, nil
+	}
+	af.amu.Unlock()
+	short, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
+	defer cancel()
+	err = admin.CreateTopic(short, "x", 1, 1, nil)
+	require.Error(t, err, "fails once ctx ends (with NOT_CONTROLLER or the deadline, whichever comes last)")
+	af.amu.Lock()
+	require.Greater(t, calls, 1, "NOT_CONTROLLER is retried")
+	af.amu.Unlock()
 }
 
 func TestAdminCreateTopicAfterTransportError(t *testing.T) {

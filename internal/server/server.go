@@ -113,7 +113,8 @@ func errMessage(err error) string {
 // CreateTopic implements StreamQServiceServer.
 func (s *Server) CreateTopic(ctx context.Context, req *streamqv1.CreateTopicRequest) (*streamqv1.CreateTopicResponse, error) {
 	fail := func(err error) (*streamqv1.CreateTopicResponse, error) {
-		return &streamqv1.CreateTopicResponse{ErrorCode: s.errorCode(err), ErrorMessage: errMessage(err)}, nil
+		return &streamqv1.CreateTopicResponse{ErrorCode: s.errorCode(err), ErrorMessage: errMessage(err),
+			ControllerId: s.store.Snapshot().ControllerID}, nil
 	}
 	if err := metadata.ValidateTopicName(req.GetName()); err != nil {
 		return fail(err)
@@ -135,8 +136,9 @@ func (s *Server) CreateTopic(ctx context.Context, req *streamqv1.CreateTopicRequ
 	if _, exists := snap.Topic(req.GetName()); exists {
 		return fail(fmt.Errorf("%w: %s", metadata.ErrTopicExists, req.GetName()))
 	}
-	ids := make([]int32, 0, len(snap.Brokers))
-	for _, br := range snap.Brokers {
+	live := snap.LiveBrokers() // RF counts unfenced brokers (D36)
+	ids := make([]int32, 0, len(live))
+	for _, br := range live {
 		ids = append(ids, br.ID)
 	}
 	assignment, err := metadata.AssignReplicas(req.GetName(), ids, n, rf)
@@ -159,7 +161,10 @@ func (s *Server) CreateTopic(ctx context.Context, req *streamqv1.CreateTopicRequ
 		}},
 	}
 	if err := s.store.Propose(ctx, cmd); err != nil {
-		return fail(err)
+		// A forwarding retry may have applied our own command already (same topic id, D33).
+		if t, ok := s.store.Snapshot().Topic(req.GetName()); !ok || !errors.Is(err, metadata.ErrTopicExists) || t.ID != topicID {
+			return fail(err)
+		}
 	}
 	if err := s.broker.WaitTopicReady(ctx, req.GetName(), topicID); err != nil {
 		return fail(err)
@@ -170,7 +175,8 @@ func (s *Server) CreateTopic(ctx context.Context, req *streamqv1.CreateTopicRequ
 // DeleteTopic implements StreamQServiceServer.
 func (s *Server) DeleteTopic(ctx context.Context, req *streamqv1.DeleteTopicRequest) (*streamqv1.DeleteTopicResponse, error) {
 	fail := func(err error) (*streamqv1.DeleteTopicResponse, error) {
-		return &streamqv1.DeleteTopicResponse{ErrorCode: s.errorCode(err), ErrorMessage: errMessage(err)}, nil
+		return &streamqv1.DeleteTopicResponse{ErrorCode: s.errorCode(err), ErrorMessage: errMessage(err),
+			ControllerId: s.store.Snapshot().ControllerID}, nil
 	}
 	t, ok := s.store.Snapshot().Topic(req.GetName())
 	if !ok {
@@ -182,7 +188,10 @@ func (s *Server) DeleteTopic(ctx context.Context, req *streamqv1.DeleteTopicRequ
 		Cmd:         &streamqv1.MetadataCommand_DeleteTopic{DeleteTopic: &streamqv1.DeleteTopicCommand{Name: req.GetName()}},
 	}
 	if err := s.store.Propose(ctx, cmd); err != nil {
-		return fail(err)
+		// A forwarding retry may have deleted it already (D33).
+		if now, ok := s.store.Snapshot().Topic(req.GetName()); !errors.Is(err, metadata.ErrUnknownTopic) || (ok && now.ID == t.ID) {
+			return fail(err)
+		}
 	}
 	if err := s.broker.WaitTopicDeleted(ctx, req.GetName(), t.ID); err != nil {
 		return fail(err)
@@ -205,7 +214,7 @@ func (s *Server) ListTopics(_ context.Context, _ *streamqv1.ListTopicsRequest) (
 func (s *Server) Metadata(_ context.Context, req *streamqv1.MetadataRequest) (*streamqv1.MetadataResponse, error) {
 	snap := s.store.Snapshot()
 	resp := &streamqv1.MetadataResponse{ControllerId: snap.ControllerID}
-	for _, br := range snap.Brokers {
+	for _, br := range snap.LiveBrokers() {
 		resp.Brokers = append(resp.Brokers, &streamqv1.Broker{Id: br.ID, Host: br.Host, Port: br.Port})
 	}
 	names := req.GetTopics()

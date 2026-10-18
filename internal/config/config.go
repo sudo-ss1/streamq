@@ -58,8 +58,12 @@ type Config struct {
 	// GroupInitialRebalanceDelayMs delays the first rebalance of an empty group so consumers
 	// starting together join one generation (Kafka group.initial.rebalance.delay.ms; D25).
 	GroupInitialRebalanceDelayMs int64 `yaml:"group_initial_rebalance_delay_ms"`
-	FileDeleteDelayMs            int64 `yaml:"file_delete_delay_ms"`
-	ProducerIDExpirationMs       int64 `yaml:"producer_id_expiration_ms"`
+	// Raft timing (cluster mode, D32).
+	RaftHeartbeatTimeoutMs int64 `yaml:"raft_heartbeat_timeout_ms"`
+	RaftElectionTimeoutMs  int64 `yaml:"raft_election_timeout_ms"`
+	RaftSnapshotThreshold  int64 `yaml:"raft_snapshot_threshold"`
+	FileDeleteDelayMs      int64 `yaml:"file_delete_delay_ms"`
+	ProducerIDExpirationMs int64 `yaml:"producer_id_expiration_ms"`
 }
 
 // Default returns the SPEC §10 defaults.
@@ -91,6 +95,9 @@ func Default() Config {
 		GroupSessionTimeoutMs:        10_000,
 		GroupRebalanceTimeoutMs:      30_000,
 		GroupInitialRebalanceDelayMs: 3_000,
+		RaftHeartbeatTimeoutMs:       1_000,
+		RaftElectionTimeoutMs:        1_000,
+		RaftSnapshotThreshold:        8_192,
 		FileDeleteDelayMs:            60_000,
 		ProducerIDExpirationMs:       604_800_000,
 	}

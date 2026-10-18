@@ -461,3 +461,53 @@ func TestFetchWokenByTopicDeletion(t *testing.T) {
 	require.NoError(t, e.store.Propose(ctx, deleteCmd("t")))
 	require.ErrorIs(t, (<-done)[0].Err, ErrUnknownPartition)
 }
+
+func TestResyncFromRestoredSnapshot(t *testing.T) {
+	e := openEnv(t, t.TempDir())
+	ctx := context.Background()
+	e.createTopic("keep", "id-keep", 1)
+	e.createTopic("gone", "id-gone", 1)
+	e.createTopic("recreated", "id-old", 1)
+	e.produce("keep", 0, "a")
+
+	// A restored snapshot: "gone" deleted, "recreated" has a new id, "new" appeared, and the
+	// leadership of keep/0 moved to another broker at a higher epoch.
+	snap := e.store.Snapshot()
+	keep := snap.Topics["keep"]
+	keep.Partitions[0].Leader = 2
+	keep.Partitions[0].LeaderEpoch = 4
+	keep.Partitions[0].PartitionEpoch = 4
+	snap.Topics["keep"] = keep
+	delete(snap.Topics, "gone")
+	snap.Topics["recreated"] = metadata.Topic{Name: "recreated", ID: "id-new", Partitions: []metadata.PartitionState{
+		{Partition: 0, Replicas: []int32{1}, Leader: 1, ISR: []int32{1}},
+	}}
+	snap.Topics["new"] = metadata.Topic{Name: "new", ID: "id-n", Partitions: []metadata.PartitionState{
+		{Partition: 0, Replicas: []int32{1}, Leader: 1, ISR: []int32{1}},
+	}}
+	snap.Index = 500
+	e.b.onChange(ctx, metadata.Change{Kind: metadata.Restored, Index: 500, Snapshot: &snap})
+
+	_, ok := e.b.Partition(tp("gone", 0))
+	require.False(t, ok)
+	p, ok := e.b.Partition(tp("recreated", 0))
+	require.True(t, ok)
+	require.Equal(t, "id-new", p.TopicID())
+	require.Equal(t, int64(0), p.Log().LogEndOffset())
+	_, ok = e.b.Partition(tp("new", 0))
+	require.True(t, ok)
+	k, _ := e.b.Partition(tp("keep", 0))
+	leader, epoch := k.Leader()
+	require.Equal(t, int32(2), leader)
+	require.Equal(t, int32(4), epoch)
+	require.Equal(t, int64(1), k.Log().LogEndOffset(), "an existing partition keeps its data")
+	require.Equal(t, uint64(500), e.b.ProcessedIndex())
+
+	// An older PartitionChanged delivered after the restore is ignored (monotonic, plan R6).
+	e.b.onChange(ctx, metadata.Change{Kind: metadata.PartitionChanged, Topic: "keep", TopicID: "id-keep", Index: 400,
+		Partitions: []metadata.PartitionState{{Partition: 0, Replicas: []int32{1}, Leader: 1, LeaderEpoch: 1, PartitionEpoch: 1, ISR: []int32{1}}}})
+	leader, epoch = k.Leader()
+	require.Equal(t, int32(2), leader)
+	require.Equal(t, int32(4), epoch)
+	require.Equal(t, uint64(500), e.b.ProcessedIndex(), "the processed index never goes back")
+}

@@ -28,8 +28,9 @@ type PartitionDescription struct {
 
 // Admin manages topics. It is safe for concurrent use.
 //
-// Every call is bounded by the Client's RequestTimeout (or ctx, if earlier). Transport errors
-// are retried with backoff, on any reachable broker, within that bound.
+// Every call is bounded by the Client's RequestTimeout (or ctx, if earlier). Transport errors and
+// NOT_CONTROLLER (no controller reachable while the broker forwarded the request) are retried
+// with backoff, on any reachable broker, within that bound.
 type Admin struct {
 	client *Client
 }
@@ -46,12 +47,14 @@ func (a *Admin) call(ctx context.Context, fn func(context.Context, streamqv1.Str
 	for attempt := 0; ; attempt++ {
 		err = a.client.callAny(ctx, func(ctx context.Context, api streamqv1.StreamQServiceClient) error {
 			ferr := fn(ctx, api)
-			if isTransportError(ferr) {
+			if isTransportError(ferr) || errors.Is(ferr, ErrNotController) {
+				// Unknown outcome: the mutation may have been applied (DECISIONS D33).
 				sawTransport = true
 			}
 			return ferr
 		})
-		if err == nil || !isTransportError(err) || ctx.Err() != nil {
+		retriable := isTransportError(err) || errors.Is(err, ErrNotController)
+		if err == nil || !retriable || ctx.Err() != nil {
 			return sawTransport, err
 		}
 		if !sleep(ctx, a.client.backoff.delay(attempt), nil) {

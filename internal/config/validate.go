@@ -75,6 +75,13 @@ func (c Config) Validate() error {
 	if c.FileDeleteDelayMs < 0 {
 		add("file_delete_delay_ms %d must be >= 0", c.FileDeleteDelayMs)
 	}
+	if c.RaftHeartbeatTimeoutMs <= 0 || c.RaftElectionTimeoutMs < c.RaftHeartbeatTimeoutMs {
+		add("raft_heartbeat_timeout_ms %d must be > 0 and <= raft_election_timeout_ms %d",
+			c.RaftHeartbeatTimeoutMs, c.RaftElectionTimeoutMs)
+	}
+	if c.RaftSnapshotThreshold <= 0 {
+		add("raft_snapshot_threshold %d must be > 0", c.RaftSnapshotThreshold)
+	}
 	if c.GroupInitialRebalanceDelayMs < 0 || c.GroupInitialRebalanceDelayMs > c.GroupRebalanceTimeoutMs {
 		add("group_initial_rebalance_delay_ms %d must be in [0, group_rebalance_timeout_ms]", c.GroupInitialRebalanceDelayMs)
 	}
