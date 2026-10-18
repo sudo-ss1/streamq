@@ -29,5 +29,8 @@
 
 **Known limitations**
 - `make gen` is a no-op until M2 adds `.proto` files (buf fails on an empty module).
-- The CI workflow has not run on GitHub yet (nothing has been pushed).
+- The CI workflow has not run on GitHub yet (nothing has been pushed); the action tags are unverified.
+- `make test-int` is a no-op until `test/integration/` exists (M2).
+- Process switched to the autonomous plan → plan-reviewer → implement → code/failure-reviewer loop
+  (CLAUDE.md). M0 plan approved by the user directly; see `docs/plans/M0.md`.
 - No goleak `TestMain` yet; it arrives with the first package that has tests (M1).
