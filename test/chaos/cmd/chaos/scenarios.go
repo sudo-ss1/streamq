@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"math/rand/v2"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -35,7 +37,7 @@ func scenarios() []scenario {
 	return []scenario{
 		{
 			name:   "kill9-random",
-			faults: "4 rounds: after 10–20 s, SIGKILL a random broker (docker compose kill -s SIGKILL), start it again after 5–10 s",
+			faults: "4 rounds: after 10–20 s, SIGKILL a random broker other than the previous round's (docker compose kill -s SIGKILL), start it again after 5–10 s",
 			run:    runKill9Random,
 		},
 		{
@@ -151,11 +153,18 @@ func (s *scenarioRun) killAndRestart(ctx context.Context, victim int32, why stri
 }
 
 func runKill9Random(ctx context.Context, s *scenarioRun) error {
+	prev := int32(0)
 	for round := 1; round <= 4; round++ {
 		if err := s.sleepRange(ctx, 10*time.Second, 20*time.Second); err != nil {
 			return err
 		}
+		// Uniform over the brokers other than the previous victim, so the rounds spread over
+		// leaders and followers instead of possibly hitting one broker four times.
 		victim := int32(1 + s.rng.IntN(3))
+		for victim == prev {
+			victim = int32(1 + s.rng.IntN(3))
+		}
+		prev = victim
 		if err := s.killAndRestart(ctx, victim, fmt.Sprintf("round %d: random broker", round)); err != nil {
 			return err
 		}
@@ -375,6 +384,7 @@ func runFullDisk(ctx context.Context, s *scenarioRun) error {
 		return nil
 	}
 	s.event("fenced", "broker3", "broker3 not live and out of every ISR")
+	s.saveBroker3Logs(ctx)
 	if _, err := s.r.compose.run(ctx, true, "rm", "-f", "-s", "broker3"); err != nil {
 		return err
 	}
@@ -386,6 +396,45 @@ func runFullDisk(ctx context.Context, s *scenarioRun) error {
 	}
 	s.event("replace disk", "broker3", "container removed, log volume recreated empty, broker3 started")
 	return nil
+}
+
+// saveBroker3Logs keeps the full-disk broker3 container's logs before the container is replaced
+// (the scenario's final log capture only sees the new container) and records how its log
+// failures surfaced.
+func (s *scenarioRun) saveBroker3Logs(ctx context.Context) {
+	out, err := s.r.compose.run(ctx, true, "logs", "--no-color", "--timestamps", "broker3")
+	if err != nil {
+		s.observe("could not capture broker3's logs before the disk replacement: %v", err)
+		return
+	}
+	name := fmt.Sprintf("%s-%s-broker3-before-replacement.log", s.r.runID, s.sc.name)
+	if err := os.WriteFile(filepath.Join(s.r.opts.out, name), []byte(out), 0o600); err != nil {
+		s.observe("could not save broker3's logs: %v", err)
+		return
+	}
+	var enospc, errs int
+	var first string
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, `"level":"ERROR"`) || strings.Contains(line, `"level":"WARN"`) {
+			errs++
+		}
+		if strings.Contains(strings.ToLower(line), "no space left") {
+			enospc++
+			if first == "" {
+				first = line
+			}
+		}
+	}
+	s.observe("broker3 log before the replacement (%s): %d WARN/ERROR lines, %d mentioning ENOSPC; first: %s", name, errs, enospc,
+		truncate(first, 400))
+}
+
+// truncate shortens s to at most n bytes.
+func truncate(s string, n int) string {
+	if len(s) > n {
+		return s[:n] + "..."
+	}
+	return s
 }
 
 // waitFenced waits until broker3 is not live and in no ISR of lin or bulk, and every partition
