@@ -207,3 +207,15 @@ func syncCheckpointDir(dir string) error {
 	}
 	return nil
 }
+
+// WriteFileAtomic durably replaces path with data (tmp file, fsync, rename, dir fsync). Other
+// packages use it for their own per-partition files (producer-state snapshots).
+func WriteFileAtomic(ctx context.Context, path string, data []byte) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return writeCheckpointFile(path, data)
+}
+
+// SyncDir fsyncs dir so creates, renames and unlinks inside it are durable.
+func SyncDir(dir string) error { return syncCheckpointDir(dir) }
