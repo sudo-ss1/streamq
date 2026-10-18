@@ -67,4 +67,13 @@ service_ms{p50,p99,p999,max}, behind_schedule), `end_to_end` (when `-consume` is
 latency_ms), and `cluster_checks` (leader_epoch_changes, partition_epoch_changes), and `rate_model`
 ("shared-token-bucket").
 
+Additional fields, added during implementation and accepted at integration:
+- top level: `invalid_reasons`;
+- `produce`: `sent`, `acked_in_window`, `timeouts`, `latency_kind`, `window_s`, `drain_s`;
+- `cluster_checks`: `source` (`metadata-store` or `admin-describe`), `isr_below_rf`, `problems`;
+- `config`: `producer_config`.
+
+In-process single-node runs check stability through `admin-describe`. `internal/node` exposes no
+metadata store in single-node mode, and with RF 1 on one broker the leader and ISR cannot change.
+
 `bench/USAGE.md` is frozen: implementers must not edit it (M10 plan R15).
