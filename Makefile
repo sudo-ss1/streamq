@@ -57,7 +57,7 @@ test-int:
 ifeq ($(wildcard test/integration),)
 	@echo "test-int: no integration tests until M2; skipping"
 else
-	go test -race -count=1 -tags=integration ./test/integration/...
+	go test -race -count=1 -tags=integration ./test/integration/... ./test/linearizability/...
 endif
 
 lint: $(GOLANGCI_STAMP)
@@ -78,8 +78,10 @@ cluster-up:
 cluster-down:
 	docker compose -f deploy/docker-compose.yml down -v
 
-chaos:
-	@echo "chaos: not implemented until M9"
+# Chaos scenarios against a dedicated compose project (M9 plan R14); results in test/chaos/results.
+chaos: build
+	go run ./test/chaos/cmd/chaos -compose deploy/docker-compose.yml -override deploy/docker-compose.chaos.yml \
+		-project streamq-chaos -ctl ./bin/streamqctl -out test/chaos/results
 
 clean:
 	rm -rf bin/

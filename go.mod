@@ -3,6 +3,7 @@ module github.com/sudo-ss1/streamq
 go 1.26.0
 
 require (
+	github.com/anishathalye/porcupine v1.3.1
 	github.com/hashicorp/go-hclog v1.6.3
 	github.com/hashicorp/raft v1.8.0
 	github.com/hashicorp/raft-boltdb/v2 v2.4.2
