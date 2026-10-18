@@ -374,6 +374,15 @@ min(LEO, leader end). If the leader knows only an older epoch E', it also trunca
 of E' and repeats. Without epoch information on either side it truncates to its HW. Below the
 leader's log start it restarts empty at that offset.
 
+Refinements from the M6 review:
+- If the follower also has E', both logs agree up to min(LEO, leader end, own end of E'). It
+  truncates there, drops any later (possibly empty) local epochs, and stops.
+- It iterates only when it lacks E'. That intermediate step also clamps to the leader's end. This
+  truncates at most what is already divergent, so it is slightly more than Kafka but safe.
+- A stale empty epoch can never block progress: epoch entries at or after the new LEO are always
+  dropped, and `Assign` replaces any entry at the same start offset.
+- Truncation writes the recovery-point and HW checkpoints synchronously before the next append.
+
 ## D47. `INVALID_ISR` internal error code (M6)
 
 Code 23, internal API only. AlterISR content rejections (members that are not replicas, the leader

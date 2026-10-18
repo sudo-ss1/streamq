@@ -313,13 +313,90 @@ the `integration` build tag is linted.
   - FSM snapshot round trip.
 
 **Known limitations**
-- No data replication yet (M6). On RF>1 partitions the HW does not advance with ISR > {self}
-  (D15), and acks=all on RF>1 is accepted after the leader append only. RF>1 data-plane behaviour
-  is untested in M5 (plan R19).
+- ~~No data replication yet~~: resolved in M6.
 - The broker-side liveness loop uses `time.Ticker`, not an injected clock (integration-tested
   only; the override is recorded in `docs/plans/M5.md`).
-- Interim: acks=all on a partition whose ISR has followers is refused with NOT_ENOUGH_REPLICAS
-  (retriable, so a default acks=all producer on an RF>1 topic retries until its delivery timeout).
-  M6 replaces this with replication and the HW purgatory.
+- ~~Interim acks=all guard on RF>1~~: replaced in M6 by replication and the HW purgatory.
 - The M6 plan draft landed inside the M5 fix commit `bf279d0` (no history rewrite; noted).
 - The notifier is duplicated in `local` and `raftstore` (same design).
+
+## M6 — Replication (2026-10-18)
+
+**Built**
+- `internal/storage`:
+  - follower append (`AppendAsFollower`, `ErrOffsetMismatch`);
+  - batch-wise `TruncateTo`, which deletes segments newest-first with a dir fsync after each, then
+    cuts the containing segment and rescans it;
+  - `TruncateFullyAndStartAt`;
+  - a truncation generation, so a concurrent flush never raises the recovery point past a
+    truncation;
+  - retention is bounded by a per-partition limit (the HW).
+- `internal/partition`:
+  - a leader-epoch cache (`leader-epoch-checkpoint`);
+  - leader side:
+    - the HW is the minimum LEO over the **maximal ISR**, committed ∪ pending (KIP-497);
+    - min.insync is checked against the committed ISR;
+    - Kafka's caught-up rule;
+    - expand needs LEO ≥ HW, LEO ≥ the start of the current epoch, and an unfenced broker;
+    - shrink after `replica_lag_max_ms`;
+    - one AlterISR in flight, with backoff; FENCED keeps the pending ISR until metadata arrives;
+    - the epoch-tied acks=all purgatory (`WaitForCommit`): NOT_LEADER on leadership change,
+      NOT_ENOUGH_REPLICAS after the append, REQUEST_TIMED_OUT;
+    - replica fetch long-poll up to the LEO; `OffsetForLeaderEpoch`;
+  - follower side: epoch-checked append, HW = min(leader HW, LEO), truncation lowers the HW;
+  - the HW checkpoint is loaded on the first transition only.
+- `internal/broker`:
+  - transitions are broker-driven: Classify → stop the fetcher → become leader/follower → start
+    the fetcher;
+  - one fetcher goroutine per followed partition. It runs the KIP-279 truncation loop and makes the
+    recovery-point and HW checkpoints durable before appending. It backs off on errors and never
+    exits on its own;
+  - the ISR loop (shrink, AlterISR sender, epoch-cache log-start sync);
+  - `Produce` waits for acks=all (`timeout_ms`, default 30 s, capped below the RPC deadline);
+  - leader-side `ReplicaFetch` with the broker-epoch check, and `OffsetForLeaderEpoch`;
+  - fetchers are stopped before topic delete or Close;
+  - `Partition.Remove` wakes waiters on delete and shutdown.
+- `internal/server`:
+  - internal handlers for ReplicaFetch, OffsetForLeaderEpoch and AlterISR;
+  - `ReplicaClient`, which sends follower RPCs and AlterISR to the controller;
+  - error codes for FENCED (metadata), INVALID_ISR, STALE_BROKER_EPOCH and REQUEST_TIMED_OUT.
+- `internal/controller`: `AlterISR`, applied term-stamped.
+- `internal/node`: wires the replica client, passes the broker epoch (R18), and attaches the broker
+  to the internal API.
+
+**Decisions**: D39–D47 (D46 refined after review).
+
+**Process**
+- plan-reviewer: REVISE ×2, then APPROVE.
+- Round 1:
+  - code-reviewer: CHANGES REQUIRED (BLOCKER: KIP-279 stall on an empty latest epoch).
+  - failure-reviewer: APPROVE.
+- Fixes, then round 2: both APPROVE.
+- Details are in `docs/plans/M6.md`.
+
+**Verification**: `make lint test test-int` green.
+- `test/integration/replication_test.go` covers:
+  - no acknowledged loss on leader kill: 550 acks, 150 of them after failover;
+  - the old leader rejoining and all three replicas becoming byte-identical;
+  - a restarted follower rejoining the ISR;
+  - NOT_ENOUGH_REPLICAS with RF 3 / min.insync 3 when one follower is down, with nothing
+    appended.
+  - Stable over 4 race runs, together with `TestClusterMetadataRaft`.
+- Unit tests:
+  - divergent-follower truncation (follower epochs [(0,0),(2,10)] vs leader [(0,0),(1,8),(3,20)]);
+  - an empty latest epoch;
+  - NOT_LEADER retries;
+  - a follower below the leader's log start;
+  - goleak for delete-while-following and close-while-following;
+  - maximal-ISR HW, AlterISR result handling, the caught-up rule and shrink, purgatory outcomes.
+
+**Known limitations / deferred MINORs**
+- `store.Snapshot()` (a full metadata clone) is called per replica fetch and per outgoing replica
+  RPC. Needs a cheap broker lookup; M10 benchmarks will show the cost.
+- A `BecomeLeader` disk failure (epoch checkpoint) leaves the partition offline until the next
+  metadata change. Kafka would mark the log offline.
+- The ISR loop ticks on a real `time.Ticker`; shrink timing uses the injected clock.
+- The R2 purgatory test passes on the leadership check alone.
+- No crash-injection tests for truncation; durability ordering is reasoned and reviewed.
+- The leader is stopped gracefully in integration tests; hard kills and partitions come in M9.
+- One RPC per partition per fetch (no per-broker fetch batching, D42).
