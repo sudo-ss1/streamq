@@ -68,7 +68,7 @@ func TestPersistedJSONKeys(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(dir, FileName))
 	require.NoError(t, err)
 	var raw struct {
-		Topics map[string]map[string]json.RawMessage `json:"topics"`
+		Topics map[string]map[string]json.RawMessage  `json:"topics"`
 		Groups map[string]map[string]map[string]int64 `json:"groups"`
 	}
 	require.NoError(t, json.Unmarshal(data, &raw))

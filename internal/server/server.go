@@ -17,6 +17,7 @@ import (
 	streamqv1 "github.com/sudo-ss1/streamq/gen/v1"
 	"github.com/sudo-ss1/streamq/internal/broker"
 	"github.com/sudo-ss1/streamq/internal/config"
+	"github.com/sudo-ss1/streamq/internal/group"
 	"github.com/sudo-ss1/streamq/internal/metadata"
 	"github.com/sudo-ss1/streamq/internal/partition"
 	"github.com/sudo-ss1/streamq/internal/storage"
@@ -33,6 +34,7 @@ type Server struct {
 	streamqv1.UnimplementedStreamQServiceServer
 
 	broker   *broker.Broker
+	groups   *group.Coordinator
 	store    metadata.Store
 	defaults config.TopicDefaults
 	clock    broker.Clock
@@ -40,8 +42,10 @@ type Server struct {
 }
 
 // New returns a Server.
-func New(b *broker.Broker, store metadata.Store, defaults config.TopicDefaults, clock broker.Clock, logger *slog.Logger) *Server {
-	return &Server{broker: b, store: store, defaults: defaults, clock: clock, logger: logger}
+func New(b *broker.Broker, groups *group.Coordinator, store metadata.Store, defaults config.TopicDefaults,
+	clock broker.Clock, logger *slog.Logger,
+) *Server {
+	return &Server{broker: b, groups: groups, store: store, defaults: defaults, clock: clock, logger: logger}
 }
 
 // errorCode maps an error to its API ErrorCode. Unexpected errors map to UNKNOWN and are logged.
@@ -84,6 +88,14 @@ func errorCode(err error) streamqv1.ErrorCode {
 		return streamqv1.ErrorCode_ERROR_CODE_INVALID_TIMESTAMP
 	case errors.Is(err, metadata.ErrNotController):
 		return streamqv1.ErrorCode_ERROR_CODE_NOT_CONTROLLER
+	case errors.Is(err, group.ErrUnknownMemberID):
+		return streamqv1.ErrorCode_ERROR_CODE_UNKNOWN_MEMBER_ID
+	case errors.Is(err, group.ErrIllegalGeneration):
+		return streamqv1.ErrorCode_ERROR_CODE_ILLEGAL_GENERATION
+	case errors.Is(err, group.ErrRebalanceInProgress):
+		return streamqv1.ErrorCode_ERROR_CODE_REBALANCE_IN_PROGRESS
+	case errors.Is(err, group.ErrNotCoordinator), errors.Is(err, group.ErrCoordinatorClosed):
+		return streamqv1.ErrorCode_ERROR_CODE_NOT_COORDINATOR
 	case errors.Is(err, context.DeadlineExceeded):
 		return streamqv1.ErrorCode_ERROR_CODE_REQUEST_TIMED_OUT
 	default:

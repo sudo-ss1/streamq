@@ -17,6 +17,7 @@ import (
 	streamqv1 "github.com/sudo-ss1/streamq/gen/v1"
 	"github.com/sudo-ss1/streamq/internal/broker"
 	"github.com/sudo-ss1/streamq/internal/config"
+	"github.com/sudo-ss1/streamq/internal/group"
 	"github.com/sudo-ss1/streamq/internal/metadata"
 	"github.com/sudo-ss1/streamq/internal/metadata/local"
 	"github.com/sudo-ss1/streamq/internal/server"
@@ -29,6 +30,7 @@ const gracefulStopTimeout = 10 * time.Second
 type Node struct {
 	store  *local.Store
 	broker *broker.Broker
+	groups *group.Coordinator
 	grpc   *grpc.Server
 	lis    net.Listener
 	logger *slog.Logger
@@ -65,9 +67,15 @@ func Start(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Node, 
 	if err != nil {
 		return nil, errors.Join(fmt.Errorf("open broker: %w", err), store.Close(), lis.Close())
 	}
+	groups := group.New(group.Config{
+		BrokerID:                cfg.BrokerID,
+		MaxSessionTimeout:       time.Duration(cfg.GroupSessionTimeoutMs) * time.Millisecond,
+		DefaultRebalanceTimeout: time.Duration(cfg.GroupRebalanceTimeoutMs) * time.Millisecond,
+		InitialRebalanceDelay:   time.Duration(cfg.GroupInitialRebalanceDelayMs) * time.Millisecond,
+	}, store, group.SystemClock{}, logger)
 	gs := grpc.NewServer(grpc.MaxRecvMsgSize(server.MaxMessageSize), grpc.MaxSendMsgSize(server.MaxMessageSize))
-	streamqv1.RegisterStreamQServiceServer(gs, server.New(b, store, cfg.TopicDefaults, broker.SystemClock{}, logger))
-	n := &Node{store: store, broker: b, grpc: gs, lis: lis, logger: logger, serveErr: make(chan error, 1)}
+	streamqv1.RegisterStreamQServiceServer(gs, server.New(b, groups, store, cfg.TopicDefaults, broker.SystemClock{}, logger))
+	n := &Node{store: store, broker: b, groups: groups, grpc: gs, lis: lis, logger: logger, serveErr: make(chan error, 1)}
 	go func() { n.serveErr <- gs.Serve(lis) }()
 	logger.Info("serving", slog.String("addr", lis.Addr().String()))
 	return n, nil
@@ -90,8 +98,9 @@ func (n *Node) Broker() *broker.Broker { return n.broker }
 // storage), then close the metadata store. Idempotent.
 func (n *Node) Close(ctx context.Context) error {
 	n.closeOnce.Do(func() {
-		// Wake idle long-polls first so GracefulStop can drain promptly (NFR4).
+		// Wake idle long-polls and parked joins first so GracefulStop can drain promptly (NFR4).
 		n.broker.BeginShutdown()
+		n.groups.BeginShutdown()
 		stopped := make(chan struct{})
 		go func() {
 			n.grpc.GracefulStop()
@@ -111,6 +120,7 @@ func (n *Node) Close(ctx context.Context) error {
 		if errors.Is(serveErr, grpc.ErrServerStopped) {
 			serveErr = nil
 		}
+		n.groups.Close()
 		n.closeErr = errors.Join(serveErr, n.broker.Close(ctx), n.store.Close())
 	})
 	return n.closeErr

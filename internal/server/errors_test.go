@@ -11,6 +11,7 @@ import (
 	streamqv1 "github.com/sudo-ss1/streamq/gen/v1"
 	"github.com/sudo-ss1/streamq/internal/broker"
 	"github.com/sudo-ss1/streamq/internal/config"
+	"github.com/sudo-ss1/streamq/internal/group"
 	"github.com/sudo-ss1/streamq/internal/metadata"
 	"github.com/sudo-ss1/streamq/internal/partition"
 	"github.com/sudo-ss1/streamq/internal/storage"
@@ -38,6 +39,11 @@ func TestErrorCode(t *testing.T) {
 		{storage.ErrInvalidTimestamp, streamqv1.ErrorCode_ERROR_CODE_INVALID_TIMESTAMP},
 		{metadata.ErrNotController, streamqv1.ErrorCode_ERROR_CODE_NOT_CONTROLLER},
 		{context.DeadlineExceeded, streamqv1.ErrorCode_ERROR_CODE_REQUEST_TIMED_OUT},
+		{group.ErrUnknownMemberID, streamqv1.ErrorCode_ERROR_CODE_UNKNOWN_MEMBER_ID},
+		{group.ErrIllegalGeneration, streamqv1.ErrorCode_ERROR_CODE_ILLEGAL_GENERATION},
+		{group.ErrRebalanceInProgress, streamqv1.ErrorCode_ERROR_CODE_REBALANCE_IN_PROGRESS},
+		{group.ErrNotCoordinator, streamqv1.ErrorCode_ERROR_CODE_NOT_COORDINATOR},
+		{group.ErrCoordinatorClosed, streamqv1.ErrorCode_ERROR_CODE_NOT_COORDINATOR},
 		{storage.ErrLogFailed, streamqv1.ErrorCode_ERROR_CODE_UNKNOWN},
 		{context.Canceled, streamqv1.ErrorCode_ERROR_CODE_UNKNOWN},
 		{errors.New("boom"), streamqv1.ErrorCode_ERROR_CODE_UNKNOWN},
