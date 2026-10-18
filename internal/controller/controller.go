@@ -303,3 +303,31 @@ func (c *Controller) Heartbeat(ctx context.Context, brokerID int32, brokerEpoch 
 	c.logger.Info("broker unfenced", slog.Int("unfenced_broker", int(brokerID)))
 	return false, nil
 }
+
+// AlterISRRequest is a partition leader's ISR change (SPEC §4.3).
+type AlterISRRequest struct {
+	Topic          string
+	Partition      int32
+	LeaderEpoch    int32
+	PartitionEpoch int32
+	NewISR         []int32
+}
+
+// AlterISR applies an ISR change, stamped with the controller's term. The FSM checks the epochs
+// (metadata.ErrFencedLeaderEpoch) and the new ISR's content (metadata.ErrInvalidISR).
+func (c *Controller) AlterISR(ctx context.Context, req AlterISRRequest) error {
+	term, err := c.activeTerm()
+	if err != nil {
+		return err
+	}
+	cmd := &streamqv1.MetadataCommand{Version: metadata.CommandVersion, TimestampMs: c.clock.Now().UnixMilli(), ControllerEpoch: term,
+		Cmd: &streamqv1.MetadataCommand_AlterIsr{AlterIsr: &streamqv1.AlterISRCommand{
+			Topic: req.Topic, Partition: req.Partition, LeaderEpoch: req.LeaderEpoch,
+			PartitionEpoch: req.PartitionEpoch, NewIsr: req.NewISR,
+		}}}
+	if _, err := c.store.ApplyForwarded(ctx, cmd); err != nil {
+		return fmt.Errorf("alter isr %s-%d: %w", req.Topic, req.Partition, err)
+	}
+	c.logger.Info("isr changed", slog.String("topic", req.Topic), slog.Int("partition", int(req.Partition)), slog.Any("isr", req.NewISR))
+	return nil
+}

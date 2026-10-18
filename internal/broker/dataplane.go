@@ -32,10 +32,25 @@ type ProduceResult struct {
 	LeaderEpoch    int32
 }
 
+// DefaultProduceTimeout bounds an acks=all wait when the request gives no timeout_ms (D43).
+const DefaultProduceTimeout = 30 * time.Second
+
+// produceDeadlineMargin keeps the acks=all wait below the RPC deadline, so the client gets
+// REQUEST_TIMED_OUT rather than a transport deadline error (plan R13).
+const produceDeadlineMargin = 100 * time.Millisecond
+
 // Produce appends each batch to its partition as leader. Each request is independent; results are
 // in request order. With acks=none the appends still run synchronously (DECISIONS: M2 plan R7).
-func (b *Broker) Produce(ctx context.Context, acks partition.Acks, reqs []ProduceRequest) []ProduceResult {
+// With acks=all every batch is appended first, then each waits until committed (the purgatory,
+// SPEC §4.5) or until timeout (0 = DefaultProduceTimeout) bounded by ctx's deadline.
+func (b *Broker) Produce(ctx context.Context, acks partition.Acks, timeout time.Duration, reqs []ProduceRequest) []ProduceResult {
 	out := make([]ProduceResult, len(reqs))
+	type waiter struct {
+		p          *partition.Partition
+		lastOffset int64
+		epoch      int32
+	}
+	waits := make([]*waiter, len(reqs))
 	for i, r := range reqs {
 		res := ProduceResult{TP: r.TP, BaseOffset: -1, LeaderID: -1, LeaderEpoch: -1}
 		p, ok := b.Partition(r.TP)
@@ -45,14 +60,35 @@ func (b *Broker) Produce(ctx context.Context, acks partition.Acks, reqs []Produc
 			continue
 		}
 		res.LeaderID, res.LeaderEpoch = p.Leader()
-		info, err := p.Append(ctx, r.Records, r.LeaderEpoch, acks)
+		info, epoch, err := p.Append(ctx, r.Records, r.LeaderEpoch, acks)
 		if err != nil {
 			res.Err = err
 		} else {
 			res.BaseOffset = info.FirstOffset
+			if acks == partition.AcksAll {
+				waits[i] = &waiter{p: p, lastOffset: info.LastOffset, epoch: epoch}
+			}
 		}
 		res.LogStartOffset = p.Log().LogStartOffset()
 		out[i] = res
+	}
+	if acks != partition.AcksAll {
+		return out
+	}
+	if timeout <= 0 {
+		timeout = DefaultProduceTimeout
+	}
+	deadline := b.clock.Now().Add(timeout)
+	if d, ok := ctx.Deadline(); ok && d.Add(-produceDeadlineMargin).Before(deadline) {
+		deadline = d.Add(-produceDeadlineMargin)
+	}
+	for i, w := range waits {
+		if w == nil {
+			continue
+		}
+		if err := w.p.WaitForCommit(ctx, w.lastOffset, w.epoch, max(deadline.Sub(b.clock.Now()), 0)); err != nil {
+			out[i].Err = err
+		}
 	}
 	return out
 }

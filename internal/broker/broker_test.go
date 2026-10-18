@@ -127,7 +127,7 @@ func batchOf(t *testing.T, values ...string) []byte {
 
 func (e *env) produce(topic string, p int32, values ...string) ProduceResult {
 	e.t.Helper()
-	res := e.b.Produce(context.Background(), partition.AcksAll, []ProduceRequest{{TP: tp(topic, p), LeaderEpoch: -1, Records: batchOf(e.t, values...)}})
+	res := e.b.Produce(context.Background(), partition.AcksAll, 0, []ProduceRequest{{TP: tp(topic, p), LeaderEpoch: -1, Records: batchOf(e.t, values...)}})
 	require.NoError(e.t, res[0].Err)
 	return res[0]
 }
@@ -260,12 +260,12 @@ func TestProduceErrors(t *testing.T) {
 	ctx := context.Background()
 	require.NoError(t, e.store.Propose(ctx, createCmd("strict", "id2", 1, map[string]string{"min_insync_replicas": "2"})))
 	require.NoError(t, e.b.WaitTopicReady(ctx, "strict", "id2"))
-	res := e.b.Produce(ctx, partition.AcksAll, []ProduceRequest{
+	res := e.b.Produce(ctx, partition.AcksAll, 0, []ProduceRequest{
 		{TP: tp("strict", 0), LeaderEpoch: -1, Records: batchOf(t, "x")},
 		{TP: tp("strict", 0), LeaderEpoch: 3, Records: batchOf(t, "x")},
 		{TP: tp("missing", 0), LeaderEpoch: -1, Records: batchOf(t, "x")},
 	})
-	res = append(res, e.b.Produce(ctx, partition.AcksLeader, []ProduceRequest{
+	res = append(res, e.b.Produce(ctx, partition.AcksLeader, 0, []ProduceRequest{
 		{TP: tp("strict", 0), LeaderEpoch: -1, Records: []byte("garbage")},
 	})...)
 	require.ErrorIs(t, res[0].Err, partition.ErrNotEnoughReplicas)

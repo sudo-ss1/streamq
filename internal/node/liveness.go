@@ -70,7 +70,13 @@ func (n *Node) tryRegister(ctx context.Context, req *streamqv1.RegisterBrokerReq
 	return resp, nil
 }
 
-func (n *Node) setEpoch(epoch int64) { n.epoch.Store(epoch) }
+// setEpoch records the registration epoch; the broker sends it with replica fetches (plan R18).
+func (n *Node) setEpoch(epoch int64) {
+	n.epoch.Store(epoch)
+	if n.broker != nil {
+		n.broker.SetBrokerEpoch(epoch)
+	}
+}
 
 // liveness heartbeats to the controller every broker_heartbeat_interval_ms, reporting the
 // metadata index the broker has processed (so the controller can unfence it, D35). A stale-epoch

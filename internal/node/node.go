@@ -45,12 +45,14 @@ type Node struct {
 	cfg    config.Config
 	logger *slog.Logger
 
-	store     metadata.Store
-	raft      *raftstore.Store // nil in single-node mode
-	forwarder *server.Forwarder
-	ctrl      *controller.Controller
-	broker    *broker.Broker
-	groups    *group.Coordinator
+	store       metadata.Store
+	raft        *raftstore.Store // nil in single-node mode
+	forwarder   *server.Forwarder
+	replicas    *server.ReplicaClient // follower RPCs and AlterISR (cluster mode)
+	internalAPI *server.InternalServer
+	ctrl        *controller.Controller
+	broker      *broker.Broker
+	groups      *group.Coordinator
 
 	grpc     *grpc.Server
 	lis      net.Listener
@@ -103,15 +105,22 @@ func StartWithOptions(ctx context.Context, cfg config.Config, logger *slog.Logge
 		return nil, err
 	}
 
-	if n.broker, err = broker.Open(ctx, broker.Config{
+	bcfg := broker.Config{
 		BrokerID:        cfg.BrokerID,
 		DataDir:         cfg.DataDir,
 		TopicDefaults:   cfg.TopicDefaults,
 		FileDeleteDelay: time.Duration(cfg.FileDeleteDelayMs) * time.Millisecond,
-	}, n.store, broker.SystemClock{}, logger); err != nil {
+		ReplicaLagMax:   time.Duration(cfg.ReplicaLagMaxMs) * time.Millisecond,
+	}
+	if n.replicas != nil {
+		bcfg.LeaderClient, bcfg.AlterISR = n.replicas, n.replicas.AlterISR
+	}
+	if n.broker, err = broker.Open(ctx, bcfg, n.store, broker.SystemClock{}, logger); err != nil {
 		return nil, fmt.Errorf("open broker: %w", err)
 	}
 	if n.raft != nil {
+		n.broker.SetBrokerEpoch(n.epoch.Load())
+		n.internalAPI.SetBroker(n.broker)
 		// The liveness loop outlives Start's ctx: it runs until Close (background context).
 		n.bg.Go(func() error { return n.liveness(n.bgCtx(), port) }) //nolint:contextcheck // node-lifetime goroutine
 	}
@@ -186,8 +195,10 @@ func (n *Node) startCluster(ctx context.Context, opts Options, port int32, logge
 		BrokerID:       cfg.BrokerID,
 		SessionTimeout: time.Duration(cfg.BrokerSessionTimeoutMs) * time.Millisecond,
 	}, n.raft, controller.SystemClock{}, n.logger)
-	n.internal = grpc.NewServer()
-	streamqv1.RegisterStreamQInternalServiceServer(n.internal, server.NewInternal(n.ctrl, n.raft, n.logger))
+	n.replicas = server.NewReplicaClient(n.forwarder, n.raft)
+	n.internalAPI = server.NewInternal(n.ctrl, n.raft, n.logger)
+	n.internal = grpc.NewServer(grpc.MaxRecvMsgSize(server.MaxMessageSize), grpc.MaxSendMsgSize(server.MaxMessageSize))
+	streamqv1.RegisterStreamQInternalServiceServer(n.internal, n.internalAPI)
 
 	bgCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	n.bgCancel = cancel

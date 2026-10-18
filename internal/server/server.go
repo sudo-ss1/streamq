@@ -75,8 +75,12 @@ func errorCode(err error) streamqv1.ErrorCode {
 		return streamqv1.ErrorCode_ERROR_CODE_INVALID_CONFIG
 	case errors.Is(err, partition.ErrNotLeader):
 		return streamqv1.ErrorCode_ERROR_CODE_NOT_LEADER
-	case errors.Is(err, partition.ErrFencedLeaderEpoch):
+	case errors.Is(err, partition.ErrFencedLeaderEpoch), errors.Is(err, metadata.ErrFencedLeaderEpoch):
 		return streamqv1.ErrorCode_ERROR_CODE_FENCED_LEADER_EPOCH
+	case errors.Is(err, metadata.ErrInvalidISR):
+		return streamqv1.ErrorCode_ERROR_CODE_INVALID_ISR
+	case errors.Is(err, broker.ErrStaleBrokerEpoch):
+		return streamqv1.ErrorCode_ERROR_CODE_STALE_BROKER_EPOCH
 	case errors.Is(err, partition.ErrNotEnoughReplicas):
 		return streamqv1.ErrorCode_ERROR_CODE_NOT_ENOUGH_REPLICAS
 	case errors.Is(err, storage.ErrOffsetOutOfRange):
@@ -97,7 +101,8 @@ func errorCode(err error) streamqv1.ErrorCode {
 		return streamqv1.ErrorCode_ERROR_CODE_REBALANCE_IN_PROGRESS
 	case errors.Is(err, group.ErrNotCoordinator), errors.Is(err, group.ErrCoordinatorClosed):
 		return streamqv1.ErrorCode_ERROR_CODE_NOT_COORDINATOR
-	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, raftstore.ErrUnknownOutcome):
+	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, raftstore.ErrUnknownOutcome),
+		errors.Is(err, partition.ErrRequestTimedOut):
 		return streamqv1.ErrorCode_ERROR_CODE_REQUEST_TIMED_OUT
 	default:
 		return streamqv1.ErrorCode_ERROR_CODE_UNKNOWN
@@ -277,7 +282,7 @@ func (s *Server) Produce(ctx context.Context, req *streamqv1.ProduceRequest) (*s
 			})
 		}
 	}
-	results := s.broker.Produce(ctx, acks, reqs)
+	results := s.broker.Produce(ctx, acks, time.Duration(req.GetTimeoutMs())*time.Millisecond, reqs)
 	resp := &streamqv1.ProduceResponse{}
 	byTopic := map[string]*streamqv1.ProduceTopicResponse{}
 	for _, r := range results {

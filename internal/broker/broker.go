@@ -3,7 +3,8 @@
 // topics change), writes the high-watermark checkpoint, and implements produce, the long-poll
 // fetch and list-offsets for the gRPC layer.
 //
-// Lock ordering: Broker.applyMu → Broker.ckptMu → Broker.mu → (partition and storage locks).
+// Lock ordering: Broker.applyMu → Broker.fetchMu; Broker.applyMu → Broker.ckptMu → Broker.mu →
+// (partition and storage locks).
 // applyMu serializes Open's processing of the initial metadata snapshot with every metadata change
 // handler, so changes are applied strictly in order and never interleave with startup. mu guards
 // the partitions and topics maps and the change-notification channel and is never held across I/O.
@@ -67,6 +68,16 @@ type Config struct {
 	TopicDefaults        config.TopicDefaults
 	FileDeleteDelay      time.Duration
 	HWCheckpointInterval time.Duration // default 5s
+
+	// Replication (M6). LeaderClient nil disables fetchers (single-node mode); AlterISR nil
+	// disables ISR changes.
+	LeaderClient         LeaderClient
+	AlterISR             ISRSender
+	ReplicaLagMax        time.Duration // replica.lag.max.ms (default 10s)
+	ReplicaFetchWait     time.Duration // default DefaultReplicaFetchWait
+	ReplicaFetchMaxBytes int           // default DefaultReplicaFetchMaxBytes
+	ISRCheckInterval     time.Duration // default DefaultISRCheckInterval
+	ISRRequestTimeout    time.Duration // default 5s
 }
 
 // topicState is the local view of one topic.
@@ -107,6 +118,15 @@ type Broker struct {
 
 	afterFetchRead func() // test hook: runs between a fetch's read and its wait
 
+	// runCtx parents fetchers; it exists before the first metadata is applied (plan R8).
+	runCtx         context.Context
+	shutdownCtx    context.Context // cancelled by BeginShutdown
+	shutdownCancel context.CancelFunc
+	fetchMu        sync.Mutex
+	fetchers       map[storage.TopicPartition]*fetcher
+	fetchersClosed bool
+	brokerEpoch    atomic.Int64
+
 	// processed is the metadata index whose changes this broker has fully handled (D35).
 	processed atomic.Uint64
 }
@@ -118,9 +138,26 @@ func Open(ctx context.Context, cfg Config, store metadata.Store, clock Clock, lo
 	if cfg.HWCheckpointInterval <= 0 {
 		cfg.HWCheckpointInterval = 5 * time.Second
 	}
+	if cfg.ReplicaLagMax <= 0 {
+		cfg.ReplicaLagMax = 10 * time.Second
+	}
+	if cfg.ReplicaFetchWait <= 0 {
+		cfg.ReplicaFetchWait = DefaultReplicaFetchWait
+	}
+	if cfg.ReplicaFetchMaxBytes <= 0 {
+		cfg.ReplicaFetchMaxBytes = DefaultReplicaFetchMaxBytes
+	}
+	if cfg.ISRCheckInterval <= 0 {
+		cfg.ISRCheckInterval = DefaultISRCheckInterval
+	}
+	if cfg.ISRRequestTimeout <= 0 {
+		cfg.ISRRequestTimeout = 5 * time.Second
+	}
 	logger = logger.With(slog.Int("broker_id", int(cfg.BrokerID)))
+	var b *Broker // the retention limit needs the broker, which needs the manager
 	mcfg := storage.DefaultManagerConfig(cfg.DataDir)
 	mcfg.FileDeleteDelay = cfg.FileDeleteDelay
+	mcfg.RetentionLimit = func(tp storage.TopicPartition) int64 { return b.retentionLimit(tp) }
 	mgr, err := storage.OpenManager(ctx, mcfg, storage.SystemClock{}, logger)
 	if err != nil {
 		return nil, fmt.Errorf("open storage: %w", err)
@@ -129,7 +166,7 @@ func Open(ctx context.Context, cfg Config, store metadata.Store, clock Clock, lo
 	if err != nil {
 		return nil, errors.Join(fmt.Errorf("read hw checkpoint: %w", err), mgr.Close(ctx))
 	}
-	b := &Broker{
+	b = &Broker{
 		cfg:        cfg,
 		store:      store,
 		mgr:        mgr,
@@ -140,7 +177,13 @@ func Open(ctx context.Context, cfg Config, store metadata.Store, clock Clock, lo
 		changed:    make(chan struct{}),
 		hwCkpt:     hw,
 		done:       make(chan struct{}),
+		fetchers:   map[storage.TopicPartition]*fetcher{},
 	}
+	b.shutdownCtx, b.shutdownCancel = context.WithCancel(context.WithoutCancel(ctx))
+	runCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	b.cancel = cancel
+	b.group, runCtx = errgroup.WithContext(runCtx)
+	b.runCtx = runCtx
 
 	b.applyMu.Lock()
 	snap, unsubscribe := store.Subscribe(b.onChange)
@@ -150,14 +193,15 @@ func Open(ctx context.Context, cfg Config, store metadata.Store, clock Clock, lo
 	b.applyMu.Unlock()
 	if err != nil {
 		unsubscribe()
+		b.stopAllFetchers()
+		cancel()
+		b.shutdownCancel()
 		return nil, errors.Join(err, mgr.Close(ctx))
 	}
 
-	runCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	b.cancel = cancel
-	b.group, runCtx = errgroup.WithContext(runCtx)
 	b.group.Go(func() error { return mgr.Run(runCtx) })
 	b.group.Go(func() error { return b.runHWCheckpoints(runCtx) })
+	b.group.Go(func() error { return b.runISR(runCtx) })
 	return b, nil
 }
 
@@ -217,7 +261,7 @@ func (b *Broker) onChange(ctx context.Context, ch metadata.Change) {
 	case metadata.TopicDeleted:
 		b.deleteTopic(ctx, ch.Topic, ch.TopicID)
 	case metadata.PartitionChanged:
-		b.applyPartitionChanges(ch.Topic, ch.TopicID, ch.Partitions)
+		b.applyPartitionChanges(ctx, ch.Topic, ch.TopicID, ch.Partitions)
 	case metadata.Restored:
 		if ch.Snapshot != nil {
 			b.resync(ctx, *ch.Snapshot)
@@ -287,18 +331,26 @@ func (b *Broker) openPartition(ctx context.Context, topic, id string, tcfg confi
 	if err != nil {
 		return nil, err
 	}
-	p := partition.New(tp, id, l, b.cfg.BrokerID, b.logger)
+	epochs, err := partition.OpenEpochCache(ctx, l.Dir(), l.LogEndOffset())
+	if err != nil {
+		return nil, fmt.Errorf("partition %s: %w", tp, err)
+	}
+	if err := epochs.TruncateFromStart(ctx, l.LogStartOffset()); err != nil {
+		return nil, fmt.Errorf("partition %s: %w", tp, err)
+	}
+	p := partition.New(tp, id, l, epochs, partition.Config{
+		LocalID: b.cfg.BrokerID, Clock: b.clock, ReplicaLagMax: b.cfg.ReplicaLagMax, IsFenced: b.isFenced,
+	}, b.logger)
 	b.mu.RLock()
 	hw := b.hwCkpt[tp]
 	b.mu.RUnlock()
-	p.ApplyState(partition.State{Leader: ps.Leader, LeaderEpoch: ps.LeaderEpoch, PartitionEpoch: ps.PartitionEpoch,
-		ISR: ps.ISR, MinInsync: tcfg.MinInsyncReplicas, HWCheckpoint: hw})
+	b.applyState(ctx, p, partition.FromMetadata(ps, tcfg.MinInsyncReplicas, hw))
 	return p, nil
 }
 
 // applyPartitionChanges applies leadership/ISR changes to local replicas of a topic with id.
-// Stale changes are ignored by Partition.ApplyState. Caller holds applyMu.
-func (b *Broker) applyPartitionChanges(topic, id string, parts []metadata.PartitionState) {
+// Stale changes are ignored (Partition.Classify). Caller holds applyMu.
+func (b *Broker) applyPartitionChanges(ctx context.Context, topic, id string, parts []metadata.PartitionState) {
 	b.mu.RLock()
 	ts, ok := b.topics[topic]
 	minInsync := int32(1)
@@ -318,8 +370,7 @@ func (b *Broker) applyPartitionChanges(topic, id string, parts []metadata.Partit
 		b.mu.RLock()
 		hw := b.hwCkpt[tp]
 		b.mu.RUnlock()
-		p.ApplyState(partition.State{Leader: ps.Leader, LeaderEpoch: ps.LeaderEpoch, PartitionEpoch: ps.PartitionEpoch,
-			ISR: ps.ISR, MinInsync: minInsync, HWCheckpoint: hw})
+		b.applyState(ctx, p, partition.FromMetadata(ps, minInsync, hw))
 	}
 }
 
@@ -347,7 +398,7 @@ func (b *Broker) resync(ctx context.Context, snap metadata.Snapshot) {
 	for _, name := range names {
 		t := snap.Topics[name]
 		if id, ok := local[name]; ok && id == t.ID {
-			b.applyPartitionChanges(name, t.ID, t.Partitions)
+			b.applyPartitionChanges(ctx, name, t.ID, t.Partitions)
 			continue
 		}
 		b.createTopic(ctx, name, t.ID, t.Configs, t.Partitions)
@@ -374,14 +425,18 @@ func (b *Broker) ProcessedIndex() uint64 { return b.processed.Load() }
 func (b *Broker) deleteTopic(ctx context.Context, name, id string) {
 	b.mu.Lock()
 	var tps []storage.TopicPartition
+	removed := map[storage.TopicPartition]*partition.Partition{}
 	for tp, p := range b.partitions {
 		if tp.Topic == name && p.TopicID() == id {
 			tps = append(tps, tp)
+			removed[tp] = p
 			delete(b.partitions, tp)
 		}
 	}
 	b.mu.Unlock()
 	for _, tp := range tps {
+		b.stopFetcher(tp)    // before the log goes away (plan R8)
+		removed[tp].Remove() // acks=all waiters fail now rather than time out
 		if err := b.deletePartitionStorage(ctx, tp, id); err != nil {
 			b.logger.Error("failed to delete partition", slog.String("topic", tp.Topic),
 				slog.Int("partition", int(tp.Partition)), slog.Any("error", err))
@@ -505,10 +560,23 @@ func (b *Broker) writeHWCheckpoint(ctx context.Context) error {
 	return nil
 }
 
-// BeginShutdown wakes every waiting long-poll fetch (they return what they have) and makes new
-// ones return immediately, so the gRPC server can drain quickly. Idempotent; Close calls it.
+// BeginShutdown wakes every waiting long-poll fetch (they return what they have), fails acks=all
+// waiters and replica fetches, and makes new long-polls return immediately, so the gRPC server
+// can drain quickly. Idempotent; Close calls it.
 func (b *Broker) BeginShutdown() {
-	b.doneOnce.Do(func() { close(b.done) })
+	b.doneOnce.Do(func() {
+		close(b.done)
+		b.shutdownCancel()
+		b.mu.RLock()
+		parts := make([]*partition.Partition, 0, len(b.partitions))
+		for _, p := range b.partitions {
+			parts = append(parts, p)
+		}
+		b.mu.RUnlock()
+		for _, p := range parts {
+			p.Remove() // acks=all waiters return NOT_LEADER so GracefulStop drains promptly
+		}
+	})
 }
 
 // Close stops following metadata, wakes waiting fetches, stops the background loops, writes the
@@ -518,6 +586,9 @@ func (b *Broker) Close(ctx context.Context) error {
 	b.closeOnce.Do(func() {
 		b.unsubscribe()
 		b.BeginShutdown()
+		b.applyMu.Lock()
+		b.stopAllFetchers() // before storage closes (plan R8)
+		b.applyMu.Unlock()
 		b.cancel()
 		errs := []error{b.group.Wait()}
 		errs = append(errs, b.writeHWCheckpoint(ctx), b.mgr.Close(ctx))

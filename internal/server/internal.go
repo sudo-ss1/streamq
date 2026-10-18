@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -13,6 +14,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	streamqv1 "github.com/sudo-ss1/streamq/gen/v1"
+	"github.com/sudo-ss1/streamq/internal/broker"
 	"github.com/sudo-ss1/streamq/internal/controller"
 	"github.com/sudo-ss1/streamq/internal/metadata"
 	"github.com/sudo-ss1/streamq/internal/metadata/raftstore"
@@ -30,6 +32,7 @@ type InternalServer struct {
 
 	ctrl   *controller.Controller
 	store  ControllerStore
+	broker atomic.Pointer[broker.Broker]
 	logger *slog.Logger
 }
 
@@ -105,7 +108,8 @@ func (f *Forwarder) Client(addr string) (streamqv1.StreamQInternalServiceClient,
 	conn, ok := f.conns[addr]
 	if !ok {
 		var err error
-		conn, err = grpc.NewClient("passthrough:///"+addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		conn, err = grpc.NewClient("passthrough:///"+addr, grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(MaxMessageSize), grpc.MaxCallSendMsgSize(MaxMessageSize)))
 		if err != nil {
 			return nil, fmt.Errorf("dial %s: %w", addr, err)
 		}
