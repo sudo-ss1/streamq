@@ -21,3 +21,6 @@ coverage.*
 
 # Benchmark output (M10)
 /bench/results/
+
+# Single-node quick-start data (deploy/single-node.yaml)
+/data/
