@@ -1,0 +1,10 @@
+.git
+.tools
+.claude
+bin
+data
+deploy
+docs
+**/*.test
+**/*.out
+**/*.prof
