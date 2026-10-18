@@ -26,8 +26,6 @@ var (
 	ErrClosed                   = errors.New("metadata: store closed")
 )
 
-var errUnimplemented = errors.New("metadata: unimplemented")
-
 // Broker is a registered broker.
 type Broker struct {
 	ID   int32  `json:"id"`
@@ -81,7 +79,8 @@ type Change struct {
 	Kind       ChangeKind
 	Topic      string
 	TopicID    string
-	Partitions []PartitionState // created/changed partitions; for TopicDeleted, the deleted ones
+	Partitions []PartitionState  // created/changed partitions; for TopicDeleted, the deleted ones
+	Configs    map[string]string // topic configs (a copy); set for TopicCreated
 }
 
 // Store is the metadata store (SPEC §2.2). Brokers and groups must not care which
