@@ -24,6 +24,11 @@ var (
 	ErrInvalidTopic             = errors.New("metadata: invalid topic")
 	ErrInvalidCommand           = errors.New("metadata: invalid command")
 	ErrNotController            = errors.New("metadata: not the controller")
+	// ErrFencedLeaderEpoch reports an AlterISR whose leader or partition epoch is stale.
+	ErrFencedLeaderEpoch = errors.New("metadata: fenced leader epoch")
+	// ErrInvalidISR reports an AlterISR with an ISR that is empty, not a subset of the replicas,
+	// missing the leader, or containing fenced brokers.
+	ErrInvalidISR = errors.New("metadata: invalid isr")
 	ErrClosed                   = errors.New("metadata: store closed")
 )
 

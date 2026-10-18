@@ -229,3 +229,38 @@ func TestDeleteWithStaleTopicIDKeepsRecreatedTopic(t *testing.T) {
 	require.Equal(t, "id-new", s.Topics["t"].ID)
 	require.NoError(t, del(""), "an unscoped delete still works")
 }
+
+func alterISR(epoch, pepoch int32, isr ...int32) *streamqv1.MetadataCommand {
+	return &streamqv1.MetadataCommand{Version: CommandVersion, Cmd: &streamqv1.MetadataCommand_AlterIsr{
+		AlterIsr: &streamqv1.AlterISRCommand{Topic: "t", Partition: 0, LeaderEpoch: epoch, PartitionEpoch: pepoch, NewIsr: isr},
+	}}
+}
+
+func TestAlterISR(t *testing.T) {
+	s := clusterState(t) // t/0: replicas [1 2 3], leader 1, ISR [1 2 3], epochs (0, 0)
+	ch := mustApply(t, s, alterISR(0, 0, 1, 3))
+	require.Equal(t, []int32{1, 3}, part(s, 0).ISR)
+	require.Equal(t, int32(1), part(s, 0).PartitionEpoch)
+	require.Equal(t, int32(0), part(s, 0).LeaderEpoch)
+	require.Equal(t, PartitionChanged, ch[0].Kind)
+	mustApply(t, s, alterISR(0, 1, 3, 2, 1)) // any order; stored in replica order
+	require.Equal(t, []int32{1, 2, 3}, part(s, 0).ISR)
+
+	for name, tc := range map[string]struct {
+		cmd  *streamqv1.MetadataCommand
+		want error
+	}{
+		"stale partition epoch": {alterISR(0, 1, 1, 2), ErrFencedLeaderEpoch},
+		"stale leader epoch":    {alterISR(9, 2, 1, 2), ErrFencedLeaderEpoch},
+		"missing leader":        {alterISR(0, 2, 2, 3), ErrInvalidISR},
+		"empty":                 {alterISR(0, 2), ErrInvalidISR},
+		"not a replica":         {alterISR(0, 2, 1, 7), ErrInvalidISR},
+		"duplicate":             {alterISR(0, 2, 1, 1), ErrInvalidISR},
+	} {
+		_, err := s.Apply(tc.cmd)
+		require.ErrorIs(t, err, tc.want, name)
+	}
+	mustApply(t, s, fence(s, 3)) // epochs bump: ISR [1 2], partition epoch 3
+	_, err := s.Apply(alterISR(0, 3, 1, 2, 3))
+	require.ErrorIs(t, err, ErrInvalidISR, "a fenced broker cannot rejoin the ISR")
+}

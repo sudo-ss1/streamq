@@ -130,6 +130,8 @@ func (s *State) ApplyInTerm(cmd *streamqv1.MetadataCommand, term uint64) ([]Chan
 		return s.applyFenceBroker(c.FenceBroker)
 	case *streamqv1.MetadataCommand_UnfenceBroker:
 		return s.applyUnfenceBroker(c.UnfenceBroker)
+	case *streamqv1.MetadataCommand_AlterIsr:
+		return s.applyAlterISR(c.AlterIsr)
 	default:
 		return nil, fmt.Errorf("empty command: %w", ErrInvalidCommand)
 	}
@@ -457,4 +459,40 @@ func (s *State) applyUnfenceBroker(c *streamqv1.UnfenceBrokerCommand) ([]Change,
 		}
 	}
 	return changes, nil
+}
+
+// applyAlterISR changes a partition's ISR for its leader (SPEC §4.3). The leader and partition
+// epochs must match (ErrFencedLeaderEpoch); the new ISR must be non-empty, ⊆ replicas, contain the
+// leader, and every other member must be unfenced (ErrInvalidISR). The ISR is stored in replica
+// order and the partition epoch is bumped.
+func (s *State) applyAlterISR(c *streamqv1.AlterISRCommand) ([]Change, error) {
+	t, ok := s.Topics[c.GetTopic()]
+	if !ok || c.GetPartition() < 0 || int(c.GetPartition()) >= len(t.Partitions) {
+		return nil, fmt.Errorf("alter isr %s/%d: %w", c.GetTopic(), c.GetPartition(), ErrUnknownTopic)
+	}
+	ps := &t.Partitions[c.GetPartition()]
+	if c.GetLeaderEpoch() != ps.LeaderEpoch || c.GetPartitionEpoch() != ps.PartitionEpoch {
+		return nil, fmt.Errorf("alter isr %s/%d: epochs (%d, %d) != current (%d, %d): %w", c.GetTopic(), c.GetPartition(),
+			c.GetLeaderEpoch(), c.GetPartitionEpoch(), ps.LeaderEpoch, ps.PartitionEpoch, ErrFencedLeaderEpoch)
+	}
+	want := c.GetNewIsr()
+	if len(want) == 0 || !slices.Contains(want, ps.Leader) {
+		return nil, fmt.Errorf("alter isr %s/%d: %v must contain leader %d: %w", c.GetTopic(), c.GetPartition(), want, ps.Leader, ErrInvalidISR)
+	}
+	var isr []int32
+	for _, r := range ps.Replicas {
+		if !slices.Contains(want, r) {
+			continue
+		}
+		if r != ps.Leader && s.fenced(r) {
+			return nil, fmt.Errorf("alter isr %s/%d: broker %d is fenced: %w", c.GetTopic(), c.GetPartition(), r, ErrInvalidISR)
+		}
+		isr = append(isr, r)
+	}
+	if len(isr) != len(want) {
+		return nil, fmt.Errorf("alter isr %s/%d: %v not a set of replicas %v: %w", c.GetTopic(), c.GetPartition(), want, ps.Replicas, ErrInvalidISR)
+	}
+	ps.ISR = isr
+	ps.PartitionEpoch++
+	return []Change{{Kind: PartitionChanged, Topic: c.GetTopic(), TopicID: t.ID, Partitions: clonePartitions([]PartitionState{*ps})}}, nil
 }
