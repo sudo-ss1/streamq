@@ -2,11 +2,23 @@
 package main
 
 import (
+	"context"
 	"os"
+	"os/signal"
+	"syscall"
 )
 
 func main() {
-	if err := newRootCmd(os.Stdin, os.Stdout, os.Stderr).Execute(); err != nil {
-		os.Exit(1)
+	os.Exit(run())
+}
+
+// run executes the command tree with a context cancelled on SIGINT/SIGTERM (which ends
+// `consume --follow` cleanly) and returns the process exit code.
+func run() int {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := newRootCmd(os.Stdin, os.Stdout, os.Stderr).ExecuteContext(ctx); err != nil {
+		return 1
 	}
+	return 0
 }
