@@ -1,0 +1,17 @@
+{
+  "includeCoAuthoredBy": false,
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "allow": [
+      "Bash(go:*)", "Bash(make:*)", "Bash(buf:*)", "Bash(golangci-lint:*)",
+      "Bash(git init:*)", "Bash(git add:*)", "Bash(git commit:*)",
+      "Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)",
+      "Bash(git merge:*)", "Bash(git branch:*)", "Bash(git worktree:*)", "Bash(git switch:*)",
+      "Bash(mkdir:*)", "Bash(ls:*)", "Bash(docker:*)", "Bash(docker compose:*)"
+    ],
+    "deny": [
+      "Bash(git push:*)", "Bash(gh pr create:*)",
+      "Bash(git rebase:*)", "Bash(git reset --hard:*)", "Bash(git commit --amend:*)"
+    ]
+  }
+}
