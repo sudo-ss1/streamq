@@ -2,6 +2,7 @@ package linearizability
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -67,6 +68,9 @@ func TestReadAll(t *testing.T) {
 			switch {
 			case tt.anomaly:
 				require.ErrorAs(t, err, &a)
+				if strings.Contains(tt.name, "overlapping") || strings.Contains(tt.name, "backward") {
+					require.Contains(t, a.Err, "overlapping or backward batch")
+				}
 			case tt.failed:
 				require.Error(t, err)
 				require.NotErrorAs(t, err, &a)
@@ -122,6 +126,8 @@ func TestReadAllAcrossFetches(t *testing.T) {
 	}}
 	_, err = ReadAll(ctx, stale, "t", 0)
 	require.ErrorAs(t, err, &a)
+	require.Equal(t, int64(2), a.Offset)
+	require.Contains(t, a.Err, "ends below the fetch offset")
 
 	calls = 0
 	hwDropped := scripted{calls: &calls, resps: []fetchOnly{

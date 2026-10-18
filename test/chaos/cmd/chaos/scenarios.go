@@ -154,6 +154,7 @@ func (s *scenarioRun) killAndRestart(ctx context.Context, victim int32, why stri
 
 func runKill9Random(ctx context.Context, s *scenarioRun) error {
 	prev, hitLeader := int32(0), 0
+	leaderRound := 1 + s.rng.IntN(4) // one round always targets the lin leader (failure review)
 	for round := 1; round <= 4; round++ {
 		if err := s.sleepRange(ctx, 10*time.Second, 20*time.Second); err != nil {
 			return err
@@ -164,15 +165,19 @@ func runKill9Random(ctx context.Context, s *scenarioRun) error {
 		for victim == prev {
 			victim = int32(1 + s.rng.IntN(3))
 		}
-		prev = victim
-		if v, _ := s.linView(ctx); v.Leader == victim {
+		if v, _ := s.linView(ctx); v.Leader >= 1 && (round == leaderRound || v.Leader == victim) {
+			victim = v.Leader
 			hitLeader++
 		}
+		prev = victim
 		if err := s.killAndRestart(ctx, victim, fmt.Sprintf("round %d: random broker", round)); err != nil {
 			return err
 		}
 	}
 	s.observe("%d of 4 rounds killed the lin leader", hitLeader)
+	if hitLeader == 0 {
+		s.res.Status = StatusNotExercised
+	}
 	return nil
 }
 
@@ -234,7 +239,8 @@ func runInboundIsolation(ctx context.Context, s *scenarioRun) error {
 		s.event("heal", service(v.Leader), "proxies re-enabled; lin at end of isolation: "+during)
 		s.observe("round %d: isolated lin leader %d (epoch %d, controller %d); after 15 s: leader %d epoch %d isr %v",
 			round, v.Leader, v.Epoch, ctrl, after.Leader, after.Epoch, after.ISR)
-		if after.Epoch != v.Epoch || !slices.Equal(after.ISR, v.ISR) {
+		// A failed lookup (epoch -1) proves nothing; compare ISRs order-insensitively.
+		if after.Epoch >= 0 && (after.Epoch != v.Epoch || !slices.Equal(sortedCopy(after.ISR), sortedCopy(v.ISR))) {
 			exercised++
 		} else {
 			s.observe("round %d: fault not exercised: lin epoch and ISR unchanged during the cut", round)
@@ -467,9 +473,22 @@ func (s *scenarioRun) waitFenced(ctx context.Context, timeout time.Duration) ([]
 				live = live || b.GetId() == 3
 			}
 		}
-		for tp, v := range s.views(ctx) {
-			if slices.Contains(v.ISR, 3) || v.Leader < 1 {
-				bad = append(bad, fmt.Sprintf("%s(leader %d isr %v)", tp, v.Leader, v.ISR))
+		// Most conservative reading (failure review): a partition counts as bad if ANY responding
+		// broker lists 3 in its ISR or reports it leaderless, so a lagging view cannot make the
+		// harness wipe broker3's disk while it is still in an ISR.
+		seen := map[string]bool{}
+		for from, resp := range resps {
+			for _, tm := range resp.GetTopics() {
+				for _, pm := range tm.GetPartitions() {
+					if !slices.Contains(pm.GetIsr(), 3) && pm.GetLeaderId() >= 1 {
+						continue
+					}
+					tp := fmt.Sprintf("%s-%d", tm.GetName(), pm.GetPartition())
+					if !seen[tp] {
+						seen[tp] = true
+						bad = append(bad, fmt.Sprintf("%s(leader %d isr %v, from broker %d)", tp, pm.GetLeaderId(), pm.GetIsr(), from))
+					}
+				}
 			}
 		}
 		slices.Sort(bad)
@@ -491,6 +510,12 @@ func keys(m map[int32]bool) []int32 {
 	for k := range m {
 		out = append(out, k)
 	}
+	slices.Sort(out)
+	return out
+}
+
+func sortedCopy(ids []int32) []int32 {
+	out := slices.Clone(ids)
 	slices.Sort(out)
 	return out
 }
