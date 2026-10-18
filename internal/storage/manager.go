@@ -27,6 +27,9 @@ type ManagerConfig struct {
 	FlushCheckInterval     time.Duration // how often interval-policy logs are checked for flushing
 	RetentionCheckInterval time.Duration
 	CheckpointInterval     time.Duration // recovery-point checkpoint period
+	// RetentionLimit returns the offset below which the background retention pass may delete a
+	// partition's segments (its high watermark); nil means the LEO.
+	RetentionLimit func(TopicPartition) int64
 }
 
 // DefaultManagerConfig returns the defaults for dataDir.
@@ -406,7 +409,7 @@ func (m *Manager) Run(ctx context.Context) error {
 		case <-flush.C:
 			err = errors.Join(m.FlushDirty(ctx, m.clock.Now()), m.DeleteExpired(ctx, m.clock.Now()))
 		case <-retention.C:
-			err = m.RunRetention(ctx, m.clock.Now(), nil)
+			err = m.RunRetention(ctx, m.clock.Now(), m.cfg.RetentionLimit)
 		case <-checkpoint.C:
 			err = errors.Join(m.CheckpointRecoveryPoints(ctx), removeDeletedDirs(ctx, m.cfg.DataDir))
 		}

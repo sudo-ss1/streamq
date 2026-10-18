@@ -520,6 +520,20 @@ func TestLogFlushDoesNotAdvanceAfterConcurrentFailure(t *testing.T) {
 	require.Equal(t, int64(0), l.RecoveryPoint())
 }
 
+func TestLogFlushDoesNotAdvancePastConcurrentTruncation(t *testing.T) {
+	l := openTestLog(t, t.TempDir(), smallConfig(), newFakeClock(), 0)
+	defer l.close(t)
+	for range 5 {
+		appendRecords(t, l.Log, 3, 1)
+	}
+	// A Flush captured LEO 15, then a follower truncation ran before it committed.
+	leo, gen, segs := l.LogEndOffset(), l.truncGen.Load(), l.loadSegments()
+	newLEO, err := l.TruncateTo(context.Background(), 6)
+	require.NoError(t, err)
+	require.NoError(t, l.flushTo(leo, gen, segs))
+	require.LessOrEqual(t, l.RecoveryPoint(), newLEO, "recovery point never above the LEO")
+}
+
 func TestLogFlushToleratesRetiredClosedSegment(t *testing.T) {
 	l := openTestLog(t, t.TempDir(), smallConfig(), newFakeClock(), 0)
 	defer l.close(t)
@@ -532,7 +546,7 @@ func TestLogFlushToleratesRetiredClosedSegment(t *testing.T) {
 	remaining := []*segment{segs[1]}
 	l.segments.Store(&remaining)
 	require.NoError(t, retired.index.close()) // index closed first: storage.ErrClosed
-	require.NoError(t, l.flushTo(l.LogEndOffset(), segs))
+	require.NoError(t, l.flushTo(l.LogEndOffset(), l.truncGen.Load(), segs))
 	require.False(t, l.failed.Load())
 	require.Equal(t, l.LogEndOffset(), l.RecoveryPoint())
 	require.NoError(t, retired.close())

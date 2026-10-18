@@ -91,10 +91,12 @@ func TestTruncateTo(t *testing.T) {
 			if tt.wantLEO > 0 {
 				requireEveryOffsetReadable(t, l.Log, tt.wantLEO)
 			}
-			// Appends continue at the new LEO, and the log reopens consistently.
+			// Appends continue at the new LEO, and the log reopens consistently, even with the
+			// stale pre-truncation recovery point (a crash before the checkpoint is rewritten,
+			// plan R7).
 			appendRecords(t, l.Log, 2, 2000)
 			l.close(t)
-			l = openTestLog(t, dir, cfg, newFakeClock(), 0)
+			l = openTestLog(t, dir, cfg, newFakeClock(), 600)
 			defer l.close(t)
 			require.Equal(t, tt.wantLEO+2, l.LogEndOffset())
 			requireContiguous(t, readAll(t, l.Log, 0, tt.wantLEO+2), 0, tt.wantLEO+2)

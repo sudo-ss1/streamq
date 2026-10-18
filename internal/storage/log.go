@@ -24,7 +24,10 @@ type Log struct {
 	mu sync.Mutex // single writer; see the lock ordering in doc.go
 	// fsyncMu serializes every fsync with the failure check that follows it, so a Flush can never
 	// advance the recovery point between another fsync's error and its fail() call (D7).
-	fsyncMu  sync.Mutex
+	fsyncMu sync.Mutex
+	// truncGen counts truncations (bumped under fsyncMu); a flush that captured an older value
+	// must not advance the recovery point over the truncated range.
+	truncGen atomic.Uint64
 	segments atomic.Pointer[[]*segment]
 
 	logStartOffset atomic.Int64
@@ -226,12 +229,7 @@ func (l *Log) TruncateTo(ctx context.Context, offset int64) (int64, error) {
 	copy(keep, segs[:i+1])
 	removed := segs[i+1:]
 	// Lower the recovery point first: no flush may claim the data being removed.
-	for {
-		rp := l.recoveryPoint.Load()
-		if rp <= offset || l.recoveryPoint.CompareAndSwap(rp, offset) {
-			break
-		}
-	}
+	l.lowerRecoveryPoint(offset)
 	// Delete newest-first, making each deletion durable before the next, so a crash can never
 	// leave a gap between surviving segments (plan R7); then cut the containing segment.
 	l.segments.Store(&keep)
@@ -266,26 +264,31 @@ func (l *Log) TruncateFullyAndStartAt(ctx context.Context, offset int64) error {
 	if l.closed.Load() {
 		return ErrClosed
 	}
+	if l.failed.Load() {
+		return ErrLogFailed
+	}
+	l.lowerRecoveryPoint(0)
+	// Delete the old segments newest-first, each durably, before creating the new one: a crash
+	// in between leaves a prefix of the old log (or nothing), never an offset gap (D9).
+	old := l.loadSegments()
+	for i := len(old) - 1; i >= 0; i-- {
+		if err := old[i].deleteFiles(); err != nil {
+			return l.fail(fmt.Errorf("truncate fully: %w", err))
+		}
+		if err := syncDir(l.dir); err != nil {
+			return l.fail(fmt.Errorf("truncate fully: %w", err))
+		}
+	}
 	seg, err := createSegment(l.dir, offset, l.cfg, l.clock.Now())
 	if err != nil {
 		return l.fail(err)
 	}
-	old := l.loadSegments()
 	fresh := []*segment{seg}
 	l.logStartOffset.Store(offset)
 	l.segments.Store(&fresh)
 	l.leo.Store(offset)
 	l.recoveryPoint.Store(offset)
-	var errs []error
-	for _, s := range old {
-		if s.baseOffset != offset {
-			errs = append(errs, s.deleteFiles())
-		} else {
-			errs = append(errs, s.close()) // createSegment already replaced its files
-		}
-	}
-	errs = append(errs, syncDir(l.dir))
-	if err := errors.Join(errs...); err != nil {
+	if err := syncDir(l.dir); err != nil {
 		return l.fail(fmt.Errorf("truncate fully: %w", err))
 	}
 	return nil
@@ -404,12 +407,28 @@ func (l *Log) Flush(ctx context.Context) error {
 	}
 	leo := l.leo.Load()
 	segs := l.loadSegments()
+	gen := l.truncGen.Load()
 	l.mu.Unlock()
-	return l.flushTo(leo, segs)
+	return l.flushTo(leo, gen, segs)
 }
 
-// flushTo fsyncs segs holding data in [recoveryPoint, leo) and advances the recovery point.
-func (l *Log) flushTo(leo int64, segs []*segment) error {
+// lowerRecoveryPoint lowers the recovery point to at most offset and invalidates in-flight
+// flushes (a flush that captured the pre-truncation LEO must not raise it back). Caller holds mu.
+func (l *Log) lowerRecoveryPoint(offset int64) {
+	l.fsyncMu.Lock()
+	defer l.fsyncMu.Unlock()
+	l.truncGen.Add(1)
+	for {
+		rp := l.recoveryPoint.Load()
+		if rp <= offset || l.recoveryPoint.CompareAndSwap(rp, offset) {
+			return
+		}
+	}
+}
+
+// flushTo fsyncs segs holding data in [recoveryPoint, leo) and advances the recovery point,
+// unless a truncation happened since leo was captured (gen).
+func (l *Log) flushTo(leo int64, gen uint64, segs []*segment) error {
 	if l.failed.Load() {
 		return ErrLogFailed
 	}
@@ -438,6 +457,9 @@ func (l *Log) flushTo(leo int64, segs []*segment) error {
 	// reports a writeback error to only one fsync caller, so ours succeeding proves nothing (D7).
 	if l.failed.Load() {
 		return ErrLogFailed
+	}
+	if l.truncGen.Load() != gen {
+		return nil // truncated meanwhile: the captured LEO may no longer exist
 	}
 	for {
 		cur := l.recoveryPoint.Load()
@@ -542,7 +564,7 @@ func (l *Log) Close() error {
 	segs := l.loadSegments()
 	var errs []error
 	if !l.failed.Load() {
-		if err := l.flushTo(l.leo.Load(), segs); err != nil {
+		if err := l.flushTo(l.leo.Load(), l.truncGen.Load(), segs); err != nil {
 			errs = append(errs, err)
 		}
 	}
