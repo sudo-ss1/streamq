@@ -63,6 +63,12 @@ func TestModel(t *testing.T) {
 		{"wrong offset", []porcupine.Operation{
 			appendOp(0, "a", 0, 1, 0), appendOp(0, "b", 2, 3, 0),
 		}, porcupine.Illegal},
+		{"non-monotonic reads are allowed (prefix reads, D56)", []porcupine.Operation{
+			appendOp(0, "a", 0, 1, 0), appendOp(0, "b", 2, 3, 1), readOp(1, 4, 5, "a", "b"), readOp(1, 6, 7, "a"),
+		}, porcupine.Ok},
+		{"acknowledged offsets must respect real-time order", []porcupine.Operation{
+			appendOp(0, "a", 0, 1, 0), appendOp(0, "b", 2, 3, 2), appendOp(1, "c", 4, 5, 1),
+		}, porcupine.Illegal},
 		{"read regressing past an acknowledged value it saw", []porcupine.Operation{
 			appendOp(0, "a", 0, 1, 0), readOp(1, 2, 3, "a"), appendOp(0, "c", 4, 5, 1), readOp(1, 6, 7, "c"),
 		}, porcupine.Illegal},

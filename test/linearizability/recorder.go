@@ -213,7 +213,20 @@ func ReadAll(ctx context.Context, c streamqv1.StreamQServiceClient, topic string
 			return nil, &Anomaly{Offset: next, Err: "split batches: " + err.Error()}
 		}
 		before := next
-		for _, b := range batches {
+		for i, b := range batches {
+			// Batch structure (D56): a fetch returns the batch containing the fetch offset
+			// first, then contiguous batches. Anything else means overlapping, duplicated or
+			// backward offsets, which records would otherwise silently hide.
+			switch {
+			case i == 0 && (b.BaseOffset() > before || b.LastOffset() < before):
+				if b.BaseOffset() > before {
+					return nil, &Anomaly{Offset: before, Err: fmt.Sprintf("offset gap: first batch starts at %d", b.BaseOffset())}
+				}
+				return nil, &Anomaly{Offset: before, Err: fmt.Sprintf("first batch [%d, %d] ends below the fetch offset", b.BaseOffset(), b.LastOffset())}
+			case i > 0 && b.BaseOffset() != batches[i-1].LastOffset()+1:
+				return nil, &Anomaly{Offset: b.BaseOffset(), Err: fmt.Sprintf("overlapping or backward batch: base %d after a batch ending at %d",
+					b.BaseOffset(), batches[i-1].LastOffset())}
+			}
 			if _, err := record.Validate(b, len(b)); err != nil {
 				return nil, &Anomaly{Offset: b.BaseOffset(), Err: "invalid batch: " + err.Error()}
 			}

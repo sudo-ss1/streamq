@@ -56,6 +56,8 @@ func TestReadAll(t *testing.T) {
 		{"offset gap below the HW", fetchOnly{hw: 4, data: gapped}, nil, true, false},
 		{"corrupt batch", fetchOnly{hw: 3, data: corrupt}, nil, true, false},
 		{"no data below its own HW", fetchOnly{hw: 5, data: nil}, nil, true, false},
+		{"overlapping batch hides a record", fetchOnly{hw: 4, data: append(batchAt(t, 0, "a", "b", "c"), batchAt(t, 2, "X", "d")...)}, nil, true, false},
+		{"backward batch", fetchOnly{hw: 4, data: append(append(batchAt(t, 0, "a", "b"), batchAt(t, 2, "c")...), batchAt(t, 1, "x")...)}, nil, true, false},
 		{"API error has no effect", fetchOnly{code: streamqv1.ErrorCode_ERROR_CODE_NOT_LEADER}, nil, false, true},
 	}
 	for _, tt := range tests {
@@ -103,13 +105,23 @@ func (s scripted) Fetch(ctx context.Context, r *streamqv1.FetchRequest, o ...grp
 func TestReadAllAcrossFetches(t *testing.T) {
 	ctx := context.Background()
 	calls := 0
-	overlap := scripted{calls: &calls, resps: []fetchOnly{
-		{hw: 4, data: batchAt(t, 0, "a", "b")},
-		{hw: 4, data: append(batchAt(t, 0, "a", "b"), batchAt(t, 2, "c", "d")...)},
+	// The batch containing the fetch offset starts below it: earlier records are skipped.
+	containing := scripted{calls: &calls, resps: []fetchOnly{
+		{hw: 4, data: batchAt(t, 0, "a")},
+		{hw: 4, data: batchAt(t, 0, "a", "b", "c", "d")},
 	}}
-	got, err := ReadAll(ctx, overlap, "t", 0)
+	got, err := ReadAll(ctx, containing, "t", 0)
 	require.NoError(t, err)
 	require.Equal(t, []string{"a", "b", "c", "d"}, got)
+
+	calls = 0
+	var a *Anomaly
+	stale := scripted{calls: &calls, resps: []fetchOnly{
+		{hw: 4, data: batchAt(t, 0, "a", "b")},
+		{hw: 4, data: batchAt(t, 0, "a", "b")}, // entirely below fetch offset 2
+	}}
+	_, err = ReadAll(ctx, stale, "t", 0)
+	require.ErrorAs(t, err, &a)
 
 	calls = 0
 	hwDropped := scripted{calls: &calls, resps: []fetchOnly{
@@ -118,6 +130,5 @@ func TestReadAllAcrossFetches(t *testing.T) {
 	}}
 	_, err = ReadAll(ctx, hwDropped, "t", 0)
 	require.Error(t, err)
-	var a *Anomaly
 	require.NotErrorAs(t, err, &a, "a lower HW on a later response is not an integrity violation")
 }

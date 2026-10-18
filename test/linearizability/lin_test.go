@@ -111,11 +111,16 @@ func waitISR(t *testing.T, c *testnode.Cluster, cs *conns) {
 	}, 60*time.Second, 50*time.Millisecond, "partition healthy")
 }
 
-func currentLeader(t *testing.T, c *testnode.Cluster, cs *conns) int32 {
-	t.Helper()
+// leaderOf returns the partition's leader as seen by the first broker that answers, or -1.
+func leaderOf(c *testnode.Cluster, cs *conns) int32 {
 	for id := int32(1); id <= 3; id++ {
+		if c.Node(id) == nil {
+			continue
+		}
 		api, err := cs.get(c.Addr(id))
-		require.NoError(t, err)
+		if err != nil {
+			continue
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		resp, err := api.Metadata(ctx, &streamqv1.MetadataRequest{Topics: []string{topic}})
 		cancel()
@@ -123,8 +128,14 @@ func currentLeader(t *testing.T, c *testnode.Cluster, cs *conns) int32 {
 			return resp.GetTopics()[0].GetPartitions()[0].GetLeaderId()
 		}
 	}
-	t.Fatal("no broker answered metadata")
 	return -1
+}
+
+func currentLeader(t *testing.T, c *testnode.Cluster, cs *conns) int32 {
+	t.Helper()
+	l := leaderOf(c, cs)
+	require.NotEqual(t, int32(-1), l, "no broker answered metadata")
+	return l
 }
 
 // TestLinearizability (SPEC §9 M9, plan §1/R12): concurrent single-attempt acks=all appends and
@@ -190,17 +201,28 @@ func TestLinearizability(t *testing.T) {
 	waitOps := func(target int64) {
 		require.Eventually(t, func() bool { return done.Load() >= target }, 60*time.Second, 5*time.Millisecond)
 	}
+	leaderChanges := 0
 	for fault := range faults {
 		waitOps(done.Load() + faultEach)
-		victim := currentLeader(t, c, cs)
+		leaderBefore := currentLeader(t, c, cs)
+		victim := leaderBefore
 		if fault%2 == 1 || victim < 1 {
 			victim = int32(1 + frng.IntN(3))
 		}
 		t.Logf("fault %d: stop and restart broker %d (after %d ops)", fault+1, victim, done.Load())
 		c.Stop(victim)
+		if victim == leaderBefore {
+			// Stay down until another broker leads, so clients really fail over (review).
+			require.Eventually(t, func() bool {
+				l := leaderOf(c, cs)
+				return l > 0 && l != victim
+			}, 30*time.Second, 20*time.Millisecond, "leadership moved off broker %d", victim)
+			leaderChanges++
+		}
 		c.Restart(victim)
 		waitISR(t, c, cs)
 	}
+	require.Positive(t, leaderChanges, "at least one fault moved the leader")
 	waitOps(max(done.Load()+faultEach, totalOps))
 	stop()
 	require.NoError(t, g.Wait())
