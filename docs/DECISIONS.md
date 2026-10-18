@@ -20,3 +20,56 @@ buf, golangci-lint, protoc-gen-go and protoc-gen-go-grpc are installed at exact 
 contains only runtime and test dependencies. Versions are pinned in the `Makefile`; the
 golangci-lint version is duplicated in `.github/workflows/ci.yml` (which uses the official action)
 and must be bumped in both places.
+
+## D3. Index file format and validity (M1)
+
+Offset index entries are 8 bytes big-endian `(relativeOffset uint32, position uint32)` and map a
+batch's **baseOffset** to its file position. Time index entries are 12 bytes big-endian
+`(timestamp int64, relativeOffset uint32)`, where the timestamp is the largest batch maxTimestamp
+seen so far in the segment and the offset is the baseOffset of the batch where that maximum was
+first seen. Before a batch is written, both indexes get an entry if at least
+`index.interval.bytes` were written since the last one, so position 0 is never indexed. A time
+entry is written only if its timestamp is greater than the last one's and it is not all-zero.
+Index files are preallocated (sparse) to `MaxIndexBytes` (10 MiB, rounded down to the entry size)
+and trimmed on roll and close. On open, the valid entries are the leading run of entries that
+are not all-zero and strictly increase. Indexes of segments at or after the recovery point are
+always rebuilt from the log. Timestamp lookup uses the largest entry with timestamp strictly less
+than the target, then scans forward. This keeps the result exact when several batches share a
+timestamp.
+
+## D4. Time-based segment roll follows Kafka's `timeWaitedForRoll` (M1)
+
+A non-empty active segment rolls when `incomingBatch.maxTimestamp - firstBatch.maxTimestamp >
+segment.ms`, or, if the segment has no first-batch timestamp, when `now - segmentCreated >
+segment.ms`. Producers that send timestamp 0 or replay old data therefore don't cause a roll on
+every batch. Time-based retention compares each segment's largest timestamp with
+`now - retention.ms` and, like size retention, deletes only a contiguous prefix of old segments.
+
+## D5. Recovery requires contiguous offsets and canonical batches (M1)
+
+During recovery, each batch's baseOffset must equal the previous batch's next offset. Each batch
+must also pass full validation: CRC, canonical encoding and exact framing. The log is cut at the
+first batch that fails, and later segments are deleted. Gaps can't happen legitimately, since
+there is no compaction and retention only removes whole leading segments. Recovery never applies
+`max.message.bytes`, because the value may have been lowered after the data was written.
+
+## D6. Storage I/O methods take a context (M1)
+
+Exported storage methods that do I/O take `ctx` first, per the coding conventions, and return
+`ctx.Err()` before starting work. File I/O itself can't be interrupted.
+
+## D7. Delayed deletion without reader refcounts; sticky I/O failure (M1)
+
+Deleted segments are renamed `.deleted`, then closed and unlinked after `file.delete.delay.ms`.
+Reads are short, so a 60 s delay is enough without refcounting (Kafka makes the same choice).
+A reader that still hits a closed segment gets `ErrOffsetOutOfRange`, or `ErrClosed` if the
+whole log was closed. It never crashes, because index lookups hold the index RWMutex. If a write
+rollback or an fsync fails, the log enters a failed state and returns `ErrLogFailed` until it is
+reopened. Linux may drop dirty pages after a failed fsync, so continuing could advance the
+recovery point past lost data.
+
+## D8. File modes and gosec G304 (M1)
+
+Storage creates files with mode 0640 and directories with 0750, which satisfies gosec G301/G306.
+G304 (file path from a variable) is excluded for `internal/storage/` only: every path there is
+built from the configured data directory.
