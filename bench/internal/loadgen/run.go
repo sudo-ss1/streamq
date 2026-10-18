@@ -107,6 +107,14 @@ func Run(ctx context.Context, cfg Config, logger *slog.Logger) (res *Result, err
 	if res.Produce.Count == 0 {
 		reasons = append(reasons, "no record was acked in the window")
 	}
+	// A fault-free benchmark must have no produce errors or timeouts: they would distort the
+	// numbers, so the run is not valid (review).
+	if res.Produce.Timeouts > 0 {
+		reasons = append(reasons, fmt.Sprintf("%d records timed out", res.Produce.Timeouts))
+	}
+	if len(res.Produce.ErrorsByKind) > 0 {
+		reasons = append(reasons, fmt.Sprintf("produce errors: %v", res.Produce.ErrorsByKind))
+	}
 	res.Status, res.InvalidReasons = StatusOK, reasons
 	if len(reasons) > 0 {
 		res.Status = StatusInvalid

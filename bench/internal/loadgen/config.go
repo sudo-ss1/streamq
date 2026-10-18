@@ -27,7 +27,7 @@ const (
 
 // assumedMaxRate is the send rate assumed for disk estimates when -rate is 0 (as fast as
 // possible).
-const assumedMaxRate = 100_000
+const assumedMaxRate = 250_000
 
 // Client defaults set explicitly so every effective ProducerConfig value is known and reported
 // (DECISIONS D22, M10 plan R1).
@@ -314,7 +314,8 @@ func (c Config) ProducerConfig() client.ProducerConfig {
 func (c Config) DrainTimeout() time.Duration { return min(deliveryTimeout, maxDrain) }
 
 // EstimatedDiskBytes estimates the run's disk use as rate × record size × RF × (warmup +
-// duration), assuming assumedMaxRate msgs/s when -rate is 0 (M10 plan R14).
+// duration), assuming assumedMaxRate msgs/s when -rate is 0 (M10 plan R14). It is a heuristic
+// (max-rate throughput depends on the machine); runs measured up to ~163k msgs/s.
 func (c Config) EstimatedDiskBytes() int64 {
 	rate := int64(c.Rate)
 	if rate == 0 {

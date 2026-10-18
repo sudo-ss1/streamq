@@ -69,3 +69,20 @@ func TestSmokeInterrupted(t *testing.T) {
 	require.Positive(t, res.Produce.Count)
 	require.Less(t, res.Produce.WindowSeconds, 30.0)
 }
+
+// TestSmokeInProcessCluster exercises the 3-broker path: concurrent start, waiting for unfencing,
+// and the metadata-store stability check (review).
+func TestSmokeInProcessCluster(t *testing.T) {
+	cfg, err := Parse([]string{
+		"-cluster", "inprocess:3", "-duration", "1s", "-warmup", "500ms", "-producers", "1",
+		"-rate", "500", "-partitions", "3", "-data-dir", t.TempDir(),
+	}, os.Stderr)
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+	res, err := Run(ctx, cfg, slog.New(slog.DiscardHandler))
+	require.NoError(t, err)
+	require.Equal(t, StatusOK, res.Status, "reasons: %v", res.InvalidReasons)
+	require.Equal(t, "metadata-store", res.ClusterChecks.Source)
+	require.Positive(t, res.Produce.Count)
+}

@@ -76,4 +76,8 @@ Additional fields, added during implementation and accepted at integration:
 In-process single-node runs check stability through `admin-describe`. `internal/node` exposes no
 metadata store in single-node mode, and with RF 1 on one broker the leader and ISR cannot change.
 
+Signals: the first SIGINT/SIGTERM drains, closes and cleans up, printing partial results
+(INVALID). A second signal exits immediately and leaves the temporary data dir behind. Produce
+errors or timeouts also make a run INVALID.
+
 `bench/USAGE.md` is frozen: implementers must not edit it (M10 plan R15).

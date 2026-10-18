@@ -31,7 +31,7 @@ func run(args []string) int {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	context.AfterFunc(ctx, stop) // a second signal terminates immediately
+	context.AfterFunc(ctx, stop) // a second signal terminates immediately, skipping data-dir cleanup
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
 	res, err := loadgen.Run(ctx, cfg, logger)
