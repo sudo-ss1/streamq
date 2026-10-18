@@ -31,6 +31,7 @@ type MetadataCommand struct {
 	//
 	//	*MetadataCommand_CreateTopic
 	//	*MetadataCommand_DeleteTopic
+	//	*MetadataCommand_CommitOffsets
 	Cmd           isMetadataCommand_Cmd `protobuf_oneof:"cmd"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -105,6 +106,15 @@ func (x *MetadataCommand) GetDeleteTopic() *DeleteTopicCommand {
 	return nil
 }
 
+func (x *MetadataCommand) GetCommitOffsets() *CommitOffsetsCommand {
+	if x != nil {
+		if x, ok := x.Cmd.(*MetadataCommand_CommitOffsets); ok {
+			return x.CommitOffsets
+		}
+	}
+	return nil
+}
+
 type isMetadataCommand_Cmd interface {
 	isMetadataCommand_Cmd()
 }
@@ -117,9 +127,15 @@ type MetadataCommand_DeleteTopic struct {
 	DeleteTopic *DeleteTopicCommand `protobuf:"bytes,11,opt,name=delete_topic,json=deleteTopic,proto3,oneof"`
 }
 
+type MetadataCommand_CommitOffsets struct {
+	CommitOffsets *CommitOffsetsCommand `protobuf:"bytes,12,opt,name=commit_offsets,json=commitOffsets,proto3,oneof"`
+}
+
 func (*MetadataCommand_CreateTopic) isMetadataCommand_Cmd() {}
 
 func (*MetadataCommand_DeleteTopic) isMetadataCommand_Cmd() {}
+
+func (*MetadataCommand_CommitOffsets) isMetadataCommand_Cmd() {}
 
 type CreateTopicCommand struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
@@ -287,18 +303,72 @@ func (x *DeleteTopicCommand) GetName() string {
 	return ""
 }
 
+// CommitOffsetsCommand records a consumer group's committed offsets (SPEC §5).
+type CommitOffsetsCommand struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	GroupId       string                 `protobuf:"bytes,1,opt,name=group_id,json=groupId,proto3" json:"group_id,omitempty"`
+	Offsets       []*OffsetCommit        `protobuf:"bytes,2,rep,name=offsets,proto3" json:"offsets,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CommitOffsetsCommand) Reset() {
+	*x = CommitOffsetsCommand{}
+	mi := &file_v1_internal_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CommitOffsetsCommand) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CommitOffsetsCommand) ProtoMessage() {}
+
+func (x *CommitOffsetsCommand) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_internal_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CommitOffsetsCommand.ProtoReflect.Descriptor instead.
+func (*CommitOffsetsCommand) Descriptor() ([]byte, []int) {
+	return file_v1_internal_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *CommitOffsetsCommand) GetGroupId() string {
+	if x != nil {
+		return x.GroupId
+	}
+	return ""
+}
+
+func (x *CommitOffsetsCommand) GetOffsets() []*OffsetCommit {
+	if x != nil {
+		return x.Offsets
+	}
+	return nil
+}
+
 var File_v1_internal_proto protoreflect.FileDescriptor
 
 const file_v1_internal_proto_rawDesc = "" +
 	"\n" +
 	"\x11v1/internal.proto\x12\n" +
-	"streamq.v1\"\xdf\x01\n" +
+	"streamq.v1\x1a\x10v1/streamq.proto\"\xaa\x02\n" +
 	"\x0fMetadataCommand\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\x05R\aversion\x12!\n" +
 	"\ftimestamp_ms\x18\x02 \x01(\x03R\vtimestampMs\x12C\n" +
 	"\fcreate_topic\x18\n" +
 	" \x01(\v2\x1e.streamq.v1.CreateTopicCommandH\x00R\vcreateTopic\x12C\n" +
-	"\fdelete_topic\x18\v \x01(\v2\x1e.streamq.v1.DeleteTopicCommandH\x00R\vdeleteTopicB\x05\n" +
+	"\fdelete_topic\x18\v \x01(\v2\x1e.streamq.v1.DeleteTopicCommandH\x00R\vdeleteTopic\x12I\n" +
+	"\x0ecommit_offsets\x18\f \x01(\v2 .streamq.v1.CommitOffsetsCommandH\x00R\rcommitOffsetsB\x05\n" +
 	"\x03cmd\"\x87\x02\n" +
 	"\x12CreateTopicCommand\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12E\n" +
@@ -314,7 +384,10 @@ const file_v1_internal_proto_rawDesc = "" +
 	"\tpartition\x18\x01 \x01(\x05R\tpartition\x12\x1a\n" +
 	"\breplicas\x18\x02 \x03(\x05R\breplicas\"(\n" +
 	"\x12DeleteTopicCommand\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04nameB\x96\x01\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\"e\n" +
+	"\x14CommitOffsetsCommand\x12\x19\n" +
+	"\bgroup_id\x18\x01 \x01(\tR\agroupId\x122\n" +
+	"\aoffsets\x18\x02 \x03(\v2\x18.streamq.v1.OffsetCommitR\aoffsetsB\x96\x01\n" +
 	"\x0ecom.streamq.v1B\rInternalProtoP\x01Z,github.com/sudo-ss1/streamq/gen/v1;streamqv1\xa2\x02\x03SXX\xaa\x02\n" +
 	"Streamq.V1\xca\x02\n" +
 	"Streamq\\V1\xe2\x02\x16Streamq\\V1\\GPBMetadata\xea\x02\vStreamq::V1b\x06proto3"
@@ -331,24 +404,28 @@ func file_v1_internal_proto_rawDescGZIP() []byte {
 	return file_v1_internal_proto_rawDescData
 }
 
-var file_v1_internal_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_v1_internal_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_v1_internal_proto_goTypes = []any{
-	(*MetadataCommand)(nil),     // 0: streamq.v1.MetadataCommand
-	(*CreateTopicCommand)(nil),  // 1: streamq.v1.CreateTopicCommand
-	(*PartitionAssignment)(nil), // 2: streamq.v1.PartitionAssignment
-	(*DeleteTopicCommand)(nil),  // 3: streamq.v1.DeleteTopicCommand
-	nil,                         // 4: streamq.v1.CreateTopicCommand.ConfigsEntry
+	(*MetadataCommand)(nil),      // 0: streamq.v1.MetadataCommand
+	(*CreateTopicCommand)(nil),   // 1: streamq.v1.CreateTopicCommand
+	(*PartitionAssignment)(nil),  // 2: streamq.v1.PartitionAssignment
+	(*DeleteTopicCommand)(nil),   // 3: streamq.v1.DeleteTopicCommand
+	(*CommitOffsetsCommand)(nil), // 4: streamq.v1.CommitOffsetsCommand
+	nil,                          // 5: streamq.v1.CreateTopicCommand.ConfigsEntry
+	(*OffsetCommit)(nil),         // 6: streamq.v1.OffsetCommit
 }
 var file_v1_internal_proto_depIdxs = []int32{
 	1, // 0: streamq.v1.MetadataCommand.create_topic:type_name -> streamq.v1.CreateTopicCommand
 	3, // 1: streamq.v1.MetadataCommand.delete_topic:type_name -> streamq.v1.DeleteTopicCommand
-	4, // 2: streamq.v1.CreateTopicCommand.configs:type_name -> streamq.v1.CreateTopicCommand.ConfigsEntry
-	2, // 3: streamq.v1.CreateTopicCommand.partitions:type_name -> streamq.v1.PartitionAssignment
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	4, // 2: streamq.v1.MetadataCommand.commit_offsets:type_name -> streamq.v1.CommitOffsetsCommand
+	5, // 3: streamq.v1.CreateTopicCommand.configs:type_name -> streamq.v1.CreateTopicCommand.ConfigsEntry
+	2, // 4: streamq.v1.CreateTopicCommand.partitions:type_name -> streamq.v1.PartitionAssignment
+	6, // 5: streamq.v1.CommitOffsetsCommand.offsets:type_name -> streamq.v1.OffsetCommit
+	6, // [6:6] is the sub-list for method output_type
+	6, // [6:6] is the sub-list for method input_type
+	6, // [6:6] is the sub-list for extension type_name
+	6, // [6:6] is the sub-list for extension extendee
+	0, // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_v1_internal_proto_init() }
@@ -356,9 +433,11 @@ func file_v1_internal_proto_init() {
 	if File_v1_internal_proto != nil {
 		return
 	}
+	file_v1_streamq_proto_init()
 	file_v1_internal_proto_msgTypes[0].OneofWrappers = []any{
 		(*MetadataCommand_CreateTopic)(nil),
 		(*MetadataCommand_DeleteTopic)(nil),
+		(*MetadataCommand_CommitOffsets)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -366,7 +445,7 @@ func file_v1_internal_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_internal_proto_rawDesc), len(file_v1_internal_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

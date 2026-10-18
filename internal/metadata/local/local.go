@@ -132,6 +132,18 @@ func load(path string, self metadata.Broker) (*metadata.State, error) {
 	if st.Topics == nil {
 		st.Topics = make(map[string]*metadata.Topic)
 	}
+	if st.Groups == nil {
+		st.Groups = make(map[string]metadata.GroupOffsets) // pre-M4 files have no "groups" (D28)
+	}
+	for g, offs := range st.Groups {
+		for topic, parts := range offs {
+			for p, off := range parts {
+				if off < 0 || p < 0 {
+					return nil, fmt.Errorf("decode %s: group %q offset %d for %s/%d is invalid", FileName, g, off, topic, p)
+				}
+			}
+		}
+	}
 	for name, t := range st.Topics {
 		if t == nil || t.Name != name {
 			return nil, fmt.Errorf("decode metadata %s: malformed topic entry %q", path, name)

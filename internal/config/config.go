@@ -55,8 +55,11 @@ type Config struct {
 	BrokerSessionTimeoutMs    int64           `yaml:"broker_session_timeout_ms"`
 	GroupSessionTimeoutMs     int64           `yaml:"group_session_timeout_ms"`
 	GroupRebalanceTimeoutMs   int64           `yaml:"group_rebalance_timeout_ms"`
-	FileDeleteDelayMs         int64           `yaml:"file_delete_delay_ms"`
-	ProducerIDExpirationMs    int64           `yaml:"producer_id_expiration_ms"`
+	// GroupInitialRebalanceDelayMs delays the first rebalance of an empty group so consumers
+	// starting together join one generation (Kafka group.initial.rebalance.delay.ms; D25).
+	GroupInitialRebalanceDelayMs int64 `yaml:"group_initial_rebalance_delay_ms"`
+	FileDeleteDelayMs            int64 `yaml:"file_delete_delay_ms"`
+	ProducerIDExpirationMs       int64 `yaml:"producer_id_expiration_ms"`
 }
 
 // Default returns the SPEC §10 defaults.
@@ -82,13 +85,14 @@ func Default() Config {
 			FlushPolicy:       string(lc.FlushPolicy),
 			FlushMs:           lc.FlushMs,
 		},
-		ReplicaLagMaxMs:           10_000,
-		BrokerHeartbeatIntervalMs: 2_000,
-		BrokerSessionTimeoutMs:    9_000,
-		GroupSessionTimeoutMs:     10_000,
-		GroupRebalanceTimeoutMs:   30_000,
-		FileDeleteDelayMs:         60_000,
-		ProducerIDExpirationMs:    604_800_000,
+		ReplicaLagMaxMs:              10_000,
+		BrokerHeartbeatIntervalMs:    2_000,
+		BrokerSessionTimeoutMs:       9_000,
+		GroupSessionTimeoutMs:        10_000,
+		GroupRebalanceTimeoutMs:      30_000,
+		GroupInitialRebalanceDelayMs: 3_000,
+		FileDeleteDelayMs:            60_000,
+		ProducerIDExpirationMs:       604_800_000,
 	}
 }
 

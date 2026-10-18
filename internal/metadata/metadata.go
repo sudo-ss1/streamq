@@ -5,6 +5,7 @@ package metadata
 import (
 	"context"
 	"errors"
+	"maps"
 
 	streamqv1 "github.com/sudo-ss1/streamq/gen/v1"
 )
@@ -56,6 +57,28 @@ type Snapshot struct {
 	Brokers      []Broker
 	ControllerID int32
 	Topics       map[string]Topic
+	Groups       map[string]GroupOffsets // committed offsets per group
+}
+
+// GroupOffsets are a group's committed offsets: topic → partition → next offset to consume.
+type GroupOffsets map[string]map[int32]int64
+
+// Clone returns a deep copy.
+func (g GroupOffsets) Clone() GroupOffsets {
+	if g == nil {
+		return nil
+	}
+	out := make(GroupOffsets, len(g))
+	for t, ps := range g {
+		out[t] = maps.Clone(ps)
+	}
+	return out
+}
+
+// Committed returns the committed offset of group for topic/partition.
+func (s Snapshot) Committed(group, topic string, partition int32) (int64, bool) {
+	off, ok := s.Groups[group][topic][partition]
+	return off, ok
 }
 
 // Topic returns the named topic.
@@ -72,6 +95,7 @@ const (
 	TopicCreated ChangeKind = iota + 1
 	TopicDeleted
 	PartitionChanged
+	OffsetsCommitted
 )
 
 // Change describes one applied state change, delivered to subscribers in apply order.
@@ -81,6 +105,7 @@ type Change struct {
 	TopicID    string
 	Partitions []PartitionState  // created/changed partitions; for TopicDeleted, the deleted ones
 	Configs    map[string]string // topic configs (a copy); set for TopicCreated
+	Group      string            // group id; set for OffsetsCommitted
 }
 
 // Store is the metadata store (SPEC §2.2). Brokers and groups must not care which

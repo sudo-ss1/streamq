@@ -19,13 +19,22 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	StreamQService_CreateTopic_FullMethodName = "/streamq.v1.StreamQService/CreateTopic"
-	StreamQService_DeleteTopic_FullMethodName = "/streamq.v1.StreamQService/DeleteTopic"
-	StreamQService_ListTopics_FullMethodName  = "/streamq.v1.StreamQService/ListTopics"
-	StreamQService_Metadata_FullMethodName    = "/streamq.v1.StreamQService/Metadata"
-	StreamQService_Produce_FullMethodName     = "/streamq.v1.StreamQService/Produce"
-	StreamQService_Fetch_FullMethodName       = "/streamq.v1.StreamQService/Fetch"
-	StreamQService_ListOffsets_FullMethodName = "/streamq.v1.StreamQService/ListOffsets"
+	StreamQService_CreateTopic_FullMethodName     = "/streamq.v1.StreamQService/CreateTopic"
+	StreamQService_DeleteTopic_FullMethodName     = "/streamq.v1.StreamQService/DeleteTopic"
+	StreamQService_ListTopics_FullMethodName      = "/streamq.v1.StreamQService/ListTopics"
+	StreamQService_Metadata_FullMethodName        = "/streamq.v1.StreamQService/Metadata"
+	StreamQService_Produce_FullMethodName         = "/streamq.v1.StreamQService/Produce"
+	StreamQService_Fetch_FullMethodName           = "/streamq.v1.StreamQService/Fetch"
+	StreamQService_ListOffsets_FullMethodName     = "/streamq.v1.StreamQService/ListOffsets"
+	StreamQService_FindCoordinator_FullMethodName = "/streamq.v1.StreamQService/FindCoordinator"
+	StreamQService_JoinGroup_FullMethodName       = "/streamq.v1.StreamQService/JoinGroup"
+	StreamQService_SyncGroup_FullMethodName       = "/streamq.v1.StreamQService/SyncGroup"
+	StreamQService_Heartbeat_FullMethodName       = "/streamq.v1.StreamQService/Heartbeat"
+	StreamQService_LeaveGroup_FullMethodName      = "/streamq.v1.StreamQService/LeaveGroup"
+	StreamQService_CommitOffset_FullMethodName    = "/streamq.v1.StreamQService/CommitOffset"
+	StreamQService_FetchOffset_FullMethodName     = "/streamq.v1.StreamQService/FetchOffset"
+	StreamQService_ListGroups_FullMethodName      = "/streamq.v1.StreamQService/ListGroups"
+	StreamQService_DescribeGroup_FullMethodName   = "/streamq.v1.StreamQService/DescribeGroup"
 )
 
 // StreamQServiceClient is the client API for StreamQService service.
@@ -48,6 +57,24 @@ type StreamQServiceClient interface {
 	Fetch(ctx context.Context, in *FetchRequest, opts ...grpc.CallOption) (*FetchResponse, error)
 	// ListOffsets resolves earliest, latest or timestamp offsets.
 	ListOffsets(ctx context.Context, in *ListOffsetsRequest, opts ...grpc.CallOption) (*ListOffsetsResponse, error)
+	// FindCoordinator returns the coordinator of a consumer group (the controller, SPEC §5).
+	FindCoordinator(ctx context.Context, in *FindCoordinatorRequest, opts ...grpc.CallOption) (*FindCoordinatorResponse, error)
+	// JoinGroup joins or rejoins a group; it returns when the rebalance completes.
+	JoinGroup(ctx context.Context, in *JoinGroupRequest, opts ...grpc.CallOption) (*JoinGroupResponse, error)
+	// SyncGroup returns the member's assignment for the current generation.
+	SyncGroup(ctx context.Context, in *SyncGroupRequest, opts ...grpc.CallOption) (*SyncGroupResponse, error)
+	// Heartbeat keeps a member alive and reports pending rebalances.
+	Heartbeat(ctx context.Context, in *HeartbeatRequest, opts ...grpc.CallOption) (*HeartbeatResponse, error)
+	// LeaveGroup removes a member, triggering a rebalance.
+	LeaveGroup(ctx context.Context, in *LeaveGroupRequest, opts ...grpc.CallOption) (*LeaveGroupResponse, error)
+	// CommitOffset commits offsets for a group generation.
+	CommitOffset(ctx context.Context, in *CommitOffsetRequest, opts ...grpc.CallOption) (*CommitOffsetResponse, error)
+	// FetchOffset returns committed offsets.
+	FetchOffset(ctx context.Context, in *FetchOffsetRequest, opts ...grpc.CallOption) (*FetchOffsetResponse, error)
+	// ListGroups lists known groups.
+	ListGroups(ctx context.Context, in *ListGroupsRequest, opts ...grpc.CallOption) (*ListGroupsResponse, error)
+	// DescribeGroup describes a group's state, members and committed offsets.
+	DescribeGroup(ctx context.Context, in *DescribeGroupRequest, opts ...grpc.CallOption) (*DescribeGroupResponse, error)
 }
 
 type streamQServiceClient struct {
@@ -128,6 +155,96 @@ func (c *streamQServiceClient) ListOffsets(ctx context.Context, in *ListOffsetsR
 	return out, nil
 }
 
+func (c *streamQServiceClient) FindCoordinator(ctx context.Context, in *FindCoordinatorRequest, opts ...grpc.CallOption) (*FindCoordinatorResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(FindCoordinatorResponse)
+	err := c.cc.Invoke(ctx, StreamQService_FindCoordinator_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *streamQServiceClient) JoinGroup(ctx context.Context, in *JoinGroupRequest, opts ...grpc.CallOption) (*JoinGroupResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(JoinGroupResponse)
+	err := c.cc.Invoke(ctx, StreamQService_JoinGroup_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *streamQServiceClient) SyncGroup(ctx context.Context, in *SyncGroupRequest, opts ...grpc.CallOption) (*SyncGroupResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SyncGroupResponse)
+	err := c.cc.Invoke(ctx, StreamQService_SyncGroup_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *streamQServiceClient) Heartbeat(ctx context.Context, in *HeartbeatRequest, opts ...grpc.CallOption) (*HeartbeatResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(HeartbeatResponse)
+	err := c.cc.Invoke(ctx, StreamQService_Heartbeat_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *streamQServiceClient) LeaveGroup(ctx context.Context, in *LeaveGroupRequest, opts ...grpc.CallOption) (*LeaveGroupResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(LeaveGroupResponse)
+	err := c.cc.Invoke(ctx, StreamQService_LeaveGroup_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *streamQServiceClient) CommitOffset(ctx context.Context, in *CommitOffsetRequest, opts ...grpc.CallOption) (*CommitOffsetResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CommitOffsetResponse)
+	err := c.cc.Invoke(ctx, StreamQService_CommitOffset_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *streamQServiceClient) FetchOffset(ctx context.Context, in *FetchOffsetRequest, opts ...grpc.CallOption) (*FetchOffsetResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(FetchOffsetResponse)
+	err := c.cc.Invoke(ctx, StreamQService_FetchOffset_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *streamQServiceClient) ListGroups(ctx context.Context, in *ListGroupsRequest, opts ...grpc.CallOption) (*ListGroupsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListGroupsResponse)
+	err := c.cc.Invoke(ctx, StreamQService_ListGroups_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *streamQServiceClient) DescribeGroup(ctx context.Context, in *DescribeGroupRequest, opts ...grpc.CallOption) (*DescribeGroupResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DescribeGroupResponse)
+	err := c.cc.Invoke(ctx, StreamQService_DescribeGroup_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // StreamQServiceServer is the server API for StreamQService service.
 // All implementations must embed UnimplementedStreamQServiceServer
 // for forward compatibility.
@@ -148,6 +265,24 @@ type StreamQServiceServer interface {
 	Fetch(context.Context, *FetchRequest) (*FetchResponse, error)
 	// ListOffsets resolves earliest, latest or timestamp offsets.
 	ListOffsets(context.Context, *ListOffsetsRequest) (*ListOffsetsResponse, error)
+	// FindCoordinator returns the coordinator of a consumer group (the controller, SPEC §5).
+	FindCoordinator(context.Context, *FindCoordinatorRequest) (*FindCoordinatorResponse, error)
+	// JoinGroup joins or rejoins a group; it returns when the rebalance completes.
+	JoinGroup(context.Context, *JoinGroupRequest) (*JoinGroupResponse, error)
+	// SyncGroup returns the member's assignment for the current generation.
+	SyncGroup(context.Context, *SyncGroupRequest) (*SyncGroupResponse, error)
+	// Heartbeat keeps a member alive and reports pending rebalances.
+	Heartbeat(context.Context, *HeartbeatRequest) (*HeartbeatResponse, error)
+	// LeaveGroup removes a member, triggering a rebalance.
+	LeaveGroup(context.Context, *LeaveGroupRequest) (*LeaveGroupResponse, error)
+	// CommitOffset commits offsets for a group generation.
+	CommitOffset(context.Context, *CommitOffsetRequest) (*CommitOffsetResponse, error)
+	// FetchOffset returns committed offsets.
+	FetchOffset(context.Context, *FetchOffsetRequest) (*FetchOffsetResponse, error)
+	// ListGroups lists known groups.
+	ListGroups(context.Context, *ListGroupsRequest) (*ListGroupsResponse, error)
+	// DescribeGroup describes a group's state, members and committed offsets.
+	DescribeGroup(context.Context, *DescribeGroupRequest) (*DescribeGroupResponse, error)
 	mustEmbedUnimplementedStreamQServiceServer()
 }
 
@@ -178,6 +313,33 @@ func (UnimplementedStreamQServiceServer) Fetch(context.Context, *FetchRequest) (
 }
 func (UnimplementedStreamQServiceServer) ListOffsets(context.Context, *ListOffsetsRequest) (*ListOffsetsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListOffsets not implemented")
+}
+func (UnimplementedStreamQServiceServer) FindCoordinator(context.Context, *FindCoordinatorRequest) (*FindCoordinatorResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method FindCoordinator not implemented")
+}
+func (UnimplementedStreamQServiceServer) JoinGroup(context.Context, *JoinGroupRequest) (*JoinGroupResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method JoinGroup not implemented")
+}
+func (UnimplementedStreamQServiceServer) SyncGroup(context.Context, *SyncGroupRequest) (*SyncGroupResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SyncGroup not implemented")
+}
+func (UnimplementedStreamQServiceServer) Heartbeat(context.Context, *HeartbeatRequest) (*HeartbeatResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Heartbeat not implemented")
+}
+func (UnimplementedStreamQServiceServer) LeaveGroup(context.Context, *LeaveGroupRequest) (*LeaveGroupResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method LeaveGroup not implemented")
+}
+func (UnimplementedStreamQServiceServer) CommitOffset(context.Context, *CommitOffsetRequest) (*CommitOffsetResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CommitOffset not implemented")
+}
+func (UnimplementedStreamQServiceServer) FetchOffset(context.Context, *FetchOffsetRequest) (*FetchOffsetResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method FetchOffset not implemented")
+}
+func (UnimplementedStreamQServiceServer) ListGroups(context.Context, *ListGroupsRequest) (*ListGroupsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListGroups not implemented")
+}
+func (UnimplementedStreamQServiceServer) DescribeGroup(context.Context, *DescribeGroupRequest) (*DescribeGroupResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DescribeGroup not implemented")
 }
 func (UnimplementedStreamQServiceServer) mustEmbedUnimplementedStreamQServiceServer() {}
 func (UnimplementedStreamQServiceServer) testEmbeddedByValue()                        {}
@@ -326,6 +488,168 @@ func _StreamQService_ListOffsets_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _StreamQService_FindCoordinator_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FindCoordinatorRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(StreamQServiceServer).FindCoordinator(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: StreamQService_FindCoordinator_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(StreamQServiceServer).FindCoordinator(ctx, req.(*FindCoordinatorRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _StreamQService_JoinGroup_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(JoinGroupRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(StreamQServiceServer).JoinGroup(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: StreamQService_JoinGroup_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(StreamQServiceServer).JoinGroup(ctx, req.(*JoinGroupRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _StreamQService_SyncGroup_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SyncGroupRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(StreamQServiceServer).SyncGroup(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: StreamQService_SyncGroup_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(StreamQServiceServer).SyncGroup(ctx, req.(*SyncGroupRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _StreamQService_Heartbeat_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HeartbeatRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(StreamQServiceServer).Heartbeat(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: StreamQService_Heartbeat_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(StreamQServiceServer).Heartbeat(ctx, req.(*HeartbeatRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _StreamQService_LeaveGroup_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LeaveGroupRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(StreamQServiceServer).LeaveGroup(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: StreamQService_LeaveGroup_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(StreamQServiceServer).LeaveGroup(ctx, req.(*LeaveGroupRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _StreamQService_CommitOffset_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CommitOffsetRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(StreamQServiceServer).CommitOffset(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: StreamQService_CommitOffset_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(StreamQServiceServer).CommitOffset(ctx, req.(*CommitOffsetRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _StreamQService_FetchOffset_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FetchOffsetRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(StreamQServiceServer).FetchOffset(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: StreamQService_FetchOffset_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(StreamQServiceServer).FetchOffset(ctx, req.(*FetchOffsetRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _StreamQService_ListGroups_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListGroupsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(StreamQServiceServer).ListGroups(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: StreamQService_ListGroups_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(StreamQServiceServer).ListGroups(ctx, req.(*ListGroupsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _StreamQService_DescribeGroup_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DescribeGroupRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(StreamQServiceServer).DescribeGroup(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: StreamQService_DescribeGroup_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(StreamQServiceServer).DescribeGroup(ctx, req.(*DescribeGroupRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // StreamQService_ServiceDesc is the grpc.ServiceDesc for StreamQService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -360,6 +684,42 @@ var StreamQService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListOffsets",
 			Handler:    _StreamQService_ListOffsets_Handler,
+		},
+		{
+			MethodName: "FindCoordinator",
+			Handler:    _StreamQService_FindCoordinator_Handler,
+		},
+		{
+			MethodName: "JoinGroup",
+			Handler:    _StreamQService_JoinGroup_Handler,
+		},
+		{
+			MethodName: "SyncGroup",
+			Handler:    _StreamQService_SyncGroup_Handler,
+		},
+		{
+			MethodName: "Heartbeat",
+			Handler:    _StreamQService_Heartbeat_Handler,
+		},
+		{
+			MethodName: "LeaveGroup",
+			Handler:    _StreamQService_LeaveGroup_Handler,
+		},
+		{
+			MethodName: "CommitOffset",
+			Handler:    _StreamQService_CommitOffset_Handler,
+		},
+		{
+			MethodName: "FetchOffset",
+			Handler:    _StreamQService_FetchOffset_Handler,
+		},
+		{
+			MethodName: "ListGroups",
+			Handler:    _StreamQService_ListGroups_Handler,
+		},
+		{
+			MethodName: "DescribeGroup",
+			Handler:    _StreamQService_DescribeGroup_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -18,6 +18,8 @@ type State struct {
 	Brokers      []Broker          `json:"brokers"`
 	ControllerID int32             `json:"controller_id"`
 	Topics       map[string]*Topic `json:"topics"`
+	// Groups holds committed consumer group offsets (SPEC §5).
+	Groups map[string]GroupOffsets `json:"groups,omitempty"`
 }
 
 // NewState returns a state with the given registered brokers and controller.
@@ -26,6 +28,7 @@ func NewState(brokers []Broker, controllerID int32) *State {
 		Brokers:      slices.Clone(brokers),
 		ControllerID: controllerID,
 		Topics:       make(map[string]*Topic),
+		Groups:       make(map[string]GroupOffsets),
 	}
 }
 
@@ -35,6 +38,7 @@ func (s *State) Clone() *State {
 		Brokers:      slices.Clone(s.Brokers),
 		ControllerID: s.ControllerID,
 		Topics:       make(map[string]*Topic, len(s.Topics)),
+		Groups:       cloneGroups(s.Groups),
 	}
 	for name, t := range s.Topics {
 		ct := cloneTopic(*t)
@@ -43,12 +47,24 @@ func (s *State) Clone() *State {
 	return c
 }
 
+func cloneGroups(gs map[string]GroupOffsets) map[string]GroupOffsets {
+	if gs == nil {
+		return nil
+	}
+	out := make(map[string]GroupOffsets, len(gs))
+	for g, offs := range gs {
+		out[g] = offs.Clone()
+	}
+	return out
+}
+
 // Snapshot returns an immutable deep copy as a Snapshot.
 func (s *State) Snapshot() Snapshot {
 	snap := Snapshot{
 		Brokers:      slices.Clone(s.Brokers),
 		ControllerID: s.ControllerID,
 		Topics:       make(map[string]Topic, len(s.Topics)),
+		Groups:       cloneGroups(s.Groups),
 	}
 	for name, t := range s.Topics {
 		snap.Topics[name] = cloneTopic(*t)
@@ -78,8 +94,11 @@ func clonePartitions(ps []PartitionState) []PartitionState {
 // at least one partition numbered 0..n-1, and every partition's replicas must be distinct
 // registered brokers with the same count for all partitions (ErrInvalidReplicationFactor). New
 // partitions start with leader = replicas[0], leader epoch 0, ISR = replicas, partition epoch 0.
-// Delete: the topic must exist (ErrUnknownTopic). A version other than CommandVersion or an empty
-// command returns ErrInvalidCommand.
+// Delete: the topic must exist (ErrUnknownTopic); its committed offsets are dropped from every
+// group (DECISIONS D27). CommitOffsets: the group id must be non-empty and the offset list
+// non-empty, every partition must exist (ErrUnknownTopic) and every offset be >= 0
+// (ErrInvalidCommand). A version other than CommandVersion or an empty command returns
+// ErrInvalidCommand.
 func (s *State) Apply(cmd *streamqv1.MetadataCommand) ([]Change, error) {
 	if cmd == nil {
 		return nil, fmt.Errorf("nil command: %w", ErrInvalidCommand)
@@ -92,6 +111,8 @@ func (s *State) Apply(cmd *streamqv1.MetadataCommand) ([]Change, error) {
 		return s.applyCreate(c.CreateTopic)
 	case *streamqv1.MetadataCommand_DeleteTopic:
 		return s.applyDelete(c.DeleteTopic)
+	case *streamqv1.MetadataCommand_CommitOffsets:
+		return s.applyCommitOffsets(c.CommitOffsets)
 	default:
 		return nil, fmt.Errorf("empty command: %w", ErrInvalidCommand)
 	}
@@ -181,7 +202,44 @@ func (s *State) applyDelete(c *streamqv1.DeleteTopicCommand) ([]Change, error) {
 		return nil, fmt.Errorf("delete topic %q: %w", name, ErrUnknownTopic)
 	}
 	delete(s.Topics, name)
+	for g, offs := range s.Groups {
+		delete(offs, name)
+		if len(offs) == 0 {
+			delete(s.Groups, g)
+		}
+	}
 	return []Change{{Kind: TopicDeleted, Topic: name, TopicID: t.ID, Partitions: clonePartitions(t.Partitions)}}, nil
+}
+
+// applyCommitOffsets validates every offset before mutating, so an error leaves s unchanged.
+func (s *State) applyCommitOffsets(c *streamqv1.CommitOffsetsCommand) ([]Change, error) {
+	if c == nil || c.GetGroupId() == "" || len(c.GetOffsets()) == 0 {
+		return nil, fmt.Errorf("commit_offsets needs a group id and offsets: %w", ErrInvalidCommand)
+	}
+	for _, o := range c.GetOffsets() {
+		t, ok := s.Topics[o.GetTopic()]
+		if !ok || o.GetPartition() < 0 || int(o.GetPartition()) >= len(t.Partitions) {
+			return nil, fmt.Errorf("commit offset for %s/%d: %w", o.GetTopic(), o.GetPartition(), ErrUnknownTopic)
+		}
+		if o.GetOffset() < 0 {
+			return nil, fmt.Errorf("commit offset %d for %s/%d: %w", o.GetOffset(), o.GetTopic(), o.GetPartition(), ErrInvalidCommand)
+		}
+	}
+	if s.Groups == nil {
+		s.Groups = make(map[string]GroupOffsets)
+	}
+	offs := s.Groups[c.GetGroupId()]
+	if offs == nil {
+		offs = GroupOffsets{}
+		s.Groups[c.GetGroupId()] = offs
+	}
+	for _, o := range c.GetOffsets() {
+		if offs[o.GetTopic()] == nil {
+			offs[o.GetTopic()] = map[int32]int64{}
+		}
+		offs[o.GetTopic()][o.GetPartition()] = o.GetOffset()
+	}
+	return []Change{{Kind: OffsetsCommitted, Group: c.GetGroupId()}}, nil
 }
 
 // AssignReplicas assigns rf replicas to each of n partitions over brokerIDs, Kafka-style

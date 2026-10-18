@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package streamq.v1;
 
+import "v1/streamq.proto";
+
 // MetadataCommand is one versioned, deterministic metadata state change (SPEC §2.1). The local
 // store (M2) and the Raft FSM (M5) apply the same commands. Timestamps come in the command.
 message MetadataCommand {
@@ -10,6 +12,7 @@ message MetadataCommand {
   oneof cmd {
     CreateTopicCommand create_topic = 10;
     DeleteTopicCommand delete_topic = 11;
+    CommitOffsetsCommand commit_offsets = 12;
   }
 }
 
@@ -29,4 +32,10 @@ message PartitionAssignment {
 
 message DeleteTopicCommand {
   string name = 1;
+}
+
+// CommitOffsetsCommand records a consumer group's committed offsets (SPEC §5).
+message CommitOffsetsCommand {
+  string group_id = 1;
+  repeated OffsetCommit offsets = 2;
 }

@@ -46,6 +46,25 @@ service StreamQService {
   rpc Fetch(FetchRequest) returns (FetchResponse);
   // ListOffsets resolves earliest, latest or timestamp offsets.
   rpc ListOffsets(ListOffsetsRequest) returns (ListOffsetsResponse);
+
+  // FindCoordinator returns the coordinator of a consumer group (the controller, SPEC §5).
+  rpc FindCoordinator(FindCoordinatorRequest) returns (FindCoordinatorResponse);
+  // JoinGroup joins or rejoins a group; it returns when the rebalance completes.
+  rpc JoinGroup(JoinGroupRequest) returns (JoinGroupResponse);
+  // SyncGroup returns the member's assignment for the current generation.
+  rpc SyncGroup(SyncGroupRequest) returns (SyncGroupResponse);
+  // Heartbeat keeps a member alive and reports pending rebalances.
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+  // LeaveGroup removes a member, triggering a rebalance.
+  rpc LeaveGroup(LeaveGroupRequest) returns (LeaveGroupResponse);
+  // CommitOffset commits offsets for a group generation.
+  rpc CommitOffset(CommitOffsetRequest) returns (CommitOffsetResponse);
+  // FetchOffset returns committed offsets.
+  rpc FetchOffset(FetchOffsetRequest) returns (FetchOffsetResponse);
+  // ListGroups lists known groups.
+  rpc ListGroups(ListGroupsRequest) returns (ListGroupsResponse);
+  // DescribeGroup describes a group's state, members and committed offsets.
+  rpc DescribeGroup(DescribeGroupRequest) returns (DescribeGroupResponse);
 }
 
 message CreateTopicRequest {
@@ -237,4 +256,143 @@ message ListOffsetsTopicResponse {
 
 message ListOffsetsResponse {
   repeated ListOffsetsTopicResponse topics = 1;
+}
+
+message FindCoordinatorRequest {
+  string group_id = 1;
+}
+
+message FindCoordinatorResponse {
+  ErrorCode error_code = 1;
+  Broker coordinator = 2;
+  string error_message = 3;
+}
+
+message TopicPartitions {
+  string topic = 1;
+  repeated int32 partitions = 2;
+}
+
+message JoinGroupRequest {
+  string group_id = 1;
+  // Empty for a new member; the coordinator assigns one.
+  string member_id = 2;
+  int32 session_timeout_ms = 3;
+  int32 rebalance_timeout_ms = 4;
+  // Subscribed topics.
+  repeated string topics = 5;
+  // Supported assignors in preference order ("range", "roundrobin").
+  repeated string assignors = 6;
+}
+
+message JoinGroupResponse {
+  ErrorCode error_code = 1;
+  int32 generation_id = 2;
+  string member_id = 3;
+  string assignor = 4;
+  // The member's assignment, computed by the coordinator (SPEC §5).
+  repeated TopicPartitions assignment = 5;
+  string error_message = 6;
+}
+
+message SyncGroupRequest {
+  string group_id = 1;
+  string member_id = 2;
+  int32 generation_id = 3;
+}
+
+message SyncGroupResponse {
+  ErrorCode error_code = 1;
+  repeated TopicPartitions assignment = 2;
+  string error_message = 3;
+}
+
+message HeartbeatRequest {
+  string group_id = 1;
+  string member_id = 2;
+  int32 generation_id = 3;
+}
+
+message HeartbeatResponse {
+  ErrorCode error_code = 1;
+  string error_message = 2;
+}
+
+message LeaveGroupRequest {
+  string group_id = 1;
+  string member_id = 2;
+}
+
+message LeaveGroupResponse {
+  ErrorCode error_code = 1;
+  string error_message = 2;
+}
+
+message OffsetCommit {
+  string topic = 1;
+  int32 partition = 2;
+  int64 offset = 3;
+}
+
+message CommitOffsetRequest {
+  string group_id = 1;
+  // Empty with generation_id -1 for a standalone commit (group must have no members).
+  string member_id = 2;
+  int32 generation_id = 3;
+  repeated OffsetCommit offsets = 4;
+}
+
+message CommitOffsetResponse {
+  ErrorCode error_code = 1;
+  string error_message = 2;
+  // Per-partition results (request-level failures use error_code).
+  repeated OffsetCommitResult results = 3;
+}
+
+message FetchOffsetRequest {
+  string group_id = 1;
+  // Empty means every committed partition of the group.
+  repeated TopicPartitions partitions = 2;
+}
+
+message FetchOffsetResponse {
+  ErrorCode error_code = 1;
+  // offset is -1 for partitions without a committed offset.
+  repeated OffsetCommit offsets = 2;
+  string error_message = 3;
+}
+
+message ListGroupsRequest {}
+
+message ListGroupsResponse {
+  repeated string group_ids = 1;
+  ErrorCode error_code = 2;
+  string error_message = 3;
+}
+
+message OffsetCommitResult {
+  string topic = 1;
+  int32 partition = 2;
+  ErrorCode error_code = 3;
+}
+
+message DescribeGroupRequest {
+  string group_id = 1;
+}
+
+message GroupMember {
+  string member_id = 1;
+  repeated TopicPartitions assignment = 2;
+}
+
+message DescribeGroupResponse {
+  ErrorCode error_code = 1;
+  string group_id = 2;
+  // Empty, PreparingRebalance or Stable.
+  string state = 3;
+  int32 generation_id = 4;
+  string assignor = 5;
+  repeated GroupMember members = 6;
+  repeated OffsetCommit committed = 7;
+  string error_message = 8;
 }

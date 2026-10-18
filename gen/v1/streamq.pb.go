@@ -1884,6 +1884,1327 @@ func (x *ListOffsetsResponse) GetTopics() []*ListOffsetsTopicResponse {
 	return nil
 }
 
+type FindCoordinatorRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	GroupId       string                 `protobuf:"bytes,1,opt,name=group_id,json=groupId,proto3" json:"group_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FindCoordinatorRequest) Reset() {
+	*x = FindCoordinatorRequest{}
+	mi := &file_v1_streamq_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FindCoordinatorRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FindCoordinatorRequest) ProtoMessage() {}
+
+func (x *FindCoordinatorRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_streamq_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FindCoordinatorRequest.ProtoReflect.Descriptor instead.
+func (*FindCoordinatorRequest) Descriptor() ([]byte, []int) {
+	return file_v1_streamq_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *FindCoordinatorRequest) GetGroupId() string {
+	if x != nil {
+		return x.GroupId
+	}
+	return ""
+}
+
+type FindCoordinatorResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ErrorCode     ErrorCode              `protobuf:"varint,1,opt,name=error_code,json=errorCode,proto3,enum=streamq.v1.ErrorCode" json:"error_code,omitempty"`
+	Coordinator   *Broker                `protobuf:"bytes,2,opt,name=coordinator,proto3" json:"coordinator,omitempty"`
+	ErrorMessage  string                 `protobuf:"bytes,3,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FindCoordinatorResponse) Reset() {
+	*x = FindCoordinatorResponse{}
+	mi := &file_v1_streamq_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FindCoordinatorResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FindCoordinatorResponse) ProtoMessage() {}
+
+func (x *FindCoordinatorResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_streamq_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FindCoordinatorResponse.ProtoReflect.Descriptor instead.
+func (*FindCoordinatorResponse) Descriptor() ([]byte, []int) {
+	return file_v1_streamq_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *FindCoordinatorResponse) GetErrorCode() ErrorCode {
+	if x != nil {
+		return x.ErrorCode
+	}
+	return ErrorCode_ERROR_CODE_NONE
+}
+
+func (x *FindCoordinatorResponse) GetCoordinator() *Broker {
+	if x != nil {
+		return x.Coordinator
+	}
+	return nil
+}
+
+func (x *FindCoordinatorResponse) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
+type TopicPartitions struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Topic         string                 `protobuf:"bytes,1,opt,name=topic,proto3" json:"topic,omitempty"`
+	Partitions    []int32                `protobuf:"varint,2,rep,packed,name=partitions,proto3" json:"partitions,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TopicPartitions) Reset() {
+	*x = TopicPartitions{}
+	mi := &file_v1_streamq_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TopicPartitions) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TopicPartitions) ProtoMessage() {}
+
+func (x *TopicPartitions) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_streamq_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TopicPartitions.ProtoReflect.Descriptor instead.
+func (*TopicPartitions) Descriptor() ([]byte, []int) {
+	return file_v1_streamq_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *TopicPartitions) GetTopic() string {
+	if x != nil {
+		return x.Topic
+	}
+	return ""
+}
+
+func (x *TopicPartitions) GetPartitions() []int32 {
+	if x != nil {
+		return x.Partitions
+	}
+	return nil
+}
+
+type JoinGroupRequest struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	GroupId string                 `protobuf:"bytes,1,opt,name=group_id,json=groupId,proto3" json:"group_id,omitempty"`
+	// Empty for a new member; the coordinator assigns one.
+	MemberId           string `protobuf:"bytes,2,opt,name=member_id,json=memberId,proto3" json:"member_id,omitempty"`
+	SessionTimeoutMs   int32  `protobuf:"varint,3,opt,name=session_timeout_ms,json=sessionTimeoutMs,proto3" json:"session_timeout_ms,omitempty"`
+	RebalanceTimeoutMs int32  `protobuf:"varint,4,opt,name=rebalance_timeout_ms,json=rebalanceTimeoutMs,proto3" json:"rebalance_timeout_ms,omitempty"`
+	// Subscribed topics.
+	Topics []string `protobuf:"bytes,5,rep,name=topics,proto3" json:"topics,omitempty"`
+	// Supported assignors in preference order ("range", "roundrobin").
+	Assignors     []string `protobuf:"bytes,6,rep,name=assignors,proto3" json:"assignors,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *JoinGroupRequest) Reset() {
+	*x = JoinGroupRequest{}
+	mi := &file_v1_streamq_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *JoinGroupRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*JoinGroupRequest) ProtoMessage() {}
+
+func (x *JoinGroupRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_streamq_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use JoinGroupRequest.ProtoReflect.Descriptor instead.
+func (*JoinGroupRequest) Descriptor() ([]byte, []int) {
+	return file_v1_streamq_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *JoinGroupRequest) GetGroupId() string {
+	if x != nil {
+		return x.GroupId
+	}
+	return ""
+}
+
+func (x *JoinGroupRequest) GetMemberId() string {
+	if x != nil {
+		return x.MemberId
+	}
+	return ""
+}
+
+func (x *JoinGroupRequest) GetSessionTimeoutMs() int32 {
+	if x != nil {
+		return x.SessionTimeoutMs
+	}
+	return 0
+}
+
+func (x *JoinGroupRequest) GetRebalanceTimeoutMs() int32 {
+	if x != nil {
+		return x.RebalanceTimeoutMs
+	}
+	return 0
+}
+
+func (x *JoinGroupRequest) GetTopics() []string {
+	if x != nil {
+		return x.Topics
+	}
+	return nil
+}
+
+func (x *JoinGroupRequest) GetAssignors() []string {
+	if x != nil {
+		return x.Assignors
+	}
+	return nil
+}
+
+type JoinGroupResponse struct {
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	ErrorCode    ErrorCode              `protobuf:"varint,1,opt,name=error_code,json=errorCode,proto3,enum=streamq.v1.ErrorCode" json:"error_code,omitempty"`
+	GenerationId int32                  `protobuf:"varint,2,opt,name=generation_id,json=generationId,proto3" json:"generation_id,omitempty"`
+	MemberId     string                 `protobuf:"bytes,3,opt,name=member_id,json=memberId,proto3" json:"member_id,omitempty"`
+	Assignor     string                 `protobuf:"bytes,4,opt,name=assignor,proto3" json:"assignor,omitempty"`
+	// The member's assignment, computed by the coordinator (SPEC §5).
+	Assignment    []*TopicPartitions `protobuf:"bytes,5,rep,name=assignment,proto3" json:"assignment,omitempty"`
+	ErrorMessage  string             `protobuf:"bytes,6,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *JoinGroupResponse) Reset() {
+	*x = JoinGroupResponse{}
+	mi := &file_v1_streamq_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *JoinGroupResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*JoinGroupResponse) ProtoMessage() {}
+
+func (x *JoinGroupResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_streamq_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use JoinGroupResponse.ProtoReflect.Descriptor instead.
+func (*JoinGroupResponse) Descriptor() ([]byte, []int) {
+	return file_v1_streamq_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *JoinGroupResponse) GetErrorCode() ErrorCode {
+	if x != nil {
+		return x.ErrorCode
+	}
+	return ErrorCode_ERROR_CODE_NONE
+}
+
+func (x *JoinGroupResponse) GetGenerationId() int32 {
+	if x != nil {
+		return x.GenerationId
+	}
+	return 0
+}
+
+func (x *JoinGroupResponse) GetMemberId() string {
+	if x != nil {
+		return x.MemberId
+	}
+	return ""
+}
+
+func (x *JoinGroupResponse) GetAssignor() string {
+	if x != nil {
+		return x.Assignor
+	}
+	return ""
+}
+
+func (x *JoinGroupResponse) GetAssignment() []*TopicPartitions {
+	if x != nil {
+		return x.Assignment
+	}
+	return nil
+}
+
+func (x *JoinGroupResponse) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
+type SyncGroupRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	GroupId       string                 `protobuf:"bytes,1,opt,name=group_id,json=groupId,proto3" json:"group_id,omitempty"`
+	MemberId      string                 `protobuf:"bytes,2,opt,name=member_id,json=memberId,proto3" json:"member_id,omitempty"`
+	GenerationId  int32                  `protobuf:"varint,3,opt,name=generation_id,json=generationId,proto3" json:"generation_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SyncGroupRequest) Reset() {
+	*x = SyncGroupRequest{}
+	mi := &file_v1_streamq_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SyncGroupRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SyncGroupRequest) ProtoMessage() {}
+
+func (x *SyncGroupRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_streamq_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SyncGroupRequest.ProtoReflect.Descriptor instead.
+func (*SyncGroupRequest) Descriptor() ([]byte, []int) {
+	return file_v1_streamq_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *SyncGroupRequest) GetGroupId() string {
+	if x != nil {
+		return x.GroupId
+	}
+	return ""
+}
+
+func (x *SyncGroupRequest) GetMemberId() string {
+	if x != nil {
+		return x.MemberId
+	}
+	return ""
+}
+
+func (x *SyncGroupRequest) GetGenerationId() int32 {
+	if x != nil {
+		return x.GenerationId
+	}
+	return 0
+}
+
+type SyncGroupResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ErrorCode     ErrorCode              `protobuf:"varint,1,opt,name=error_code,json=errorCode,proto3,enum=streamq.v1.ErrorCode" json:"error_code,omitempty"`
+	Assignment    []*TopicPartitions     `protobuf:"bytes,2,rep,name=assignment,proto3" json:"assignment,omitempty"`
+	ErrorMessage  string                 `protobuf:"bytes,3,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SyncGroupResponse) Reset() {
+	*x = SyncGroupResponse{}
+	mi := &file_v1_streamq_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SyncGroupResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SyncGroupResponse) ProtoMessage() {}
+
+func (x *SyncGroupResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_streamq_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SyncGroupResponse.ProtoReflect.Descriptor instead.
+func (*SyncGroupResponse) Descriptor() ([]byte, []int) {
+	return file_v1_streamq_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *SyncGroupResponse) GetErrorCode() ErrorCode {
+	if x != nil {
+		return x.ErrorCode
+	}
+	return ErrorCode_ERROR_CODE_NONE
+}
+
+func (x *SyncGroupResponse) GetAssignment() []*TopicPartitions {
+	if x != nil {
+		return x.Assignment
+	}
+	return nil
+}
+
+func (x *SyncGroupResponse) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
+type HeartbeatRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	GroupId       string                 `protobuf:"bytes,1,opt,name=group_id,json=groupId,proto3" json:"group_id,omitempty"`
+	MemberId      string                 `protobuf:"bytes,2,opt,name=member_id,json=memberId,proto3" json:"member_id,omitempty"`
+	GenerationId  int32                  `protobuf:"varint,3,opt,name=generation_id,json=generationId,proto3" json:"generation_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HeartbeatRequest) Reset() {
+	*x = HeartbeatRequest{}
+	mi := &file_v1_streamq_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HeartbeatRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HeartbeatRequest) ProtoMessage() {}
+
+func (x *HeartbeatRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_streamq_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HeartbeatRequest.ProtoReflect.Descriptor instead.
+func (*HeartbeatRequest) Descriptor() ([]byte, []int) {
+	return file_v1_streamq_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *HeartbeatRequest) GetGroupId() string {
+	if x != nil {
+		return x.GroupId
+	}
+	return ""
+}
+
+func (x *HeartbeatRequest) GetMemberId() string {
+	if x != nil {
+		return x.MemberId
+	}
+	return ""
+}
+
+func (x *HeartbeatRequest) GetGenerationId() int32 {
+	if x != nil {
+		return x.GenerationId
+	}
+	return 0
+}
+
+type HeartbeatResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ErrorCode     ErrorCode              `protobuf:"varint,1,opt,name=error_code,json=errorCode,proto3,enum=streamq.v1.ErrorCode" json:"error_code,omitempty"`
+	ErrorMessage  string                 `protobuf:"bytes,2,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HeartbeatResponse) Reset() {
+	*x = HeartbeatResponse{}
+	mi := &file_v1_streamq_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HeartbeatResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HeartbeatResponse) ProtoMessage() {}
+
+func (x *HeartbeatResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_streamq_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HeartbeatResponse.ProtoReflect.Descriptor instead.
+func (*HeartbeatResponse) Descriptor() ([]byte, []int) {
+	return file_v1_streamq_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *HeartbeatResponse) GetErrorCode() ErrorCode {
+	if x != nil {
+		return x.ErrorCode
+	}
+	return ErrorCode_ERROR_CODE_NONE
+}
+
+func (x *HeartbeatResponse) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
+type LeaveGroupRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	GroupId       string                 `protobuf:"bytes,1,opt,name=group_id,json=groupId,proto3" json:"group_id,omitempty"`
+	MemberId      string                 `protobuf:"bytes,2,opt,name=member_id,json=memberId,proto3" json:"member_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LeaveGroupRequest) Reset() {
+	*x = LeaveGroupRequest{}
+	mi := &file_v1_streamq_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LeaveGroupRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LeaveGroupRequest) ProtoMessage() {}
+
+func (x *LeaveGroupRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_streamq_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LeaveGroupRequest.ProtoReflect.Descriptor instead.
+func (*LeaveGroupRequest) Descriptor() ([]byte, []int) {
+	return file_v1_streamq_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *LeaveGroupRequest) GetGroupId() string {
+	if x != nil {
+		return x.GroupId
+	}
+	return ""
+}
+
+func (x *LeaveGroupRequest) GetMemberId() string {
+	if x != nil {
+		return x.MemberId
+	}
+	return ""
+}
+
+type LeaveGroupResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ErrorCode     ErrorCode              `protobuf:"varint,1,opt,name=error_code,json=errorCode,proto3,enum=streamq.v1.ErrorCode" json:"error_code,omitempty"`
+	ErrorMessage  string                 `protobuf:"bytes,2,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LeaveGroupResponse) Reset() {
+	*x = LeaveGroupResponse{}
+	mi := &file_v1_streamq_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LeaveGroupResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LeaveGroupResponse) ProtoMessage() {}
+
+func (x *LeaveGroupResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_streamq_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LeaveGroupResponse.ProtoReflect.Descriptor instead.
+func (*LeaveGroupResponse) Descriptor() ([]byte, []int) {
+	return file_v1_streamq_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *LeaveGroupResponse) GetErrorCode() ErrorCode {
+	if x != nil {
+		return x.ErrorCode
+	}
+	return ErrorCode_ERROR_CODE_NONE
+}
+
+func (x *LeaveGroupResponse) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
+type OffsetCommit struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Topic         string                 `protobuf:"bytes,1,opt,name=topic,proto3" json:"topic,omitempty"`
+	Partition     int32                  `protobuf:"varint,2,opt,name=partition,proto3" json:"partition,omitempty"`
+	Offset        int64                  `protobuf:"varint,3,opt,name=offset,proto3" json:"offset,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OffsetCommit) Reset() {
+	*x = OffsetCommit{}
+	mi := &file_v1_streamq_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OffsetCommit) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OffsetCommit) ProtoMessage() {}
+
+func (x *OffsetCommit) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_streamq_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OffsetCommit.ProtoReflect.Descriptor instead.
+func (*OffsetCommit) Descriptor() ([]byte, []int) {
+	return file_v1_streamq_proto_rawDescGZIP(), []int{40}
+}
+
+func (x *OffsetCommit) GetTopic() string {
+	if x != nil {
+		return x.Topic
+	}
+	return ""
+}
+
+func (x *OffsetCommit) GetPartition() int32 {
+	if x != nil {
+		return x.Partition
+	}
+	return 0
+}
+
+func (x *OffsetCommit) GetOffset() int64 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+type CommitOffsetRequest struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	GroupId string                 `protobuf:"bytes,1,opt,name=group_id,json=groupId,proto3" json:"group_id,omitempty"`
+	// Empty with generation_id -1 for a standalone commit (group must have no members).
+	MemberId      string          `protobuf:"bytes,2,opt,name=member_id,json=memberId,proto3" json:"member_id,omitempty"`
+	GenerationId  int32           `protobuf:"varint,3,opt,name=generation_id,json=generationId,proto3" json:"generation_id,omitempty"`
+	Offsets       []*OffsetCommit `protobuf:"bytes,4,rep,name=offsets,proto3" json:"offsets,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CommitOffsetRequest) Reset() {
+	*x = CommitOffsetRequest{}
+	mi := &file_v1_streamq_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CommitOffsetRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CommitOffsetRequest) ProtoMessage() {}
+
+func (x *CommitOffsetRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_streamq_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CommitOffsetRequest.ProtoReflect.Descriptor instead.
+func (*CommitOffsetRequest) Descriptor() ([]byte, []int) {
+	return file_v1_streamq_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *CommitOffsetRequest) GetGroupId() string {
+	if x != nil {
+		return x.GroupId
+	}
+	return ""
+}
+
+func (x *CommitOffsetRequest) GetMemberId() string {
+	if x != nil {
+		return x.MemberId
+	}
+	return ""
+}
+
+func (x *CommitOffsetRequest) GetGenerationId() int32 {
+	if x != nil {
+		return x.GenerationId
+	}
+	return 0
+}
+
+func (x *CommitOffsetRequest) GetOffsets() []*OffsetCommit {
+	if x != nil {
+		return x.Offsets
+	}
+	return nil
+}
+
+type CommitOffsetResponse struct {
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	ErrorCode    ErrorCode              `protobuf:"varint,1,opt,name=error_code,json=errorCode,proto3,enum=streamq.v1.ErrorCode" json:"error_code,omitempty"`
+	ErrorMessage string                 `protobuf:"bytes,2,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	// Per-partition results (request-level failures use error_code).
+	Results       []*OffsetCommitResult `protobuf:"bytes,3,rep,name=results,proto3" json:"results,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CommitOffsetResponse) Reset() {
+	*x = CommitOffsetResponse{}
+	mi := &file_v1_streamq_proto_msgTypes[42]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CommitOffsetResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CommitOffsetResponse) ProtoMessage() {}
+
+func (x *CommitOffsetResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_streamq_proto_msgTypes[42]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CommitOffsetResponse.ProtoReflect.Descriptor instead.
+func (*CommitOffsetResponse) Descriptor() ([]byte, []int) {
+	return file_v1_streamq_proto_rawDescGZIP(), []int{42}
+}
+
+func (x *CommitOffsetResponse) GetErrorCode() ErrorCode {
+	if x != nil {
+		return x.ErrorCode
+	}
+	return ErrorCode_ERROR_CODE_NONE
+}
+
+func (x *CommitOffsetResponse) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
+func (x *CommitOffsetResponse) GetResults() []*OffsetCommitResult {
+	if x != nil {
+		return x.Results
+	}
+	return nil
+}
+
+type FetchOffsetRequest struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	GroupId string                 `protobuf:"bytes,1,opt,name=group_id,json=groupId,proto3" json:"group_id,omitempty"`
+	// Empty means every committed partition of the group.
+	Partitions    []*TopicPartitions `protobuf:"bytes,2,rep,name=partitions,proto3" json:"partitions,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FetchOffsetRequest) Reset() {
+	*x = FetchOffsetRequest{}
+	mi := &file_v1_streamq_proto_msgTypes[43]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FetchOffsetRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FetchOffsetRequest) ProtoMessage() {}
+
+func (x *FetchOffsetRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_streamq_proto_msgTypes[43]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FetchOffsetRequest.ProtoReflect.Descriptor instead.
+func (*FetchOffsetRequest) Descriptor() ([]byte, []int) {
+	return file_v1_streamq_proto_rawDescGZIP(), []int{43}
+}
+
+func (x *FetchOffsetRequest) GetGroupId() string {
+	if x != nil {
+		return x.GroupId
+	}
+	return ""
+}
+
+func (x *FetchOffsetRequest) GetPartitions() []*TopicPartitions {
+	if x != nil {
+		return x.Partitions
+	}
+	return nil
+}
+
+type FetchOffsetResponse struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	ErrorCode ErrorCode              `protobuf:"varint,1,opt,name=error_code,json=errorCode,proto3,enum=streamq.v1.ErrorCode" json:"error_code,omitempty"`
+	// offset is -1 for partitions without a committed offset.
+	Offsets       []*OffsetCommit `protobuf:"bytes,2,rep,name=offsets,proto3" json:"offsets,omitempty"`
+	ErrorMessage  string          `protobuf:"bytes,3,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FetchOffsetResponse) Reset() {
+	*x = FetchOffsetResponse{}
+	mi := &file_v1_streamq_proto_msgTypes[44]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FetchOffsetResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FetchOffsetResponse) ProtoMessage() {}
+
+func (x *FetchOffsetResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_streamq_proto_msgTypes[44]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FetchOffsetResponse.ProtoReflect.Descriptor instead.
+func (*FetchOffsetResponse) Descriptor() ([]byte, []int) {
+	return file_v1_streamq_proto_rawDescGZIP(), []int{44}
+}
+
+func (x *FetchOffsetResponse) GetErrorCode() ErrorCode {
+	if x != nil {
+		return x.ErrorCode
+	}
+	return ErrorCode_ERROR_CODE_NONE
+}
+
+func (x *FetchOffsetResponse) GetOffsets() []*OffsetCommit {
+	if x != nil {
+		return x.Offsets
+	}
+	return nil
+}
+
+func (x *FetchOffsetResponse) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
+type ListGroupsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListGroupsRequest) Reset() {
+	*x = ListGroupsRequest{}
+	mi := &file_v1_streamq_proto_msgTypes[45]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListGroupsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListGroupsRequest) ProtoMessage() {}
+
+func (x *ListGroupsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_streamq_proto_msgTypes[45]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListGroupsRequest.ProtoReflect.Descriptor instead.
+func (*ListGroupsRequest) Descriptor() ([]byte, []int) {
+	return file_v1_streamq_proto_rawDescGZIP(), []int{45}
+}
+
+type ListGroupsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	GroupIds      []string               `protobuf:"bytes,1,rep,name=group_ids,json=groupIds,proto3" json:"group_ids,omitempty"`
+	ErrorCode     ErrorCode              `protobuf:"varint,2,opt,name=error_code,json=errorCode,proto3,enum=streamq.v1.ErrorCode" json:"error_code,omitempty"`
+	ErrorMessage  string                 `protobuf:"bytes,3,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListGroupsResponse) Reset() {
+	*x = ListGroupsResponse{}
+	mi := &file_v1_streamq_proto_msgTypes[46]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListGroupsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListGroupsResponse) ProtoMessage() {}
+
+func (x *ListGroupsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_streamq_proto_msgTypes[46]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListGroupsResponse.ProtoReflect.Descriptor instead.
+func (*ListGroupsResponse) Descriptor() ([]byte, []int) {
+	return file_v1_streamq_proto_rawDescGZIP(), []int{46}
+}
+
+func (x *ListGroupsResponse) GetGroupIds() []string {
+	if x != nil {
+		return x.GroupIds
+	}
+	return nil
+}
+
+func (x *ListGroupsResponse) GetErrorCode() ErrorCode {
+	if x != nil {
+		return x.ErrorCode
+	}
+	return ErrorCode_ERROR_CODE_NONE
+}
+
+func (x *ListGroupsResponse) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
+type OffsetCommitResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Topic         string                 `protobuf:"bytes,1,opt,name=topic,proto3" json:"topic,omitempty"`
+	Partition     int32                  `protobuf:"varint,2,opt,name=partition,proto3" json:"partition,omitempty"`
+	ErrorCode     ErrorCode              `protobuf:"varint,3,opt,name=error_code,json=errorCode,proto3,enum=streamq.v1.ErrorCode" json:"error_code,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OffsetCommitResult) Reset() {
+	*x = OffsetCommitResult{}
+	mi := &file_v1_streamq_proto_msgTypes[47]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OffsetCommitResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OffsetCommitResult) ProtoMessage() {}
+
+func (x *OffsetCommitResult) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_streamq_proto_msgTypes[47]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OffsetCommitResult.ProtoReflect.Descriptor instead.
+func (*OffsetCommitResult) Descriptor() ([]byte, []int) {
+	return file_v1_streamq_proto_rawDescGZIP(), []int{47}
+}
+
+func (x *OffsetCommitResult) GetTopic() string {
+	if x != nil {
+		return x.Topic
+	}
+	return ""
+}
+
+func (x *OffsetCommitResult) GetPartition() int32 {
+	if x != nil {
+		return x.Partition
+	}
+	return 0
+}
+
+func (x *OffsetCommitResult) GetErrorCode() ErrorCode {
+	if x != nil {
+		return x.ErrorCode
+	}
+	return ErrorCode_ERROR_CODE_NONE
+}
+
+type DescribeGroupRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	GroupId       string                 `protobuf:"bytes,1,opt,name=group_id,json=groupId,proto3" json:"group_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DescribeGroupRequest) Reset() {
+	*x = DescribeGroupRequest{}
+	mi := &file_v1_streamq_proto_msgTypes[48]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DescribeGroupRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DescribeGroupRequest) ProtoMessage() {}
+
+func (x *DescribeGroupRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_streamq_proto_msgTypes[48]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DescribeGroupRequest.ProtoReflect.Descriptor instead.
+func (*DescribeGroupRequest) Descriptor() ([]byte, []int) {
+	return file_v1_streamq_proto_rawDescGZIP(), []int{48}
+}
+
+func (x *DescribeGroupRequest) GetGroupId() string {
+	if x != nil {
+		return x.GroupId
+	}
+	return ""
+}
+
+type GroupMember struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	MemberId      string                 `protobuf:"bytes,1,opt,name=member_id,json=memberId,proto3" json:"member_id,omitempty"`
+	Assignment    []*TopicPartitions     `protobuf:"bytes,2,rep,name=assignment,proto3" json:"assignment,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GroupMember) Reset() {
+	*x = GroupMember{}
+	mi := &file_v1_streamq_proto_msgTypes[49]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GroupMember) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GroupMember) ProtoMessage() {}
+
+func (x *GroupMember) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_streamq_proto_msgTypes[49]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GroupMember.ProtoReflect.Descriptor instead.
+func (*GroupMember) Descriptor() ([]byte, []int) {
+	return file_v1_streamq_proto_rawDescGZIP(), []int{49}
+}
+
+func (x *GroupMember) GetMemberId() string {
+	if x != nil {
+		return x.MemberId
+	}
+	return ""
+}
+
+func (x *GroupMember) GetAssignment() []*TopicPartitions {
+	if x != nil {
+		return x.Assignment
+	}
+	return nil
+}
+
+type DescribeGroupResponse struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	ErrorCode ErrorCode              `protobuf:"varint,1,opt,name=error_code,json=errorCode,proto3,enum=streamq.v1.ErrorCode" json:"error_code,omitempty"`
+	GroupId   string                 `protobuf:"bytes,2,opt,name=group_id,json=groupId,proto3" json:"group_id,omitempty"`
+	// Empty, PreparingRebalance or Stable.
+	State         string          `protobuf:"bytes,3,opt,name=state,proto3" json:"state,omitempty"`
+	GenerationId  int32           `protobuf:"varint,4,opt,name=generation_id,json=generationId,proto3" json:"generation_id,omitempty"`
+	Assignor      string          `protobuf:"bytes,5,opt,name=assignor,proto3" json:"assignor,omitempty"`
+	Members       []*GroupMember  `protobuf:"bytes,6,rep,name=members,proto3" json:"members,omitempty"`
+	Committed     []*OffsetCommit `protobuf:"bytes,7,rep,name=committed,proto3" json:"committed,omitempty"`
+	ErrorMessage  string          `protobuf:"bytes,8,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DescribeGroupResponse) Reset() {
+	*x = DescribeGroupResponse{}
+	mi := &file_v1_streamq_proto_msgTypes[50]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DescribeGroupResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DescribeGroupResponse) ProtoMessage() {}
+
+func (x *DescribeGroupResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_streamq_proto_msgTypes[50]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DescribeGroupResponse.ProtoReflect.Descriptor instead.
+func (*DescribeGroupResponse) Descriptor() ([]byte, []int) {
+	return file_v1_streamq_proto_rawDescGZIP(), []int{50}
+}
+
+func (x *DescribeGroupResponse) GetErrorCode() ErrorCode {
+	if x != nil {
+		return x.ErrorCode
+	}
+	return ErrorCode_ERROR_CODE_NONE
+}
+
+func (x *DescribeGroupResponse) GetGroupId() string {
+	if x != nil {
+		return x.GroupId
+	}
+	return ""
+}
+
+func (x *DescribeGroupResponse) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *DescribeGroupResponse) GetGenerationId() int32 {
+	if x != nil {
+		return x.GenerationId
+	}
+	return 0
+}
+
+func (x *DescribeGroupResponse) GetAssignor() string {
+	if x != nil {
+		return x.Assignor
+	}
+	return ""
+}
+
+func (x *DescribeGroupResponse) GetMembers() []*GroupMember {
+	if x != nil {
+		return x.Members
+	}
+	return nil
+}
+
+func (x *DescribeGroupResponse) GetCommitted() []*OffsetCommit {
+	if x != nil {
+		return x.Committed
+	}
+	return nil
+}
+
+func (x *DescribeGroupResponse) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
 var File_v1_streamq_proto protoreflect.FileDescriptor
 
 const file_v1_streamq_proto_rawDesc = "" +
@@ -2030,7 +3351,114 @@ const file_v1_streamq_proto_rawDesc = "" +
 	"partitions\x18\x02 \x03(\v2(.streamq.v1.ListOffsetsPartitionResponseR\n" +
 	"partitions\"S\n" +
 	"\x13ListOffsetsResponse\x12<\n" +
-	"\x06topics\x18\x01 \x03(\v2$.streamq.v1.ListOffsetsTopicResponseR\x06topics*\xf1\x05\n" +
+	"\x06topics\x18\x01 \x03(\v2$.streamq.v1.ListOffsetsTopicResponseR\x06topics\"3\n" +
+	"\x16FindCoordinatorRequest\x12\x19\n" +
+	"\bgroup_id\x18\x01 \x01(\tR\agroupId\"\xaa\x01\n" +
+	"\x17FindCoordinatorResponse\x124\n" +
+	"\n" +
+	"error_code\x18\x01 \x01(\x0e2\x15.streamq.v1.ErrorCodeR\terrorCode\x124\n" +
+	"\vcoordinator\x18\x02 \x01(\v2\x12.streamq.v1.BrokerR\vcoordinator\x12#\n" +
+	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\"G\n" +
+	"\x0fTopicPartitions\x12\x14\n" +
+	"\x05topic\x18\x01 \x01(\tR\x05topic\x12\x1e\n" +
+	"\n" +
+	"partitions\x18\x02 \x03(\x05R\n" +
+	"partitions\"\xe0\x01\n" +
+	"\x10JoinGroupRequest\x12\x19\n" +
+	"\bgroup_id\x18\x01 \x01(\tR\agroupId\x12\x1b\n" +
+	"\tmember_id\x18\x02 \x01(\tR\bmemberId\x12,\n" +
+	"\x12session_timeout_ms\x18\x03 \x01(\x05R\x10sessionTimeoutMs\x120\n" +
+	"\x14rebalance_timeout_ms\x18\x04 \x01(\x05R\x12rebalanceTimeoutMs\x12\x16\n" +
+	"\x06topics\x18\x05 \x03(\tR\x06topics\x12\x1c\n" +
+	"\tassignors\x18\x06 \x03(\tR\tassignors\"\x89\x02\n" +
+	"\x11JoinGroupResponse\x124\n" +
+	"\n" +
+	"error_code\x18\x01 \x01(\x0e2\x15.streamq.v1.ErrorCodeR\terrorCode\x12#\n" +
+	"\rgeneration_id\x18\x02 \x01(\x05R\fgenerationId\x12\x1b\n" +
+	"\tmember_id\x18\x03 \x01(\tR\bmemberId\x12\x1a\n" +
+	"\bassignor\x18\x04 \x01(\tR\bassignor\x12;\n" +
+	"\n" +
+	"assignment\x18\x05 \x03(\v2\x1b.streamq.v1.TopicPartitionsR\n" +
+	"assignment\x12#\n" +
+	"\rerror_message\x18\x06 \x01(\tR\ferrorMessage\"o\n" +
+	"\x10SyncGroupRequest\x12\x19\n" +
+	"\bgroup_id\x18\x01 \x01(\tR\agroupId\x12\x1b\n" +
+	"\tmember_id\x18\x02 \x01(\tR\bmemberId\x12#\n" +
+	"\rgeneration_id\x18\x03 \x01(\x05R\fgenerationId\"\xab\x01\n" +
+	"\x11SyncGroupResponse\x124\n" +
+	"\n" +
+	"error_code\x18\x01 \x01(\x0e2\x15.streamq.v1.ErrorCodeR\terrorCode\x12;\n" +
+	"\n" +
+	"assignment\x18\x02 \x03(\v2\x1b.streamq.v1.TopicPartitionsR\n" +
+	"assignment\x12#\n" +
+	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\"o\n" +
+	"\x10HeartbeatRequest\x12\x19\n" +
+	"\bgroup_id\x18\x01 \x01(\tR\agroupId\x12\x1b\n" +
+	"\tmember_id\x18\x02 \x01(\tR\bmemberId\x12#\n" +
+	"\rgeneration_id\x18\x03 \x01(\x05R\fgenerationId\"n\n" +
+	"\x11HeartbeatResponse\x124\n" +
+	"\n" +
+	"error_code\x18\x01 \x01(\x0e2\x15.streamq.v1.ErrorCodeR\terrorCode\x12#\n" +
+	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\"K\n" +
+	"\x11LeaveGroupRequest\x12\x19\n" +
+	"\bgroup_id\x18\x01 \x01(\tR\agroupId\x12\x1b\n" +
+	"\tmember_id\x18\x02 \x01(\tR\bmemberId\"o\n" +
+	"\x12LeaveGroupResponse\x124\n" +
+	"\n" +
+	"error_code\x18\x01 \x01(\x0e2\x15.streamq.v1.ErrorCodeR\terrorCode\x12#\n" +
+	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\"Z\n" +
+	"\fOffsetCommit\x12\x14\n" +
+	"\x05topic\x18\x01 \x01(\tR\x05topic\x12\x1c\n" +
+	"\tpartition\x18\x02 \x01(\x05R\tpartition\x12\x16\n" +
+	"\x06offset\x18\x03 \x01(\x03R\x06offset\"\xa6\x01\n" +
+	"\x13CommitOffsetRequest\x12\x19\n" +
+	"\bgroup_id\x18\x01 \x01(\tR\agroupId\x12\x1b\n" +
+	"\tmember_id\x18\x02 \x01(\tR\bmemberId\x12#\n" +
+	"\rgeneration_id\x18\x03 \x01(\x05R\fgenerationId\x122\n" +
+	"\aoffsets\x18\x04 \x03(\v2\x18.streamq.v1.OffsetCommitR\aoffsets\"\xab\x01\n" +
+	"\x14CommitOffsetResponse\x124\n" +
+	"\n" +
+	"error_code\x18\x01 \x01(\x0e2\x15.streamq.v1.ErrorCodeR\terrorCode\x12#\n" +
+	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\x128\n" +
+	"\aresults\x18\x03 \x03(\v2\x1e.streamq.v1.OffsetCommitResultR\aresults\"l\n" +
+	"\x12FetchOffsetRequest\x12\x19\n" +
+	"\bgroup_id\x18\x01 \x01(\tR\agroupId\x12;\n" +
+	"\n" +
+	"partitions\x18\x02 \x03(\v2\x1b.streamq.v1.TopicPartitionsR\n" +
+	"partitions\"\xa4\x01\n" +
+	"\x13FetchOffsetResponse\x124\n" +
+	"\n" +
+	"error_code\x18\x01 \x01(\x0e2\x15.streamq.v1.ErrorCodeR\terrorCode\x122\n" +
+	"\aoffsets\x18\x02 \x03(\v2\x18.streamq.v1.OffsetCommitR\aoffsets\x12#\n" +
+	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\"\x13\n" +
+	"\x11ListGroupsRequest\"\x8c\x01\n" +
+	"\x12ListGroupsResponse\x12\x1b\n" +
+	"\tgroup_ids\x18\x01 \x03(\tR\bgroupIds\x124\n" +
+	"\n" +
+	"error_code\x18\x02 \x01(\x0e2\x15.streamq.v1.ErrorCodeR\terrorCode\x12#\n" +
+	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\"~\n" +
+	"\x12OffsetCommitResult\x12\x14\n" +
+	"\x05topic\x18\x01 \x01(\tR\x05topic\x12\x1c\n" +
+	"\tpartition\x18\x02 \x01(\x05R\tpartition\x124\n" +
+	"\n" +
+	"error_code\x18\x03 \x01(\x0e2\x15.streamq.v1.ErrorCodeR\terrorCode\"1\n" +
+	"\x14DescribeGroupRequest\x12\x19\n" +
+	"\bgroup_id\x18\x01 \x01(\tR\agroupId\"g\n" +
+	"\vGroupMember\x12\x1b\n" +
+	"\tmember_id\x18\x01 \x01(\tR\bmemberId\x12;\n" +
+	"\n" +
+	"assignment\x18\x02 \x03(\v2\x1b.streamq.v1.TopicPartitionsR\n" +
+	"assignment\"\xcf\x02\n" +
+	"\x15DescribeGroupResponse\x124\n" +
+	"\n" +
+	"error_code\x18\x01 \x01(\x0e2\x15.streamq.v1.ErrorCodeR\terrorCode\x12\x19\n" +
+	"\bgroup_id\x18\x02 \x01(\tR\agroupId\x12\x14\n" +
+	"\x05state\x18\x03 \x01(\tR\x05state\x12#\n" +
+	"\rgeneration_id\x18\x04 \x01(\x05R\fgenerationId\x12\x1a\n" +
+	"\bassignor\x18\x05 \x01(\tR\bassignor\x121\n" +
+	"\amembers\x18\x06 \x03(\v2\x17.streamq.v1.GroupMemberR\amembers\x126\n" +
+	"\tcommitted\x18\a \x03(\v2\x18.streamq.v1.OffsetCommitR\tcommitted\x12#\n" +
+	"\rerror_message\x18\b \x01(\tR\ferrorMessage*\xf1\x05\n" +
 	"\tErrorCode\x12\x13\n" +
 	"\x0fERROR_CODE_NONE\x10\x00\x12)\n" +
 	"%ERROR_CODE_UNKNOWN_TOPIC_OR_PARTITION\x10\x01\x12#\n" +
@@ -2059,7 +3487,7 @@ const file_v1_streamq_proto_rawDesc = "" +
 	"\x10ACKS_UNSPECIFIED\x10\x00\x12\r\n" +
 	"\tACKS_NONE\x10\x01\x12\x0f\n" +
 	"\vACKS_LEADER\x10\x02\x12\f\n" +
-	"\bACKS_ALL\x10\x032\x96\x04\n" +
+	"\bACKS_ALL\x10\x032\xe3\t\n" +
 	"\x0eStreamQService\x12N\n" +
 	"\vCreateTopic\x12\x1e.streamq.v1.CreateTopicRequest\x1a\x1f.streamq.v1.CreateTopicResponse\x12N\n" +
 	"\vDeleteTopic\x12\x1e.streamq.v1.DeleteTopicRequest\x1a\x1f.streamq.v1.DeleteTopicResponse\x12K\n" +
@@ -2068,7 +3496,18 @@ const file_v1_streamq_proto_rawDesc = "" +
 	"\bMetadata\x12\x1b.streamq.v1.MetadataRequest\x1a\x1c.streamq.v1.MetadataResponse\x12B\n" +
 	"\aProduce\x12\x1a.streamq.v1.ProduceRequest\x1a\x1b.streamq.v1.ProduceResponse\x12<\n" +
 	"\x05Fetch\x12\x18.streamq.v1.FetchRequest\x1a\x19.streamq.v1.FetchResponse\x12N\n" +
-	"\vListOffsets\x12\x1e.streamq.v1.ListOffsetsRequest\x1a\x1f.streamq.v1.ListOffsetsResponseB\x95\x01\n" +
+	"\vListOffsets\x12\x1e.streamq.v1.ListOffsetsRequest\x1a\x1f.streamq.v1.ListOffsetsResponse\x12Z\n" +
+	"\x0fFindCoordinator\x12\".streamq.v1.FindCoordinatorRequest\x1a#.streamq.v1.FindCoordinatorResponse\x12H\n" +
+	"\tJoinGroup\x12\x1c.streamq.v1.JoinGroupRequest\x1a\x1d.streamq.v1.JoinGroupResponse\x12H\n" +
+	"\tSyncGroup\x12\x1c.streamq.v1.SyncGroupRequest\x1a\x1d.streamq.v1.SyncGroupResponse\x12H\n" +
+	"\tHeartbeat\x12\x1c.streamq.v1.HeartbeatRequest\x1a\x1d.streamq.v1.HeartbeatResponse\x12K\n" +
+	"\n" +
+	"LeaveGroup\x12\x1d.streamq.v1.LeaveGroupRequest\x1a\x1e.streamq.v1.LeaveGroupResponse\x12Q\n" +
+	"\fCommitOffset\x12\x1f.streamq.v1.CommitOffsetRequest\x1a .streamq.v1.CommitOffsetResponse\x12N\n" +
+	"\vFetchOffset\x12\x1e.streamq.v1.FetchOffsetRequest\x1a\x1f.streamq.v1.FetchOffsetResponse\x12K\n" +
+	"\n" +
+	"ListGroups\x12\x1d.streamq.v1.ListGroupsRequest\x1a\x1e.streamq.v1.ListGroupsResponse\x12T\n" +
+	"\rDescribeGroup\x12 .streamq.v1.DescribeGroupRequest\x1a!.streamq.v1.DescribeGroupResponseB\x95\x01\n" +
 	"\x0ecom.streamq.v1B\fStreamqProtoP\x01Z,github.com/sudo-ss1/streamq/gen/v1;streamqv1\xa2\x02\x03SXX\xaa\x02\n" +
 	"Streamq.V1\xca\x02\n" +
 	"Streamq\\V1\xe2\x02\x16Streamq\\V1\\GPBMetadata\xea\x02\vStreamq::V1b\x06proto3"
@@ -2086,7 +3525,7 @@ func file_v1_streamq_proto_rawDescGZIP() []byte {
 }
 
 var file_v1_streamq_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_v1_streamq_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
+var file_v1_streamq_proto_msgTypes = make([]protoimpl.MessageInfo, 53)
 var file_v1_streamq_proto_goTypes = []any{
 	(ErrorCode)(0),                       // 0: streamq.v1.ErrorCode
 	(Acks)(0),                            // 1: streamq.v1.Acks
@@ -2119,17 +3558,39 @@ var file_v1_streamq_proto_goTypes = []any{
 	(*ListOffsetsPartitionResponse)(nil), // 28: streamq.v1.ListOffsetsPartitionResponse
 	(*ListOffsetsTopicResponse)(nil),     // 29: streamq.v1.ListOffsetsTopicResponse
 	(*ListOffsetsResponse)(nil),          // 30: streamq.v1.ListOffsetsResponse
-	nil,                                  // 31: streamq.v1.CreateTopicRequest.ConfigsEntry
-	nil,                                  // 32: streamq.v1.TopicMetadata.ConfigsEntry
+	(*FindCoordinatorRequest)(nil),       // 31: streamq.v1.FindCoordinatorRequest
+	(*FindCoordinatorResponse)(nil),      // 32: streamq.v1.FindCoordinatorResponse
+	(*TopicPartitions)(nil),              // 33: streamq.v1.TopicPartitions
+	(*JoinGroupRequest)(nil),             // 34: streamq.v1.JoinGroupRequest
+	(*JoinGroupResponse)(nil),            // 35: streamq.v1.JoinGroupResponse
+	(*SyncGroupRequest)(nil),             // 36: streamq.v1.SyncGroupRequest
+	(*SyncGroupResponse)(nil),            // 37: streamq.v1.SyncGroupResponse
+	(*HeartbeatRequest)(nil),             // 38: streamq.v1.HeartbeatRequest
+	(*HeartbeatResponse)(nil),            // 39: streamq.v1.HeartbeatResponse
+	(*LeaveGroupRequest)(nil),            // 40: streamq.v1.LeaveGroupRequest
+	(*LeaveGroupResponse)(nil),           // 41: streamq.v1.LeaveGroupResponse
+	(*OffsetCommit)(nil),                 // 42: streamq.v1.OffsetCommit
+	(*CommitOffsetRequest)(nil),          // 43: streamq.v1.CommitOffsetRequest
+	(*CommitOffsetResponse)(nil),         // 44: streamq.v1.CommitOffsetResponse
+	(*FetchOffsetRequest)(nil),           // 45: streamq.v1.FetchOffsetRequest
+	(*FetchOffsetResponse)(nil),          // 46: streamq.v1.FetchOffsetResponse
+	(*ListGroupsRequest)(nil),            // 47: streamq.v1.ListGroupsRequest
+	(*ListGroupsResponse)(nil),           // 48: streamq.v1.ListGroupsResponse
+	(*OffsetCommitResult)(nil),           // 49: streamq.v1.OffsetCommitResult
+	(*DescribeGroupRequest)(nil),         // 50: streamq.v1.DescribeGroupRequest
+	(*GroupMember)(nil),                  // 51: streamq.v1.GroupMember
+	(*DescribeGroupResponse)(nil),        // 52: streamq.v1.DescribeGroupResponse
+	nil,                                  // 53: streamq.v1.CreateTopicRequest.ConfigsEntry
+	nil,                                  // 54: streamq.v1.TopicMetadata.ConfigsEntry
 }
 var file_v1_streamq_proto_depIdxs = []int32{
-	31, // 0: streamq.v1.CreateTopicRequest.configs:type_name -> streamq.v1.CreateTopicRequest.ConfigsEntry
+	53, // 0: streamq.v1.CreateTopicRequest.configs:type_name -> streamq.v1.CreateTopicRequest.ConfigsEntry
 	0,  // 1: streamq.v1.CreateTopicResponse.error_code:type_name -> streamq.v1.ErrorCode
 	0,  // 2: streamq.v1.DeleteTopicResponse.error_code:type_name -> streamq.v1.ErrorCode
 	0,  // 3: streamq.v1.PartitionMetadata.error_code:type_name -> streamq.v1.ErrorCode
 	0,  // 4: streamq.v1.TopicMetadata.error_code:type_name -> streamq.v1.ErrorCode
 	10, // 5: streamq.v1.TopicMetadata.partitions:type_name -> streamq.v1.PartitionMetadata
-	32, // 6: streamq.v1.TopicMetadata.configs:type_name -> streamq.v1.TopicMetadata.ConfigsEntry
+	54, // 6: streamq.v1.TopicMetadata.configs:type_name -> streamq.v1.TopicMetadata.ConfigsEntry
 	9,  // 7: streamq.v1.MetadataResponse.brokers:type_name -> streamq.v1.Broker
 	11, // 8: streamq.v1.MetadataResponse.topics:type_name -> streamq.v1.TopicMetadata
 	13, // 9: streamq.v1.ProduceTopic.partitions:type_name -> streamq.v1.ProducePartition
@@ -2148,25 +3609,63 @@ var file_v1_streamq_proto_depIdxs = []int32{
 	0,  // 22: streamq.v1.ListOffsetsPartitionResponse.error_code:type_name -> streamq.v1.ErrorCode
 	28, // 23: streamq.v1.ListOffsetsTopicResponse.partitions:type_name -> streamq.v1.ListOffsetsPartitionResponse
 	29, // 24: streamq.v1.ListOffsetsResponse.topics:type_name -> streamq.v1.ListOffsetsTopicResponse
-	2,  // 25: streamq.v1.StreamQService.CreateTopic:input_type -> streamq.v1.CreateTopicRequest
-	4,  // 26: streamq.v1.StreamQService.DeleteTopic:input_type -> streamq.v1.DeleteTopicRequest
-	6,  // 27: streamq.v1.StreamQService.ListTopics:input_type -> streamq.v1.ListTopicsRequest
-	8,  // 28: streamq.v1.StreamQService.Metadata:input_type -> streamq.v1.MetadataRequest
-	15, // 29: streamq.v1.StreamQService.Produce:input_type -> streamq.v1.ProduceRequest
-	21, // 30: streamq.v1.StreamQService.Fetch:input_type -> streamq.v1.FetchRequest
-	27, // 31: streamq.v1.StreamQService.ListOffsets:input_type -> streamq.v1.ListOffsetsRequest
-	3,  // 32: streamq.v1.StreamQService.CreateTopic:output_type -> streamq.v1.CreateTopicResponse
-	5,  // 33: streamq.v1.StreamQService.DeleteTopic:output_type -> streamq.v1.DeleteTopicResponse
-	7,  // 34: streamq.v1.StreamQService.ListTopics:output_type -> streamq.v1.ListTopicsResponse
-	12, // 35: streamq.v1.StreamQService.Metadata:output_type -> streamq.v1.MetadataResponse
-	18, // 36: streamq.v1.StreamQService.Produce:output_type -> streamq.v1.ProduceResponse
-	24, // 37: streamq.v1.StreamQService.Fetch:output_type -> streamq.v1.FetchResponse
-	30, // 38: streamq.v1.StreamQService.ListOffsets:output_type -> streamq.v1.ListOffsetsResponse
-	32, // [32:39] is the sub-list for method output_type
-	25, // [25:32] is the sub-list for method input_type
-	25, // [25:25] is the sub-list for extension type_name
-	25, // [25:25] is the sub-list for extension extendee
-	0,  // [0:25] is the sub-list for field type_name
+	0,  // 25: streamq.v1.FindCoordinatorResponse.error_code:type_name -> streamq.v1.ErrorCode
+	9,  // 26: streamq.v1.FindCoordinatorResponse.coordinator:type_name -> streamq.v1.Broker
+	0,  // 27: streamq.v1.JoinGroupResponse.error_code:type_name -> streamq.v1.ErrorCode
+	33, // 28: streamq.v1.JoinGroupResponse.assignment:type_name -> streamq.v1.TopicPartitions
+	0,  // 29: streamq.v1.SyncGroupResponse.error_code:type_name -> streamq.v1.ErrorCode
+	33, // 30: streamq.v1.SyncGroupResponse.assignment:type_name -> streamq.v1.TopicPartitions
+	0,  // 31: streamq.v1.HeartbeatResponse.error_code:type_name -> streamq.v1.ErrorCode
+	0,  // 32: streamq.v1.LeaveGroupResponse.error_code:type_name -> streamq.v1.ErrorCode
+	42, // 33: streamq.v1.CommitOffsetRequest.offsets:type_name -> streamq.v1.OffsetCommit
+	0,  // 34: streamq.v1.CommitOffsetResponse.error_code:type_name -> streamq.v1.ErrorCode
+	49, // 35: streamq.v1.CommitOffsetResponse.results:type_name -> streamq.v1.OffsetCommitResult
+	33, // 36: streamq.v1.FetchOffsetRequest.partitions:type_name -> streamq.v1.TopicPartitions
+	0,  // 37: streamq.v1.FetchOffsetResponse.error_code:type_name -> streamq.v1.ErrorCode
+	42, // 38: streamq.v1.FetchOffsetResponse.offsets:type_name -> streamq.v1.OffsetCommit
+	0,  // 39: streamq.v1.ListGroupsResponse.error_code:type_name -> streamq.v1.ErrorCode
+	0,  // 40: streamq.v1.OffsetCommitResult.error_code:type_name -> streamq.v1.ErrorCode
+	33, // 41: streamq.v1.GroupMember.assignment:type_name -> streamq.v1.TopicPartitions
+	0,  // 42: streamq.v1.DescribeGroupResponse.error_code:type_name -> streamq.v1.ErrorCode
+	51, // 43: streamq.v1.DescribeGroupResponse.members:type_name -> streamq.v1.GroupMember
+	42, // 44: streamq.v1.DescribeGroupResponse.committed:type_name -> streamq.v1.OffsetCommit
+	2,  // 45: streamq.v1.StreamQService.CreateTopic:input_type -> streamq.v1.CreateTopicRequest
+	4,  // 46: streamq.v1.StreamQService.DeleteTopic:input_type -> streamq.v1.DeleteTopicRequest
+	6,  // 47: streamq.v1.StreamQService.ListTopics:input_type -> streamq.v1.ListTopicsRequest
+	8,  // 48: streamq.v1.StreamQService.Metadata:input_type -> streamq.v1.MetadataRequest
+	15, // 49: streamq.v1.StreamQService.Produce:input_type -> streamq.v1.ProduceRequest
+	21, // 50: streamq.v1.StreamQService.Fetch:input_type -> streamq.v1.FetchRequest
+	27, // 51: streamq.v1.StreamQService.ListOffsets:input_type -> streamq.v1.ListOffsetsRequest
+	31, // 52: streamq.v1.StreamQService.FindCoordinator:input_type -> streamq.v1.FindCoordinatorRequest
+	34, // 53: streamq.v1.StreamQService.JoinGroup:input_type -> streamq.v1.JoinGroupRequest
+	36, // 54: streamq.v1.StreamQService.SyncGroup:input_type -> streamq.v1.SyncGroupRequest
+	38, // 55: streamq.v1.StreamQService.Heartbeat:input_type -> streamq.v1.HeartbeatRequest
+	40, // 56: streamq.v1.StreamQService.LeaveGroup:input_type -> streamq.v1.LeaveGroupRequest
+	43, // 57: streamq.v1.StreamQService.CommitOffset:input_type -> streamq.v1.CommitOffsetRequest
+	45, // 58: streamq.v1.StreamQService.FetchOffset:input_type -> streamq.v1.FetchOffsetRequest
+	47, // 59: streamq.v1.StreamQService.ListGroups:input_type -> streamq.v1.ListGroupsRequest
+	50, // 60: streamq.v1.StreamQService.DescribeGroup:input_type -> streamq.v1.DescribeGroupRequest
+	3,  // 61: streamq.v1.StreamQService.CreateTopic:output_type -> streamq.v1.CreateTopicResponse
+	5,  // 62: streamq.v1.StreamQService.DeleteTopic:output_type -> streamq.v1.DeleteTopicResponse
+	7,  // 63: streamq.v1.StreamQService.ListTopics:output_type -> streamq.v1.ListTopicsResponse
+	12, // 64: streamq.v1.StreamQService.Metadata:output_type -> streamq.v1.MetadataResponse
+	18, // 65: streamq.v1.StreamQService.Produce:output_type -> streamq.v1.ProduceResponse
+	24, // 66: streamq.v1.StreamQService.Fetch:output_type -> streamq.v1.FetchResponse
+	30, // 67: streamq.v1.StreamQService.ListOffsets:output_type -> streamq.v1.ListOffsetsResponse
+	32, // 68: streamq.v1.StreamQService.FindCoordinator:output_type -> streamq.v1.FindCoordinatorResponse
+	35, // 69: streamq.v1.StreamQService.JoinGroup:output_type -> streamq.v1.JoinGroupResponse
+	37, // 70: streamq.v1.StreamQService.SyncGroup:output_type -> streamq.v1.SyncGroupResponse
+	39, // 71: streamq.v1.StreamQService.Heartbeat:output_type -> streamq.v1.HeartbeatResponse
+	41, // 72: streamq.v1.StreamQService.LeaveGroup:output_type -> streamq.v1.LeaveGroupResponse
+	44, // 73: streamq.v1.StreamQService.CommitOffset:output_type -> streamq.v1.CommitOffsetResponse
+	46, // 74: streamq.v1.StreamQService.FetchOffset:output_type -> streamq.v1.FetchOffsetResponse
+	48, // 75: streamq.v1.StreamQService.ListGroups:output_type -> streamq.v1.ListGroupsResponse
+	52, // 76: streamq.v1.StreamQService.DescribeGroup:output_type -> streamq.v1.DescribeGroupResponse
+	61, // [61:77] is the sub-list for method output_type
+	45, // [45:61] is the sub-list for method input_type
+	45, // [45:45] is the sub-list for extension type_name
+	45, // [45:45] is the sub-list for extension extendee
+	0,  // [0:45] is the sub-list for field type_name
 }
 
 func init() { file_v1_streamq_proto_init() }
@@ -2180,7 +3679,7 @@ func file_v1_streamq_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_streamq_proto_rawDesc), len(file_v1_streamq_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   31,
+			NumMessages:   53,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

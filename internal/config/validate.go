@@ -75,6 +75,9 @@ func (c Config) Validate() error {
 	if c.FileDeleteDelayMs < 0 {
 		add("file_delete_delay_ms %d must be >= 0", c.FileDeleteDelayMs)
 	}
+	if c.GroupInitialRebalanceDelayMs < 0 || c.GroupInitialRebalanceDelayMs > c.GroupRebalanceTimeoutMs {
+		add("group_initial_rebalance_delay_ms %d must be in [0, group_rebalance_timeout_ms]", c.GroupInitialRebalanceDelayMs)
+	}
 
 	errs = append(errs, c.validateCluster()...)
 

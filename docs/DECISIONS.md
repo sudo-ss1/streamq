@@ -203,3 +203,45 @@ multi-record batch with `MESSAGE_TOO_LARGE`, the producer splits it in half and 
 back at the head of the partition queue (Kafka's `splitAndReenqueue`), recursing as needed. Order
 is preserved because only one batch is in flight. Only a single-record batch fails with
 `ErrMessageTooLarge`.
+
+## D25. Consumer group protocol: server-side assignment with Kafka's state machine (M4)
+
+The coordinator computes assignments (SPEC §5) using range or round-robin. The chosen assignor is
+the first one in the earliest-joined member's list that every member supports. Group states:
+- Empty;
+- PreparingRebalance: completes when every member has rejoined, or at the rebalance timeout.
+  Members parked in Join are kept alive; other members still expire;
+- Stable.
+
+Completion is atomic under the coordinator lock, so there is no CompletingRebalance state.
+Commits from the current generation are accepted in PreparingRebalance and Stable (Kafka). A new
+group waits `group_initial_rebalance_delay_ms` (new key, default 3 s, Kafka's
+`group.initial.rebalance.delay.ms`), restarted per joiner but capped by the rebalance timeout.
+`group_session_timeout_ms` is the default and maximum session timeout: larger requests are
+clamped rather than rejected, because §7.3 has no INVALID_SESSION_TIMEOUT.
+`group_rebalance_timeout_ms` is the default rebalance timeout. Topic creation or deletion for a
+subscribed topic triggers a rebalance. A Join abandoned by its client removes a member that the
+same request created.
+
+## D26. Standalone commits only for groups without members (M4)
+
+A commit with generation -1 and no member id is accepted only when the group has no members, as
+in Kafka. Otherwise it gets UNKNOWN_MEMBER_ID.
+
+## D27. Deleting a topic deletes its committed offsets (M4)
+
+`DeleteTopic` removes the topic's committed offsets from every group, and drops groups left with
+no offsets. A recreated topic never resumes from stale offsets.
+
+## D28. `metadata.json` gains `groups` (M4; additive on-disk change, approved by the plan-reviewer)
+
+The local store persists committed offsets as `groups: {group: {topic: {"partition": offset}}}`.
+Older files without the key load with no offsets. Negative offsets are rejected on load.
+
+## D29. Extra group RPCs and per-partition commit results (M4)
+
+`ListGroups` and `DescribeGroup` go beyond SPEC §7.1; they back `streamqctl groups list`,
+`describe` and `lag` (FR11). `CommitOffsetResponse.results` reports per-partition errors (Kafka
+shape), so a deleted topic does not fail the commits of other partitions. Empty group ids and
+unknown or no common assignors are invalid requests (gRPC InvalidArgument). A stopped coordinator
+answers NOT_COORDINATOR.
