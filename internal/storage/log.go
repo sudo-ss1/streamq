@@ -54,6 +54,9 @@ type AppendInfo struct {
 	FirstOffset  int64
 	LastOffset   int64
 	MaxTimestamp int64
+	// RolledAt is the base offset of the segment this append rolled to (it equals FirstOffset),
+	// or -1 if the append did not roll. Producer-state snapshots are written at roll points.
+	RolledAt int64
 }
 
 // ReadResult is the result of a Read. Data holds zero or more whole batches.
@@ -125,20 +128,36 @@ func (l *Log) fail(err error) error {
 // Append validates b, assigns its offsets starting at the LEO and stamps leaderEpoch, both in
 // place in b, and appends it. With FlushAlways it is fsynced before Append returns.
 func (l *Log) Append(ctx context.Context, b record.Batch, leaderEpoch int32) (AppendInfo, error) {
-	if err := ctx.Err(); err != nil {
+	batch, err := l.ValidateForAppend(b)
+	if err != nil {
 		return AppendInfo{}, err
 	}
+	return l.AppendValidated(ctx, batch, leaderEpoch)
+}
+
+// ValidateForAppend checks a client batch as Append does (length, CRC, canonical form,
+// max.message.bytes, timestamp) without appending it, so callers can inspect its header safely
+// before appending it with AppendValidated (M7 plan R3).
+func (l *Log) ValidateForAppend(b []byte) (record.Batch, error) {
 	batch, err := record.Validate(b, l.cfg.MaxMessageBytes)
 	switch {
 	case errors.Is(err, record.ErrTooLarge):
-		return AppendInfo{}, fmt.Errorf("%w: %d bytes > %d", ErrMessageTooLarge, len(b), l.cfg.MaxMessageBytes)
+		return nil, fmt.Errorf("%w: %d bytes > %d", ErrMessageTooLarge, len(b), l.cfg.MaxMessageBytes)
 	case err != nil:
-		return AppendInfo{}, fmt.Errorf("%w: %w", ErrCorruptBatch, err)
+		return nil, fmt.Errorf("%w: %w", ErrCorruptBatch, err)
 	}
 	if batch.MaxTimestamp() < 0 {
-		return AppendInfo{}, fmt.Errorf("%w: maxTimestamp %d", ErrInvalidTimestamp, batch.MaxTimestamp())
+		return nil, fmt.Errorf("%w: maxTimestamp %d", ErrInvalidTimestamp, batch.MaxTimestamp())
 	}
+	return batch, nil
+}
 
+// AppendValidated appends a batch returned by ValidateForAppend as leader, like Append but
+// without validating it again.
+func (l *Log) AppendValidated(ctx context.Context, batch record.Batch, leaderEpoch int32) (AppendInfo, error) {
+	if err := ctx.Err(); err != nil {
+		return AppendInfo{}, err
+	}
 	return l.appendValidated(batch, true, leaderEpoch)
 }
 
@@ -173,10 +192,12 @@ func (l *Log) appendValidated(batch record.Batch, leader bool, leaderEpoch int32
 	now := l.clock.Now()
 	seg := l.active()
 	var err error
+	rolledAt := int64(-1)
 	if seg.needsRoll(batch, now) {
 		if seg, err = l.roll(now); err != nil {
 			return AppendInfo{}, l.fail(err)
 		}
+		rolledAt = seg.baseOffset
 	}
 	if leader {
 		batch.SetBaseOffset(l.leo.Load())
@@ -193,7 +214,7 @@ func (l *Log) appendValidated(batch record.Batch, leader bool, leaderEpoch int32
 		l.recoveryPoint.Store(batch.NextOffset())
 		l.lastFlushMs.Store(now.UnixMilli())
 	}
-	return AppendInfo{FirstOffset: batch.BaseOffset(), LastOffset: batch.LastOffset(), MaxTimestamp: batch.MaxTimestamp()}, nil
+	return AppendInfo{FirstOffset: batch.BaseOffset(), LastOffset: batch.LastOffset(), MaxTimestamp: batch.MaxTimestamp(), RolledAt: rolledAt}, nil
 }
 
 // TruncateTo removes every record at or after offset (SPEC §4.4 follower truncation). Records are

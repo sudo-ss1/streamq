@@ -137,3 +137,42 @@ func TestTruncateFullyAndStartAt(t *testing.T) {
 	require.Equal(t, int64(1000), l.LogStartOffset())
 	require.Equal(t, int64(1002), l.LogEndOffset())
 }
+
+func TestAppendReportsRoll(t *testing.T) {
+	ctx := context.Background()
+	l := openTestLog(t, t.TempDir(), smallConfig(), newFakeClock(), 0)
+	defer l.close(t)
+	f := openTestLog(t, t.TempDir(), smallConfig(), newFakeClock(), 0)
+	defer f.close(t)
+	var rolls []int64
+	for range 100 {
+		info := appendRecords(t, l.Log, 3, 1000)
+		if info.RolledAt >= 0 {
+			require.Equal(t, info.FirstOffset, info.RolledAt, "a roll starts the new segment at this batch")
+			rolls = append(rolls, info.RolledAt)
+		}
+	}
+	require.Len(t, rolls, l.SegmentCount()-1)
+
+	var followerRolls []int64
+	for _, b := range leaderBatches(t, 100) {
+		info, err := f.AppendAsFollower(ctx, append(record.Batch(nil), b...))
+		require.NoError(t, err)
+		if info.RolledAt >= 0 {
+			followerRolls = append(followerRolls, info.RolledAt)
+		}
+	}
+	require.Equal(t, rolls, followerRolls, "followers roll at the same offsets")
+}
+
+func TestValidateForAppend(t *testing.T) {
+	l := openTestLog(t, t.TempDir(), smallConfig(), newFakeClock(), 0)
+	defer l.close(t)
+	_, err := l.ValidateForAppend([]byte{1, 2, 3})
+	require.ErrorIs(t, err, ErrCorruptBatch, "short batch")
+	b := buildBatch(t, 1000, []byte("x"))
+	b[len(b)-1] ^= 0xff
+	_, err = l.ValidateForAppend(b)
+	require.ErrorIs(t, err, ErrCorruptBatch, "bad crc")
+	require.Equal(t, int64(0), l.LogEndOffset())
+}
