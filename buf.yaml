@@ -7,6 +7,8 @@ lint:
   except:
     # Protos live in api/v1/ but use package streamq.v1 (see docs/DECISIONS.md).
     - PACKAGE_DIRECTORY_MATCH
+    # ErrorCode's zero value is success (SPEC §7.3 "NONE"), not "unspecified" (see docs/DECISIONS.md).
+    - ENUM_ZERO_VALUE_SUFFIX
 breaking:
   use:
     - FILE

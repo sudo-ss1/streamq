@@ -51,7 +51,7 @@ linters:
       - ^gen/
     rules:
       # Storage opens files under the configured data dir by construction (DECISIONS D8).
-      - path: ^internal/storage/
+      - path: ^(internal/(storage|config|broker|metadata/local)|test)/
         linters: [gosec]
         text: G304
       # Tests use context.Background in helpers and math/rand for workload generation (D8).

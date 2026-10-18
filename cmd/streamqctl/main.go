@@ -2,11 +2,11 @@
 package main
 
 import (
-	"log/slog"
 	"os"
 )
 
 func main() {
-	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	logger.Info("streamqctl: not implemented yet")
+	if err := newRootCmd(os.Stdin, os.Stdout, os.Stderr).Execute(); err != nil {
+		os.Exit(1)
+	}
 }
