@@ -458,3 +458,30 @@ Idempotence is on when `Acks == AcksAll` and `DisableIdempotence` is false, whic
 - **On disk:** `metadata.json` and the Raft snapshot gain the two keys (additive). Older files load
   as 0 and empty.
 - **Lost responses:** IDs lost to lost responses are wasted, never reused.
+
+## D54. Compose topology and shutdown budget (M8)
+
+- **Broker-to-broker traffic:** internal and Raft traffic in `deploy/docker-compose.yml` goes
+  through toxiproxy, so M9 can inject faults.
+- **Client traffic:** direct. Broker N listens on and publishes 9092/9192/9292, advertised as
+  `localhost`. Clients inside the compose network are unsupported.
+- **Shutdown budget:** `controlled_shutdown_timeout_ms` defaults to 30000. The compose configs use
+  10000 so rolling restarts stay quick, with `stop_grace_period: 30s`: the 10 s controlled budget,
+  10 s graceful drain, and a margin.
+- **`cluster status`:** lists live brokers only, as Kafka's describeCluster does. Brokers that are
+  referenced as replicas but absent are shown as "down".
+
+## D52. Metrics (M8)
+
+- **Registry:** one `metrics.Metrics` per node, with its own registry (no globals).
+- **Names:** as in `docs/plans/M8.md` §1.
+- **Labels:**
+  - `code` on `streamq_requests_total` is the gRPC status. Per-partition API errors are counted in
+    `streamq_partition_errors_total{method,error_code}`.
+  - `streamq_partitions_offline` is exported by the controller (or single-node) only.
+  - Consumer lag and the ISR gauges are exported by partition leaders.
+  - Raft last-contact is 0 on the leader.
+- **Buckets:** latency buckets run from 0.5 ms to 60 s, to cover 30 s long-polls.
+- **Dependency:** `github.com/prometheus/common` (expfmt/model) is used directly by the metrics
+  tests. It comes from the same project as the approved client_golang, was approved by the M8
+  plan-reviewer, and was already transitive.
