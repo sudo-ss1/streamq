@@ -49,6 +49,11 @@ linters:
     generated: strict
     paths:
       - ^gen/
+    rules:
+      # Storage opens files under the configured data dir by construction (DECISIONS D8).
+      - path: ^internal/storage/
+        linters: [gosec]
+        text: G304
 
 issues:
   max-issues-per-linter: 0
