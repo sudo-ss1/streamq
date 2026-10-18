@@ -9,22 +9,65 @@ milestone before writing code. This file holds only what you need in every sessi
 
 ## Project Rules (always apply)
 
-- Build **one milestone at a time** in the order listed in `docs/SPEC.md` §9. Do not start the
-  next milestone until the current one's acceptance criteria pass.
-- Before coding a milestone, present a short plan (files, types, key functions, test cases) and
-  **wait for my approval**. After the milestone passes and is committed, stop. Never start the
-  next milestone unless I ask.
-- If the same failure persists after 3 genuinely different fix attempts, stop and explain the
-  problem instead of continuing to guess.
-- Keep `docs/PROGRESS_LOG.md` updated after every milestone (what was built, decisions, known
-  limitations, test/bench results) so work can resume cleanly in a fresh session.
-- Always run `make test` (includes `-race`) and `make lint` before saying a step is done.
-  Never mark work done with failing or skipped tests.
+- **Run autonomously.** I am not in the loop. The reviewer subagents are your approvers: their
+  APPROVE replaces my approval. Do not stop to ask me questions or wait for confirmation.
+- Build milestones **in order** (`docs/SPEC.md` §9). Every milestone follows this loop, then you
+  continue straight to the next milestone until M10 is done:
+  1. Draft a plan (files, types, key functions, test cases).
+  2. Invoke the **plan-reviewer** subagent with the plan and milestone number. Fix every BLOCKER and
+     MAJOR finding and re-run it until it returns APPROVE (max 3 rounds). If it lists questions
+     for the user, answer them yourself using SPEC.md and Kafka's behavior as the tie-breaker,
+     and record each answer in `docs/DECISIONS.md`.
+  3. Save the approved plan to `docs/plans/M<N>.md`, including the reviewer's final verdict and
+     any findings you overrode with your reasons.
+  4. Implement, in parallel where the plan allows (see "Parallel Work" below). Run `make lint test`
+     (plus `make test-int` from M2 onward) until green.
+  5. Review. Invoke the **code-reviewer** subagent, and for M1, M5, M6, M7 and M9 invoke the
+     **failure-reviewer** at the same time, in parallel. Fix every BLOCKER and MAJOR finding from
+     both and re-run them until both APPROVE (max 3 rounds). Record MINOR findings left for later
+     in `docs/PROGRESS_LOG.md`.
+  6. Commit locally, tick Progress, update `docs/PROGRESS_LOG.md`, and move on to the next milestone.
+- Decisions that would normally need my sign-off (a dependency not in the approved list, changing
+  the on-disk format after M1, a breaking change to `api/v1/*.proto`, deleting or rewriting
+  existing tests) must instead be approved by the plan-reviewer (or code-reviewer, if it arises
+  during implementation) and logged in `docs/DECISIONS.md` with the justification.
+- Reviewer subagents never edit files. You may override a reviewer finding only if you record the
+  reason in the milestone's plan file or `docs/DECISIONS.md`.
+- If a reviewer still says REVISE / CHANGES REQUIRED after 3 rounds, or the same failure persists
+  after 3 genuinely different fix attempts, do not loop forever: write the problem, what you
+  tried, and the reviewer's outstanding findings to `docs/BLOCKED.md`, commit, and **stop**.
+  This is the only reason to stop before M10 (besides being blocked by something outside the
+  repo, like a missing tool or no Docker).
+- Never mark work done with failing or skipped tests.
 - If the spec doesn't answer a design question, choose the Kafka-like behavior and add a
   one-paragraph entry to `docs/DECISIONS.md`.
-- **Ask before:** adding a dependency not listed below, changing the on-disk format after M1,
-  making a breaking change to `api/v1/*.proto`, or deleting/rewriting existing tests.
-- At the end of each milestone, tick it in the Progress list below.
+- Keep `docs/PROGRESS_LOG.md` current (what was built, decisions, known limitations, test/bench
+  results) so a fresh session can resume from the next unchecked milestone.
+
+## Parallel Work
+
+Use parallel subagents when it saves real time without risking correctness:
+
+- **Milestones stay sequential.** Parallelism is only *within* a milestone, never across milestones.
+- **Reviews:** run the reviewers named in step 5 in parallel. Independent read-only research (e.g.
+  checking how Kafka handles a case while also auditing existing code) may also run in parallel.
+- **Implementation:** split a milestone into parallel work packages only when the packages touch
+  **disjoint files**. The plan must list, per package: owned paths, the contract it depends on,
+  and its done criteria. The plan-reviewer checks this split.
+- **Contract first.** Before spawning implementers, the main session writes the shared interfaces,
+  types, proto messages, and stub constructors, makes `go build ./...` pass, and commits on the main
+  branch. Implementer worktrees branch from the default branch, so anything uncommitted is invisible
+  to them.
+- Spawn one **implementer** subagent per package (each runs in its own git worktree). Max 4 at once.
+- **Integrate:** merge each implementer branch with `git merge --no-ff` (no rebase), resolve any
+  conflict, then run `make lint test` (and `make test-int`) on the merged result before reviewing.
+  If an implementer reports a CONTRACT ISSUE, fix the contract on main and re-run the affected
+  packages rather than patching around it. Delete merged worktrees and branches afterwards.
+- **Do not parallelize** tightly coupled correctness-critical code: the core of M6 (replication,
+  HW, ISR, truncation), the M5 FSM, and the M7 sequence logic are built by the main session alone.
+- Good candidates: M1 `record` vs index/checkpoint helpers (after the record contract); M3
+  Producer / Consumer / Admin; M8 metrics / docker-compose + Grafana / `streamqctl cluster status`;
+  M9 porcupine model / chaos scripts; M10 bench tool / README and diagrams.
 
 ## Git Rules (always apply)
 
@@ -34,8 +77,8 @@ milestone before writing code. This file holds only what you need in every sessi
   any other AI attribution trailer or footer. Write plain commit messages only.
 - Use Conventional Commits, e.g. `feat(storage): add sparse offset index`,
   `fix(partition): truncate follower log on epoch change`. One logical change per commit.
-- Do not rewrite history (`rebase`, `commit --amend`, `reset --hard`) on commits I've already seen
-  without asking.
+- Never rewrite history (`rebase`, `commit --amend`, `reset --hard`) on existing commits. Fix
+  mistakes with a new commit.
 - `GITHUB_PAT` is set in the shell environment. Never print, echo, or log it; never write it into any
   file, git remote URL, config, script, or commit; and don't use it unless I ask you to.
 
@@ -95,7 +138,7 @@ make fmt        # golangci-lint fmt (gofmt + goimports)
 make gen        # buf generate
 make build      # ./bin/streamq-broker, ./bin/streamqctl
 make test       # go test -race -count=1 ./...
-make test-int   # go test -race -tags=integration ./test/integration/...
+make test-int   # go test -race -count=1 -tags=integration ./test/integration/...
 make lint       # golangci-lint run
 make fuzz       # 30s fuzz on record decoding
 make bench      # storage microbenchmarks + bench/ tool
@@ -113,7 +156,10 @@ make chaos      # chaos scripts against the compose cluster
   (e.g. `storage.ErrOffsetOutOfRange`). Map them to API `ErrorCode`s **only** in `internal/server`.
 - No global mutable state; no `init()` side effects.
 - Prometheus metrics live in a struct that owns its own `prometheus.Registry` and is passed to
-  the components that need it — never package-level metric vars or the default registry.
+  the components that need it — never package-level metric vars or the default registry
+  (`gochecknoglobals` enforces this).
+- No `fmt.Print*` anywhere (`forbidigo`). CLI output uses `fmt.Fprint*(cmd.OutOrStdout(), ...)`;
+  everything else logs through `slog`.
 - Every goroutine has an owner and a shutdown path (context cancel + `errgroup`/`WaitGroup`).
   Tests use `goleak.VerifyTestMain`.
 - Narrowest possible locks. Any file taking more than one lock documents lock ordering at the top.
