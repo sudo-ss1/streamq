@@ -227,3 +227,34 @@ func (c *ReplicaClient) IDBlockSource(self int32, epoch func() int64) broker.IDB
 		return resp.GetFirstId(), nil
 	}
 }
+
+// ControlledShutdown implements StreamQInternalServiceServer: the controller moves leadership off
+// a stopping broker (SPEC §4.6, D53).
+func (s *InternalServer) ControlledShutdown(ctx context.Context, req *streamqv1.ControlledShutdownRequest) (*streamqv1.ControlledShutdownResponse, error) {
+	resp := &streamqv1.ControlledShutdownResponse{ControllerId: s.store.LeaderID()}
+	if err := s.ctrl.ControlledShutdown(ctx, req.GetBrokerId(), req.GetBrokerEpoch()); err != nil {
+		resp.ErrorCode, resp.ErrorMessage = s.code(err), err.Error()
+	}
+	return resp, nil
+}
+
+// ControlledShutdown asks the controller to move leadership off broker self (D53). Errors are
+// retriable by the caller until its shutdown deadline.
+func (c *ReplicaClient) ControlledShutdown(ctx context.Context, self int32, epoch int64) error {
+	ctrl := c.store.Snapshot().ControllerID
+	if ctrl < 0 {
+		return fmt.Errorf("controlled shutdown: %w", metadata.ErrNotController)
+	}
+	cl, err := c.client(ctrl)
+	if err != nil {
+		return fmt.Errorf("controlled shutdown: %w", err)
+	}
+	resp, err := cl.ControlledShutdown(ctx, &streamqv1.ControlledShutdownRequest{BrokerId: self, BrokerEpoch: epoch})
+	if err != nil {
+		return fmt.Errorf("controlled shutdown: %w", err)
+	}
+	if resp.GetErrorCode() == streamqv1.ErrorCode_ERROR_CODE_STALE_BROKER_EPOCH {
+		return fmt.Errorf("controlled shutdown: %s: %w", resp.GetErrorMessage(), controller.ErrStaleBrokerEpoch)
+	}
+	return sentinelFor(resp.GetErrorCode(), resp.GetErrorMessage())
+}

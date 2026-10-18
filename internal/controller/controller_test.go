@@ -307,3 +307,47 @@ func TestAllocateProducerIDs(t *testing.T) {
 	_, err = c.AllocateProducerIDs(ctx, 1, r1.BrokerEpoch)
 	require.ErrorIs(t, err, metadata.ErrNotController)
 }
+
+func TestControlledShutdown(t *testing.T) {
+	ctx := context.Background()
+	c, st, _ := newTestController(t)
+	r1, r2 := register(t, c, 1), register(t, c, 2)
+	for _, r := range []struct {
+		id  int32
+		res RegisterResult
+	}{{1, r1}, {2, r2}} {
+		_, err := c.Heartbeat(ctx, r.id, r.res.BrokerEpoch, 1000)
+		require.NoError(t, err)
+	}
+	_, err := st.ApplyForwarded(ctx, &streamqv1.MetadataCommand{Version: metadata.CommandVersion, Cmd: &streamqv1.MetadataCommand_CreateTopic{
+		CreateTopic: &streamqv1.CreateTopicCommand{Name: "t", TopicId: "x", Partitions: []*streamqv1.PartitionAssignment{
+			{Partition: 0, Replicas: []int32{1, 2}}, {Partition: 1, Replicas: []int32{2, 1}},
+		}},
+	}})
+	require.NoError(t, err)
+
+	require.ErrorIs(t, c.ControlledShutdown(ctx, 1, r1.BrokerEpoch+3), ErrStaleBrokerEpoch)
+	require.NoError(t, c.ControlledShutdown(ctx, 1, r1.BrokerEpoch))
+	topic, ok := st.Snapshot().Topic("t")
+	require.True(t, ok)
+	for _, ps := range topic.Partitions {
+		require.Equal(t, int32(2), ps.Leader, "leadership moved off broker 1")
+		require.Equal(t, []int32{2}, ps.ISR)
+	}
+	require.Equal(t, int32(1), topic.Partitions[0].LeaderEpoch, "epoch bumped where 1 led")
+	require.NoError(t, c.ControlledShutdown(ctx, 1, r1.BrokerEpoch), "idempotent")
+	require.Equal(t, 1, st.commands("fence"))
+
+	// A heartbeat racing the shutdown never unfences the stopping broker.
+	fenced, err := c.Heartbeat(ctx, 1, r1.BrokerEpoch, 1_000_000)
+	require.NoError(t, err)
+	require.True(t, fenced)
+	b, _ := st.Snapshot().Broker(1)
+	require.True(t, b.Fenced)
+
+	// A restart (new epoch) is unfenced normally.
+	r1b := register(t, c, 1)
+	fenced, err = c.Heartbeat(ctx, 1, r1b.BrokerEpoch, 1_000_000)
+	require.NoError(t, err)
+	require.False(t, fenced)
+}

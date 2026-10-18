@@ -70,6 +70,7 @@ type brokerState struct {
 	catchUp       uint64 // index the broker must have processed before it is unfenced
 	hasCatchUp    bool
 	fenceSent     bool // a FenceBroker for this epoch was proposed
+	shuttingDown  bool // controlled shutdown requested: never unfence this epoch (D53)
 }
 
 // Controller tracks broker liveness while this node is the controller.
@@ -292,7 +293,7 @@ func (c *Controller) Heartbeat(ctx context.Context, brokerID int32, brokerEpoch 
 		// barrier entries the FSM never sees.
 		st.catchUp, st.hasCatchUp = c.store.Snapshot().Index, true
 	}
-	unfence := b.Fenced && processedIndex >= st.catchUp
+	unfence := b.Fenced && processedIndex >= st.catchUp && !st.shuttingDown
 	c.mu.Unlock()
 	if !unfence {
 		return b.Fenced, nil
@@ -359,4 +360,35 @@ func (c *Controller) AllocateProducerIDs(ctx context.Context, brokerID int32, br
 		return 0, fmt.Errorf("allocate producer ids: term changed during allocation: %w", metadata.ErrNotController)
 	}
 	return first, nil
+}
+
+// ControlledShutdown moves leadership off a stopping broker (SPEC §4.6, DECISIONS D53): it marks
+// the broker as shutting down, so a racing heartbeat never unfences it, and fences it, which
+// elects new leaders from the remaining ISR and removes it from every ISR. It is idempotent; a
+// re-registration (new epoch) clears the mark.
+func (c *Controller) ControlledShutdown(ctx context.Context, brokerID int32, brokerEpoch int64) error {
+	term, err := c.activeTerm()
+	if err != nil {
+		return err
+	}
+	b, ok := c.store.Snapshot().Broker(brokerID)
+	if !ok || b.Epoch != brokerEpoch {
+		return fmt.Errorf("broker %d epoch %d: %w", brokerID, brokerEpoch, ErrStaleBrokerEpoch)
+	}
+	now := c.clock.Now()
+	c.mu.Lock()
+	if c.active && c.term == term {
+		c.track(b, now).shuttingDown = true
+	}
+	c.mu.Unlock()
+	if b.Fenced {
+		return nil // already fenced: leadership has moved already
+	}
+	cmd := &streamqv1.MetadataCommand{Version: metadata.CommandVersion, TimestampMs: now.UnixMilli(), ControllerEpoch: term,
+		Cmd: &streamqv1.MetadataCommand_FenceBroker{FenceBroker: &streamqv1.FenceBrokerCommand{BrokerId: brokerID, BrokerEpoch: brokerEpoch}}}
+	if _, err := c.store.ApplyForwarded(ctx, cmd); err != nil {
+		return fmt.Errorf("controlled shutdown of broker %d: %w", brokerID, err)
+	}
+	c.logger.Info("controlled shutdown: broker fenced", slog.Int("stopping_broker", int(brokerID)), slog.Int64("broker_epoch", brokerEpoch))
+	return nil
 }

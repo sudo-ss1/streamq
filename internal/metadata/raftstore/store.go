@@ -221,6 +221,27 @@ func (s *Store) OnLeadershipChange(fn func(isLeader bool)) func() {
 	}
 }
 
+// TransferLeadership asks Raft to hand leadership to another voter and waits for the transfer to
+// finish or ctx to end (controlled shutdown of the controller, DECISIONS D53). It is a no-op when
+// this node is not the leader.
+func (s *Store) TransferLeadership(ctx context.Context) error {
+	if !s.IsLeader() {
+		return nil
+	}
+	f := s.raft.LeadershipTransfer()
+	done := make(chan error, 1)
+	go func() { done <- f.Error() }() // ends when Raft resolves the future (bounded by its own timeout)
+	select {
+	case err := <-done:
+		if err != nil {
+			return fmt.Errorf("raft leadership transfer: %w", err)
+		}
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 // IsLeader reports whether this node is the Raft leader (the controller).
 func (s *Store) IsLeader() bool { return s.raft.State() == raft.Leader }
 

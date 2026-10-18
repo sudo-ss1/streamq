@@ -420,3 +420,18 @@ func TestFSMProducerIDBlocksSurviveOtherCommands(t *testing.T) {
 	require.Equal(t, int64(0), first)
 	require.Equal(t, int64(3*metadata.ProducerIDBlockSize), snap.NextProducerID)
 }
+
+// TestTransferLeadership: the leader hands leadership to another node while it keeps running
+// (M8 plan R13).
+func TestTransferLeadership(t *testing.T) {
+	c := newTestCluster(t, 3)
+	leader := c.leader()
+	old := leader.cfg.NodeID
+	require.NoError(t, leader.TransferLeadership(ctxT(t)))
+	require.Eventually(t, func() bool {
+		id := leader.LeaderID()
+		return id >= 0 && id != old
+	}, 10*time.Second, 10*time.Millisecond, "another node leads")
+	require.False(t, leader.IsLeader())
+	require.NoError(t, leader.TransferLeadership(ctxT(t)), "a follower's transfer is a no-op")
+}
