@@ -314,7 +314,35 @@ Read the numbers with these caveats:
   ([D63](docs/DECISIONS.md#d63-nfr2-linger-m10)).
 - Any compose numbers go through Toxiproxy for replication traffic and are labelled as such.
 
-<!-- RESULTS -->
+### Results
+
+These results were measured at commit `b800553`. The setup was in-process brokers over loopback
+on one WSL2 laptop: 13th Gen Intel i5-1345U, 6 cores, 7.8 GiB RAM, ext4, Go 1.27.2,
+`flush_policy: interval`. Every run reported `status OK`: no leader-epoch or ISR change during the
+measurement window, no errors and no timeouts. The JSON files are in `bench/results/`, which is
+gitignored, so rerun the presets to reproduce them.
+
+| preset | cluster | acks | idempotent | rate | throughput | latency p50 / p99 / p999 | goal |
+|---|---|---|---|---|---|---|---|
+| `nfr1` | 3 brokers, RF 3, min.insync 2 | all | yes | max | **60,694 msgs/s** (59.3 MiB/s) | saturated, see note | NFR1 ≥ 50k msgs/s: **met** |
+| `nfr1-nonidem` | 3 brokers, RF 3, min.insync 2 | all | no | max | **84,073 msgs/s** (82.1 MiB/s) | saturated, see note | — |
+| `nfr2` | 1 broker | leader | – | 5,000 msgs/s | 5,000 msgs/s | **1.69 / 3.24 / 3.94 ms** (max 9.9 ms) | NFR2 p99 < 10 ms: **met** |
+| `quick` | 1 broker | leader | – | max | ~162,700 msgs/s (158.9 MiB/s) | saturated | — |
+
+- **Max-rate latency.** At max rate the producers run open-loop and keep each 32 MiB buffer full,
+  so the produce latency (p50 of about 3.5 s in `nfr1`) measures queueing in the client buffer,
+  not the broker. For latency, read the rate-limited `nfr2` row. It is measured from each
+  record's *intended* send time, so stalls are not hidden. Service time from the Produce call was
+  p99 2.45 ms; 17,302 of 150,000 sends started late against the schedule.
+- **What limits throughput.** The main constraint is D21/D48: one batch in flight per partition
+  per producer, with 6 partitions × 8 producers in `nfr1`. A CPU profile of `nfr1`
+  (`-cpuprofile`) puts most time in log writes (syscalls), buffer copies, client record encoding,
+  and the replica-fetch/append path. No metadata-snapshot cloning shows up above 0.5 %.
+- **Cost of idempotence.** It cost about 28 % throughput in this pair of runs (60.7k vs 84.1k
+  msgs/s). Likely contributors are the leader's serialized producer-state check per batch and the
+  producer-state snapshot written on each segment roll. This was not isolated further.
+- **Caveats** (D60): loopback and a single laptop make these numbers optimistic compared with a
+  real network. The three brokers share 6 cores and the page cache with the load generator.
 
 ## Design trade-offs
 
