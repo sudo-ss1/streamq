@@ -3,8 +3,10 @@
 // progress on the leader, the high watermark, and the leader-epoch cache. Fetcher goroutines live
 // in internal/broker; this package only provides the per-partition operations they call.
 //
-// Lock ordering: Partition.mu → (storage Log locks, EpochCache.mu) → Partition.hwMu. The HW is an
-// atomic; hwMu guards only the wake-up channels. No partition lock is held while waiting.
+// Lock ordering: Partition.mu → Partition.prodMu → (storage Log locks, EpochCache.mu,
+// producer-state files) →
+// Partition.hwMu. The HW is an atomic; hwMu guards only the wake-up channels. prodMu serializes
+// producer-state checks with the appends they guard (M7). No partition lock is held while waiting.
 package partition
 
 import (
@@ -18,6 +20,7 @@ import (
 	"time"
 
 	"github.com/sudo-ss1/streamq/internal/metadata"
+	"github.com/sudo-ss1/streamq/internal/producerstate"
 	"github.com/sudo-ss1/streamq/internal/record"
 	"github.com/sudo-ss1/streamq/internal/storage"
 )
@@ -80,6 +83,9 @@ type Config struct {
 	// IsFenced reports whether a broker is fenced in local metadata (ISR expansion skips fenced
 	// brokers); nil means none are.
 	IsFenced func(brokerID int32) bool
+	// Producers is the partition's idempotent-producer state (M7); nil means a fresh state in the
+	// log directory with a 7-day expiration. RecoverProducers loads it.
+	Producers *producerstate.State
 }
 
 // followerState is the leader's view of one follower (Kafka's replica state).
@@ -131,6 +137,15 @@ type Partition struct {
 	hwLoaded       bool // the HW checkpoint was applied (only the first transition uses it)
 	removed        bool // the partition was deleted or the broker is closing: waiters give up
 
+	prodMu       sync.Mutex
+	prod         *producerstate.State
+	prodValid    bool  // false after a failed rebuild: idempotent appends refused (M7 plan R1)
+	prodLogStart int64 // log start when snapshots were last pruned
+	// prodTruncatedAt is the lowest truncation point since the state was last rebuilt (-1: none);
+	// rebuilds first delete snapshots above it.
+	prodTruncatedAt int64
+	replay          producerstate.BatchReader // the log; tests inject read failures
+
 	hw      atomic.Int64
 	hwMu    sync.Mutex
 	hwCh    chan struct{} // closed and replaced when the HW advances
@@ -147,19 +162,26 @@ func New(tp storage.TopicPartition, topicID string, log *storage.Log, epochs *Ep
 	if cfg.ReplicaLagMax <= 0 {
 		cfg.ReplicaLagMax = 10 * time.Second
 	}
+	if cfg.Producers == nil {
+		cfg.Producers = producerstate.New(log.Dir(), 7*24*time.Hour)
+	}
 	return &Partition{
-		tp:             tp,
-		topicID:        topicID,
-		log:            log,
-		epochs:         epochs,
-		cfg:            cfg,
-		leader:         -1,
-		leaderEpoch:    -1,
-		partitionEpoch: -1,
-		logger:         logger.With(slog.String("topic", tp.Topic), slog.Int("partition", int(tp.Partition))),
-		hwCh:           make(chan struct{}),
-		stateCh:        make(chan struct{}),
-		leoCh:          make(chan struct{}),
+		prod:            cfg.Producers,
+		prodValid:       true,
+		prodTruncatedAt: -1,
+		replay:          log,
+		tp:              tp,
+		topicID:         topicID,
+		log:             log,
+		epochs:          epochs,
+		cfg:             cfg,
+		leader:          -1,
+		leaderEpoch:     -1,
+		partitionEpoch:  -1,
+		logger:          logger.With(slog.String("topic", tp.Topic), slog.Int("partition", int(tp.Partition))),
+		hwCh:            make(chan struct{}),
+		stateCh:         make(chan struct{}),
+		leoCh:           make(chan struct{}),
 	}
 }
 
@@ -255,6 +277,9 @@ func (p *Partition) BecomeLeader(ctx context.Context, st State) error {
 	if err := p.epochs.Assign(ctx, st.LeaderEpoch, leo); err != nil {
 		return fmt.Errorf("record leader epoch: %w", err)
 	}
+	p.prodMu.Lock()
+	p.ensureProducersLocked(ctx)
+	p.prodMu.Unlock()
 	now := p.cfg.Clock.Now()
 	p.isLeader, p.leader = true, p.cfg.LocalID
 	p.leaderEpoch, p.partitionEpoch = st.LeaderEpoch, st.PartitionEpoch
@@ -366,10 +391,36 @@ func (p *Partition) Append(ctx context.Context, b record.Batch, requestEpoch int
 	if acks == AcksAll && int32(len(p.isr)) < p.minInsync {
 		return storage.AppendInfo{}, 0, fmt.Errorf("%w: isr %d < min.insync.replicas %d", ErrNotEnoughReplicas, len(p.isr), p.minInsync)
 	}
-	info, err := p.log.Append(ctx, b, p.leaderEpoch)
+	// Validate before reading producer fields from the header (M7 plan R3).
+	batch, err := p.log.ValidateForAppend(b)
 	if err != nil {
 		return storage.AppendInfo{}, 0, err
 	}
+	if err := producerstate.ValidateFields(batch); err != nil {
+		return storage.AppendInfo{}, 0, fmt.Errorf("%w: %w", storage.ErrCorruptBatch, err)
+	}
+	p.prodMu.Lock()
+	defer p.prodMu.Unlock()
+	if pid := batch.ProducerID(); pid >= 0 {
+		if !p.prodValid {
+			return storage.AppendInfo{}, 0, fmt.Errorf("%w: producer state is being rebuilt", ErrNotLeader)
+		}
+		first := batch.BaseSequence()
+		dup, isDup, err := p.prod.Check(pid, first, producerstate.LastSeq(first, batch.RecordCount()))
+		if err != nil {
+			return storage.AppendInfo{}, 0, err
+		}
+		if isDup {
+			// A retry of an appended batch: report the original offsets, append nothing (SPEC §6).
+			return storage.AppendInfo{FirstOffset: dup.FirstOffset, LastOffset: dup.LastOffset,
+				MaxTimestamp: dup.MaxTimestamp, RolledAt: -1}, p.leaderEpoch, nil
+		}
+	}
+	info, err := p.log.AppendValidated(ctx, batch, p.leaderEpoch)
+	if err != nil {
+		return storage.AppendInfo{}, 0, err
+	}
+	p.afterAppendLocked(ctx, batch, info)
 	p.advanceHWLocked()
 	p.hwMu.Lock()
 	close(p.leoCh)

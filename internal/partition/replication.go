@@ -243,13 +243,18 @@ func (p *Partition) AppendAsFollower(ctx context.Context, fetchEpoch int32, b re
 			return err
 		}
 	}
-	if _, err := p.log.AppendAsFollower(ctx, b); err != nil {
+	p.prodMu.Lock()
+	defer p.prodMu.Unlock()
+	info, err := p.log.AppendAsFollower(ctx, b)
+	if err != nil {
 		// Drop an epoch entry assigned for a batch that did not land.
 		if terr := p.epochs.TruncateFromEnd(ctx, p.log.LogEndOffset()); terr != nil {
 			err = errors.Join(err, terr)
 		}
 		return fmt.Errorf("append replicated batch: %w", err)
 	}
+	// Followers maintain producer state too, so a new leader can detect duplicates (SPEC §6).
+	p.afterAppendLocked(ctx, b, info)
 	return nil
 }
 
@@ -273,6 +278,16 @@ func (p *Partition) TruncateTo(ctx context.Context, fetchEpoch int32, offset int
 	if err := p.checkFollower(fetchEpoch); err != nil {
 		return 0, err
 	}
+	// The producer state is invalid from before the log changes until a rebuild succeeds, so no
+	// failure part-way can leave it answering for truncated batches (M7 plan R1).
+	p.prodMu.Lock()
+	defer p.prodMu.Unlock()
+	wasValid := p.prodValid
+	p.prodValid = false
+	before := p.log.LogEndOffset()
+	if p.prodTruncatedAt < 0 || offset < p.prodTruncatedAt {
+		p.prodTruncatedAt = offset // before the log changes, so a failure part-way still records it
+	}
 	leo, err := p.log.TruncateTo(ctx, offset)
 	if err != nil {
 		return 0, err
@@ -283,6 +298,16 @@ func (p *Partition) TruncateTo(ctx context.Context, fetchEpoch int32, offset int
 	if p.hw.Load() > leo {
 		p.hw.Store(leo) // the only place the HW is lowered
 	}
+	if leo == before && wasValid {
+		p.prodValid = true // nothing removed: the state still matches the log (R9)
+		p.prodTruncatedAt = -1
+		return leo, nil
+	}
+	// Truncated batches must no longer count as duplicates (M7 plan R1, R9); the rebuild first
+	// deletes snapshots above the truncation point. A follower does not need producer state to
+	// replicate, so a failed rebuild only leaves it invalid (idempotent appends refused) for
+	// MaintainProducers or BecomeLeader to retry; replication continues (failure review).
+	_ = p.rebuildProducersLocked(ctx) // logged inside
 	return leo, nil
 }
 
@@ -294,14 +319,22 @@ func (p *Partition) TruncateFullyAndStartAt(ctx context.Context, fetchEpoch int3
 	if err := p.checkFollower(fetchEpoch); err != nil {
 		return err
 	}
-	// Clear the epoch cache first: a crash in between leaves the old log with no epochs (the HW
-	// fallback), never an empty log with stale epochs.
+	// Clear the producer snapshots and the epoch cache first: a crash in between leaves the old
+	// log with no epochs or snapshots (rebuilt by replay), never an empty log with stale state.
+	p.prodMu.Lock()
+	defer p.prodMu.Unlock()
+	p.prodValid = false // until the log is empty too: the empty state must not cover old data
+	if err := p.prod.Clear(ctx); err != nil {
+		return err
+	}
 	if err := p.epochs.TruncateFromEnd(ctx, -1); err != nil {
 		return err
 	}
 	if err := p.log.TruncateFullyAndStartAt(ctx, offset); err != nil {
 		return err
 	}
+	p.prodValid = true // the empty state is exact for the empty log
+	p.prodTruncatedAt, p.prodLogStart = -1, offset
 	p.hw.Store(offset)
 	return nil
 }
