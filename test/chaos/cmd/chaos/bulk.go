@@ -59,6 +59,7 @@ type bulkWorkload struct {
 	errKinds map[string]int
 	acks     []ackEvent
 	start    time.Time
+	closed   bool // set at the end of settle: later callbacks no longer change outcomes
 }
 
 func startBulk(parent context.Context) (*bulkWorkload, error) {
@@ -90,6 +91,9 @@ func (w *bulkWorkload) produce(ctx context.Context, rec client.Record, v *bulkVa
 		w.mu.Lock()
 		defer w.mu.Unlock()
 		w.pending--
+		if w.closed {
+			return // too late: the outcome was already decided as failed (unsent at close)
+		}
 		if err != nil {
 			v.status = bulkFailed
 			w.errKinds[errKind(err)]++
@@ -218,6 +222,7 @@ func (w *bulkWorkload) settle(ctx context.Context) (sentinels map[int32]int64, s
 			w.errKinds["unsent at close"]++
 		}
 	}
+	w.closed = true
 	return sentinels, settleErr, closeErr
 }
 

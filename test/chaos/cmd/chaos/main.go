@@ -39,6 +39,8 @@ const (
 	postHeal          = 10 * time.Second // workloads keep running after the cluster is healthy again
 	gapThreshold      = 2.0              // seconds without an acked lin append counted as unavailability
 	settleBudget      = 6 * time.Minute
+	minLinAcked       = 300  // a scenario must acknowledge at least this many lin appends ...
+	minBulkAcked      = 5000 // ... and bulk records, or it is NOT_EXERCISED
 	toxiproxyReadyFor = 60 * time.Second
 )
 
@@ -322,14 +324,17 @@ func (r *runner) scenarioBody(ctx context.Context, s *scenarioRun) error {
 	res.WorkloadSec = round1(time.Since(s.t0).Seconds())
 
 	// Settle and check (R16, R25, R23, D58).
-	sctx, cancel := context.WithTimeout(ctx, settleBudget)
-	defer cancel()
+	// Separate budgets, so a slow lin settle cannot starve bulk (failure review).
+	lctx, lcancel := context.WithTimeout(ctx, settleBudget)
+	defer lcancel()
 	viz := filepath.Join(r.opts.out, fmt.Sprintf("%s-%s-lin.html", r.runID, sc.name))
-	linRes, linViolations := lin.settleAndCheck(sctx, viz)
+	linRes, linViolations := lin.settleAndCheck(lctx, viz)
 	res.Lin = linRes
 	res.Violations = append(res.Violations, linViolations...)
-	sentinels, settleErr, closeErr := bulk.settle(sctx)
-	final, anomalies, readErr := bulk.finalRead(sctx, cl, sentinels)
+	bctx, bcancel := context.WithTimeout(ctx, settleBudget)
+	defer bcancel()
+	sentinels, settleErr, closeErr := bulk.settle(bctx)
+	final, anomalies, readErr := bulk.finalRead(bctx, cl, sentinels)
 	res.Bulk = bulk.result(final)
 	res.Bulk.Anomalies = anomalies
 	res.Bulk.SettleError = strings.Trim(settleErr+"; "+readErr, "; ")
@@ -368,6 +373,8 @@ func finalStatus(res *scenarioResult) string {
 		return StatusFail
 	case !res.Availability.Healthy:
 		return StatusUnhealthy
+	case res.Lin.Summary.Acked < minLinAcked || res.Bulk.Acked < minBulkAcked:
+		return StatusNotExercised // too little work to prove anything (failure review)
 	case res.Status == StatusNotExercised:
 		return StatusNotExercised
 	}

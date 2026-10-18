@@ -4,7 +4,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
 	"go.uber.org/goleak"
+
+	"github.com/sudo-ss1/streamq/test/linearizability"
 )
 
 func TestMain(m *testing.M) { goleak.VerifyTestMain(m) }
@@ -157,19 +160,23 @@ func TestScenarioSeedIsStablePerName(t *testing.T) {
 }
 
 func TestFinalStatus(t *testing.T) {
+	enoughLin := linResult{Summary: linearizability.Summary{Acked: minLinAcked}}
+	enoughBulk := bulkResult{Acked: minBulkAcked}
 	tests := []struct {
 		name string
 		res  scenarioResult
 		want string
 	}{
-		{name: "pass", res: scenarioResult{Status: StatusPass, Availability: availability{Healthy: true}}, want: StatusPass},
-		{name: "violation", res: scenarioResult{Status: StatusPass, Violations: []string{"bulk lost"}, Availability: availability{Healthy: true}}, want: StatusFail},
-		{name: "inconclusive", res: scenarioResult{Violations: []string{"lin porcupine check inconclusive"}, Availability: availability{Healthy: true}}, want: StatusInconclusive},
+		{name: "pass", res: scenarioResult{Status: StatusPass, Availability: availability{Healthy: true}, Lin: enoughLin, Bulk: enoughBulk}, want: StatusPass},
+		{name: "violation", res: scenarioResult{Status: StatusPass, Violations: []string{"bulk lost"}, Availability: availability{Healthy: true}, Lin: enoughLin, Bulk: enoughBulk}, want: StatusFail},
+		{name: "inconclusive", res: scenarioResult{Violations: []string{"lin porcupine check inconclusive"}, Availability: availability{Healthy: true}, Lin: enoughLin, Bulk: enoughBulk}, want: StatusInconclusive},
 		{name: "unhealthy", res: scenarioResult{Status: StatusPass}, want: StatusUnhealthy},
-		{name: "not exercised", res: scenarioResult{Status: StatusNotExercised, Availability: availability{Healthy: true}}, want: StatusNotExercised},
+		{name: "not exercised", res: scenarioResult{Status: StatusNotExercised, Availability: availability{Healthy: true}, Lin: enoughLin, Bulk: enoughBulk}, want: StatusNotExercised},
 		{name: "violation beats not exercised", res: scenarioResult{Status: StatusNotExercised, Violations: []string{"x"}}, want: StatusFail},
-		{name: "bulk not settled", res: scenarioResult{Status: StatusPass, Availability: availability{Healthy: true},
-			Bulk: bulkResult{SettleError: "partition 3: no sentinel acknowledged"}}, want: StatusFail},
+		{name: "bulk not settled", res: scenarioResult{Status: StatusPass, Availability: availability{Healthy: true}, Lin: enoughLin,
+			Bulk: bulkResult{Acked: minBulkAcked, SettleError: "partition 3: no sentinel acknowledged"}}, want: StatusFail},
+		{name: "too little work", res: scenarioResult{Status: StatusPass, Availability: availability{Healthy: true}, Lin: enoughLin,
+			Bulk: bulkResult{Acked: 10}}, want: StatusNotExercised},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

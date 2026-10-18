@@ -153,7 +153,7 @@ func (s *scenarioRun) killAndRestart(ctx context.Context, victim int32, why stri
 }
 
 func runKill9Random(ctx context.Context, s *scenarioRun) error {
-	prev := int32(0)
+	prev, hitLeader := int32(0), 0
 	for round := 1; round <= 4; round++ {
 		if err := s.sleepRange(ctx, 10*time.Second, 20*time.Second); err != nil {
 			return err
@@ -165,14 +165,19 @@ func runKill9Random(ctx context.Context, s *scenarioRun) error {
 			victim = int32(1 + s.rng.IntN(3))
 		}
 		prev = victim
+		if v, _ := s.linView(ctx); v.Leader == victim {
+			hitLeader++
+		}
 		if err := s.killAndRestart(ctx, victim, fmt.Sprintf("round %d: random broker", round)); err != nil {
 			return err
 		}
 	}
+	s.observe("%d of 4 rounds killed the lin leader", hitLeader)
 	return nil
 }
 
 func runKill9Controller(ctx context.Context, s *scenarioRun) error {
+	exercised := 0
 	for round := 1; round <= 3; round++ {
 		if err := s.sleepRange(ctx, 10*time.Second, 20*time.Second); err != nil {
 			return err
@@ -185,14 +190,21 @@ func runKill9Controller(ctx context.Context, s *scenarioRun) error {
 		if err := s.killAndRestart(ctx, ctrl, fmt.Sprintf("round %d: controller", round)); err != nil {
 			return err
 		}
-		if next := s.cl.controller(ctx); next > 0 {
+		if next := s.cl.controller(ctx); next > 0 && next != ctrl {
+			exercised++
 			s.observe("round %d: controller %d killed; controller now %d", round, ctrl, next)
+		} else {
+			s.observe("round %d: fault not exercised: controller %d killed but controller is now %d", round, ctrl, next)
 		}
+	}
+	if exercised == 0 { // a run that never moved the controller proves nothing (failure review)
+		s.res.Status = StatusNotExercised
 	}
 	return nil
 }
 
 func runInboundIsolation(ctx context.Context, s *scenarioRun) error {
+	exercised := 0
 	for round := 1; round <= 3; round++ {
 		if err := s.sleepRange(ctx, 10*time.Second, 15*time.Second); err != nil {
 			return err
@@ -222,6 +234,14 @@ func runInboundIsolation(ctx context.Context, s *scenarioRun) error {
 		s.event("heal", service(v.Leader), "proxies re-enabled; lin at end of isolation: "+during)
 		s.observe("round %d: isolated lin leader %d (epoch %d, controller %d); after 15 s: leader %d epoch %d isr %v",
 			round, v.Leader, v.Epoch, ctrl, after.Leader, after.Epoch, after.ISR)
+		if after.Epoch != v.Epoch || !slices.Equal(after.ISR, v.ISR) {
+			exercised++
+		} else {
+			s.observe("round %d: fault not exercised: lin epoch and ISR unchanged during the cut", round)
+		}
+	}
+	if exercised == 0 {
+		s.res.Status = StatusNotExercised
 	}
 	return nil
 }
@@ -373,15 +393,11 @@ func runFullDisk(ctx context.Context, s *scenarioRun) error {
 	s.event("kill -9", "broker3", "disk replacement starts; container was "+state)
 	offline, ok := s.waitFenced(ctx, 60*time.Second)
 	if !ok {
-		s.observe("partition offline (availability): broker3 still in an ISR or partitions leaderless after 60 s: %v; skipping the empty restart, freeing the disk instead", offline)
-		if _, err := docker(ctx, "run", "--rm", "-v", vol+":/d", busyboxImage, "rm", "-f", "/d/filler"); err != nil {
-			return err
-		}
-		if err := s.r.compose.start(ctx, true, 3); err != nil {
-			return err
-		}
-		s.event("start", "broker3", "filler removed, same disk")
-		return nil
+		// The tmpfs log volume was unmounted when broker3 stopped, so its contents are already
+		// gone: restarting broker3 now would be a harness-made disk loss while it is still in an
+		// ISR. Stop the scenario instead (failure review).
+		s.observe("partition offline (availability): broker3 still in an ISR or partitions leaderless after 60 s: %v", offline)
+		return fmt.Errorf("full-disk: broker3 not fenced out of every ISR within 60 s (%v); not restarting it on an emptied tmpfs", offline)
 	}
 	s.event("fenced", "broker3", "broker3 not live and out of every ISR")
 	s.saveBroker3Logs(ctx)
