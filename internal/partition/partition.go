@@ -57,12 +57,13 @@ type Partition struct {
 	localID int32
 	logger  *slog.Logger
 
-	mu          sync.RWMutex // leader state; held (read) across appends so the epoch can't change mid-append
-	isLeader    bool
-	leader      int32
-	leaderEpoch int32
-	isr         []int32
-	minInsync   int32
+	mu             sync.RWMutex // leader state; held (read) across appends so the epoch can't change mid-append
+	isLeader       bool
+	leader         int32
+	leaderEpoch    int32
+	partitionEpoch int32
+	isr            []int32
+	minInsync      int32
 
 	hw   atomic.Int64
 	hwMu sync.Mutex
@@ -72,13 +73,15 @@ type Partition struct {
 // New returns a replica of tp backed by log. It is not a leader until BecomeLeader.
 func New(tp storage.TopicPartition, topicID string, log *storage.Log, localID int32, logger *slog.Logger) *Partition {
 	return &Partition{
-		tp:      tp,
-		topicID: topicID,
-		log:     log,
-		localID: localID,
-		leader:  -1,
-		logger:  logger.With(slog.String("topic", tp.Topic), slog.Int("partition", int(tp.Partition))),
-		hwCh:    make(chan struct{}),
+		tp:             tp,
+		topicID:        topicID,
+		log:            log,
+		localID:        localID,
+		leader:         -1,
+		leaderEpoch:    -1,
+		partitionEpoch: -1,
+		logger:         logger.With(slog.String("topic", tp.Topic), slog.Int("partition", int(tp.Partition))),
+		hwCh:           make(chan struct{}),
 	}
 }
 
@@ -107,6 +110,57 @@ func (p *Partition) BecomeLeader(epoch int32, isr []int32, minInsync int32, hwCh
 	p.advanceHWLocked()
 	p.mu.Unlock()
 	p.logger.Info("became leader", slog.Int("leader_epoch", int(epoch)), slog.Int64("high_watermark", p.hw.Load()))
+}
+
+// State is a partition's replicated metadata as seen by this replica.
+type State struct {
+	Leader         int32
+	LeaderEpoch    int32
+	PartitionEpoch int32
+	ISR            []int32
+	MinInsync      int32
+	HWCheckpoint   int64 // used when this replica becomes leader
+}
+
+// ApplyState applies metadata for this partition. It is monotonic: a state older than the
+// current one (lower leader epoch, or same leader epoch and lower partition epoch) is ignored
+// and false returned (plan R6). A newer leader epoch makes this replica leader or follower; a
+// newer partition epoch at the same leader epoch only updates the ISR (plan R25).
+func (p *Partition) ApplyState(st State) bool {
+	p.mu.Lock()
+	stale := st.LeaderEpoch < p.leaderEpoch || (st.LeaderEpoch == p.leaderEpoch && st.PartitionEpoch <= p.partitionEpoch)
+	if stale {
+		p.mu.Unlock()
+		return false
+	}
+	sameLeadership := st.LeaderEpoch == p.leaderEpoch && st.Leader == p.leader
+	p.partitionEpoch = st.PartitionEpoch
+	if sameLeadership {
+		p.isr = slices.Clone(st.ISR)
+		p.minInsync = st.MinInsync
+		p.advanceHWLocked()
+		p.mu.Unlock()
+		return true
+	}
+	p.mu.Unlock()
+	if st.Leader == p.localID {
+		p.BecomeLeader(st.LeaderEpoch, st.ISR, st.MinInsync, st.HWCheckpoint)
+	} else {
+		p.BecomeFollower(st.Leader, st.LeaderEpoch)
+	}
+	return true
+}
+
+// BecomeFollower records that leader leads at epoch (-1 = no leader); this replica serves no
+// produce or consumer fetch. (Fetching from the leader arrives with replication, M6.)
+func (p *Partition) BecomeFollower(leader, epoch int32) {
+	p.mu.Lock()
+	p.isLeader = false
+	p.leader = leader
+	p.leaderEpoch = epoch
+	p.isr = nil
+	p.mu.Unlock()
+	p.logger.Info("became follower", slog.Int("leader", int(leader)), slog.Int("leader_epoch", int(epoch)))
 }
 
 // Leader returns the leader id (-1 if unknown) and leader epoch.

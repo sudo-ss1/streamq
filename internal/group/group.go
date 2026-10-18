@@ -199,8 +199,11 @@ type Coordinator struct {
 	// timers counts scheduled-but-not-stopped timer callbacks; Add happens under mu while !closed.
 	timers sync.WaitGroup
 
-	mu         sync.Mutex
-	groups     map[string]*group
+	mu     sync.Mutex
+	groups map[string]*group
+	// epoch is the controller epoch (Raft term) the in-memory groups belong to; groups are
+	// cleared whenever it changes, and commits are stamped with it (DECISIONS D33).
+	epoch      uint64
 	closed     bool
 	nextMember uint64
 	nextJoin   uint64
@@ -247,10 +250,38 @@ func (c *Coordinator) begin() (metadata.Snapshot, error) {
 		return metadata.Snapshot{}, ErrCoordinatorClosed
 	}
 	snap := c.store.Snapshot()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if snap.ControllerID != c.cfg.BrokerID {
+		// Not (or no longer) the coordinator: drop all membership; members rejoin elsewhere
+		// (SPEC §5).
+		c.resetLocked()
+		c.epoch = 0
 		return metadata.Snapshot{}, fmt.Errorf("controller is broker %d: %w", snap.ControllerID, ErrNotCoordinator)
 	}
+	if snap.ControllerEpoch != c.epoch {
+		// Leadership was regained in a new term: membership from an earlier term is stale.
+		c.resetLocked()
+		c.epoch = snap.ControllerEpoch
+	}
+	snap.ControllerEpoch = c.epoch
 	return snap, nil
+}
+
+// resetLocked drops every in-memory group, failing parked joins with ErrNotCoordinator. Timer
+// callbacks of dropped groups see a different (or missing) group and do nothing. Caller holds mu.
+func (c *Coordinator) resetLocked() {
+	for _, g := range c.groups {
+		c.stopRebalanceTimer(g)
+		for _, m := range g.members {
+			c.stopSessionTimer(m)
+			if m.waiter != nil {
+				c.wake(m.waiter, JoinResult{}, ErrNotCoordinator)
+				m.waiter = nil
+			}
+		}
+	}
+	c.groups = map[string]*group{}
 }
 
 // Join joins (or rejoins) a group and blocks until the rebalance completes, ctx ends, or the
@@ -463,9 +494,11 @@ func (c *Coordinator) Commit(ctx context.Context, groupID, memberID string, gen 
 	if groupID == "" {
 		return nil, fmt.Errorf("commit: empty group id: %w", ErrInvalidGroup)
 	}
-	if _, err := c.begin(); err != nil {
+	begun, err := c.begin()
+	if err != nil {
 		return nil, err
 	}
+	epoch := begun.ControllerEpoch
 	if err := c.checkCommit(groupID, memberID, gen); err != nil {
 		return nil, err
 	}
@@ -494,16 +527,21 @@ func (c *Coordinator) Commit(ctx context.Context, groupID, memberID string, gen 
 			return results, nil
 		}
 		cmd := &streamqv1.MetadataCommand{
-			Version:     metadata.CommandVersion,
-			TimestampMs: c.clock.Now().UnixMilli(),
+			Version:         metadata.CommandVersion,
+			TimestampMs:     c.clock.Now().UnixMilli(),
+			ControllerEpoch: epoch,
 			Cmd: &streamqv1.MetadataCommand_CommitOffsets{CommitOffsets: &streamqv1.CommitOffsetsCommand{
 				GroupId: groupID,
 				Offsets: commits,
 			}},
 		}
-		err := c.store.Propose(ctx, cmd)
+		err := c.store.ProposeAsLeader(ctx, cmd)
 		if err == nil {
 			return results, nil
+		}
+		if errors.Is(err, metadata.ErrNotController) {
+			// Leadership moved between validation and apply: the commit was not applied.
+			return nil, fmt.Errorf("commit offsets for group %q: %w (%w)", groupID, ErrNotCoordinator, err)
 		}
 		if attempt == 0 && errors.Is(err, metadata.ErrUnknownTopic) {
 			continue

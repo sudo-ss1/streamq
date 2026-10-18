@@ -166,3 +166,37 @@ func TestListOffsets(t *testing.T) {
 	_, _, err := p.ListOffsets(ctx, 0, -3)
 	require.Error(t, err)
 }
+
+func TestApplyStateIsMonotonic(t *testing.T) {
+	ctx := context.Background()
+	p := newTestPartition(t)
+	require.True(t, p.ApplyState(State{Leader: 1, LeaderEpoch: 0, PartitionEpoch: 0, ISR: []int32{1, 2}, MinInsync: 2}))
+	_, err := p.Append(ctx, batch(t, 1, 1), 0, AcksAll)
+	require.NoError(t, err, "ISR {1,2} satisfies min.insync 2")
+	require.Equal(t, int64(0), p.HighWatermark(), "HW waits for the other ISR member")
+
+	// The follower is fenced: same leader epoch, higher partition epoch, smaller ISR.
+	require.True(t, p.ApplyState(State{Leader: 1, LeaderEpoch: 0, PartitionEpoch: 1, ISR: []int32{1}, MinInsync: 2}))
+	_, err = p.Append(ctx, batch(t, 1, 1), 0, AcksAll)
+	require.ErrorIs(t, err, ErrNotEnoughReplicas, "the min.insync check uses the updated ISR")
+	require.Equal(t, int64(1), p.HighWatermark(), "ISR {self}: HW follows the LEO again")
+
+	// Older states are ignored.
+	require.False(t, p.ApplyState(State{Leader: 1, LeaderEpoch: 0, PartitionEpoch: 0, ISR: []int32{1, 2}, MinInsync: 2}))
+	require.False(t, p.ApplyState(State{Leader: 2, LeaderEpoch: -1, PartitionEpoch: 9}))
+
+	// A new leader epoch elsewhere makes this replica a follower: requests get NOT_LEADER.
+	require.True(t, p.ApplyState(State{Leader: 2, LeaderEpoch: 1, PartitionEpoch: 2, ISR: []int32{2}}))
+	leader, epoch := p.Leader()
+	require.Equal(t, int32(2), leader)
+	require.Equal(t, int32(1), epoch)
+	_, err = p.Append(ctx, batch(t, 1, 1), AnyEpoch, AcksLeader)
+	require.ErrorIs(t, err, ErrNotLeader)
+	_, _, err = p.Read(ctx, 0, 100, AnyEpoch)
+	require.ErrorIs(t, err, ErrNotLeader)
+
+	// Leadership returns with a higher epoch.
+	require.True(t, p.ApplyState(State{Leader: 1, LeaderEpoch: 2, PartitionEpoch: 3, ISR: []int32{1}, MinInsync: 1}))
+	_, err = p.Append(ctx, batch(t, 1, 1), 2, AcksAll)
+	require.NoError(t, err)
+}

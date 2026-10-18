@@ -778,8 +778,58 @@ func (s *flakyStore) Propose(ctx context.Context, cmd *streamqv1.MetadataCommand
 	return s.Store.Propose(ctx, cmd)
 }
 
+// ProposeAsLeader is the path the coordinator uses for commits (leader-only, D33).
+func (s *flakyStore) ProposeAsLeader(ctx context.Context, cmd *streamqv1.MetadataCommand) error {
+	return s.Propose(ctx, cmd)
+}
+
 func (s *flakyStore) proposals() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.n
+}
+
+// epochStore reports a configurable controller and controller epoch on top of a real store.
+type epochStore struct {
+	metadata.Store
+	mu         sync.Mutex
+	controller int32
+	epoch      uint64
+}
+
+func (s *epochStore) set(controller int32, epoch uint64) {
+	s.mu.Lock()
+	s.controller, s.epoch = controller, epoch
+	s.mu.Unlock()
+}
+
+func (s *epochStore) Snapshot() metadata.Snapshot {
+	snap := s.Store.Snapshot()
+	s.mu.Lock()
+	snap.ControllerID, snap.ControllerEpoch = s.controller, s.epoch
+	s.mu.Unlock()
+	return snap
+}
+
+// R4: a coordinator that loses and regains leadership starts with no groups, and its commits
+// carry the controller epoch its groups belong to.
+func TestCoordinatorClearsGroupsOnControllerEpochChange(t *testing.T) {
+	e := newEnv(t, testConfig())
+	createTopic(t, e.store, "t", 2)
+	es := &epochStore{Store: e.store, controller: testConfig().BrokerID, epoch: 3}
+	c := New(testConfig(), es, e.clock, nil)
+	t.Cleanup(c.Close)
+	e2 := &env{t: t, c: c, store: e.store, clock: e.clock}
+	m := e2.joinAll(grp, sub("t"))[0]
+	d, err := c.Describe(grp)
+	require.NoError(t, err)
+	require.Len(t, d.Members, 1)
+
+	es.set(99, 3) // leadership moved away
+	require.ErrorIs(t, c.Heartbeat(grp, m.MemberID, m.GenerationID), ErrNotCoordinator)
+	es.set(testConfig().BrokerID, 5) // regained in a later term
+	require.ErrorIs(t, c.Heartbeat(grp, m.MemberID, m.GenerationID), ErrUnknownMemberID, "old membership is gone")
+	d, err = c.Describe(grp)
+	require.NoError(t, err)
+	require.Empty(t, d.Members)
 }

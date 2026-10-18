@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -70,10 +71,11 @@ type Config struct {
 
 // topicState is the local view of one topic.
 type topicState struct {
-	id      string
-	want    int   // local partitions expected
-	open    int   // local partitions open
-	openErr error // first error opening a partition, if any
+	id        string
+	minInsync int32
+	want      int   // local partitions expected
+	open      int   // local partitions open
+	openErr   error // first error opening a partition, if any
 }
 
 // Broker is the replica manager.
@@ -104,6 +106,9 @@ type Broker struct {
 	group  *errgroup.Group
 
 	afterFetchRead func() // test hook: runs between a fetch's read and its wait
+
+	// processed is the metadata index whose changes this broker has fully handled (D35).
+	processed atomic.Uint64
 }
 
 // Open opens the storage under cfg.DataDir, subscribes to store, removes stray partition
@@ -141,6 +146,7 @@ func Open(ctx context.Context, cfg Config, store metadata.Store, clock Clock, lo
 	snap, unsubscribe := store.Subscribe(b.onChange)
 	b.unsubscribe = unsubscribe
 	err = b.applySnapshot(ctx, snap)
+	b.markProcessed(snap.Index)
 	b.applyMu.Unlock()
 	if err != nil {
 		unsubscribe()
@@ -211,8 +217,14 @@ func (b *Broker) onChange(ctx context.Context, ch metadata.Change) {
 	case metadata.TopicDeleted:
 		b.deleteTopic(ctx, ch.Topic, ch.TopicID)
 	case metadata.PartitionChanged:
-		// Leadership changes arrive with replication (M6).
+		b.applyPartitionChanges(ch.Topic, ch.TopicID, ch.Partitions)
+	case metadata.Restored:
+		if ch.Snapshot != nil {
+			b.resync(ctx, *ch.Snapshot)
+		}
+	case metadata.OffsetsCommitted, metadata.BrokersChanged:
 	}
+	b.markProcessed(ch.Index)
 }
 
 // createTopic opens the local partitions of a topic. Errors are recorded per topic (and returned
@@ -234,6 +246,9 @@ func (b *Broker) createTopic(ctx context.Context, name, id string, configs map[s
 	b.mu.Unlock()
 
 	tcfg, err := config.ResolveTopicConfig(b.cfg.TopicDefaults, configs)
+	b.mu.Lock()
+	ts.minInsync = tcfg.MinInsyncReplicas
+	b.mu.Unlock()
 	for _, ps := range parts {
 		if err != nil {
 			break
@@ -276,11 +291,83 @@ func (b *Broker) openPartition(ctx context.Context, topic, id string, tcfg confi
 	b.mu.RLock()
 	hw := b.hwCkpt[tp]
 	b.mu.RUnlock()
-	if ps.Leader == b.cfg.BrokerID {
-		p.BecomeLeader(ps.LeaderEpoch, ps.ISR, tcfg.MinInsyncReplicas, hw)
-	}
+	p.ApplyState(partition.State{Leader: ps.Leader, LeaderEpoch: ps.LeaderEpoch, PartitionEpoch: ps.PartitionEpoch,
+		ISR: ps.ISR, MinInsync: tcfg.MinInsyncReplicas, HWCheckpoint: hw})
 	return p, nil
 }
+
+// applyPartitionChanges applies leadership/ISR changes to local replicas of a topic with id.
+// Stale changes are ignored by Partition.ApplyState. Caller holds applyMu.
+func (b *Broker) applyPartitionChanges(topic, id string, parts []metadata.PartitionState) {
+	b.mu.RLock()
+	ts, ok := b.topics[topic]
+	minInsync := int32(1)
+	if ok {
+		minInsync = ts.minInsync
+	}
+	b.mu.RUnlock()
+	if !ok || ts.id != id {
+		return
+	}
+	for _, ps := range parts {
+		tp := storage.TopicPartition{Topic: topic, Partition: ps.Partition}
+		p, ok := b.Partition(tp)
+		if !ok || p.TopicID() != id {
+			continue
+		}
+		b.mu.RLock()
+		hw := b.hwCkpt[tp]
+		b.mu.RUnlock()
+		p.ApplyState(partition.State{Leader: ps.Leader, LeaderEpoch: ps.LeaderEpoch, PartitionEpoch: ps.PartitionEpoch,
+			ISR: ps.ISR, MinInsync: minInsync, HWCheckpoint: hw})
+	}
+}
+
+// resync brings local partitions in line with a restored metadata snapshot (plan R6): topics
+// gone or recreated are deleted through the normal path, new topics are created, and every
+// existing local partition gets the snapshot's leadership. It never runs the startup stray-dir
+// pass. Caller holds applyMu.
+func (b *Broker) resync(ctx context.Context, snap metadata.Snapshot) {
+	b.mu.RLock()
+	local := make(map[string]string, len(b.topics))
+	for name, ts := range b.topics {
+		local[name] = ts.id
+	}
+	b.mu.RUnlock()
+	for name, id := range local {
+		if t, ok := snap.Topic(name); !ok || t.ID != id {
+			b.deleteTopic(ctx, name, id)
+		}
+	}
+	names := make([]string, 0, len(snap.Topics))
+	for name := range snap.Topics {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	for _, name := range names {
+		t := snap.Topics[name]
+		if id, ok := local[name]; ok && id == t.ID {
+			b.applyPartitionChanges(name, t.ID, t.Partitions)
+			continue
+		}
+		b.createTopic(ctx, name, t.ID, t.Configs, t.Partitions)
+	}
+	b.markProcessed(snap.Index)
+}
+
+// markProcessed raises the processed metadata index.
+func (b *Broker) markProcessed(index uint64) {
+	for {
+		cur := b.processed.Load()
+		if index <= cur || b.processed.CompareAndSwap(cur, index) {
+			return
+		}
+	}
+}
+
+// ProcessedIndex returns the metadata index whose changes this broker has fully handled; brokers
+// report it in heartbeats so the controller unfences them only when caught up (D35).
+func (b *Broker) ProcessedIndex() uint64 { return b.processed.Load() }
 
 // deleteTopic removes the local partitions of a topic with the given id. Idempotent. Caller holds
 // applyMu.

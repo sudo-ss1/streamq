@@ -30,7 +30,9 @@ type fakeStore struct {
 	listeners []func(bool)
 }
 
-func newFakeStore() *fakeStore { return &fakeStore{state: metadata.NewState(nil, 0), leader: true, term: 1} }
+func newFakeStore() *fakeStore {
+	return &fakeStore{state: metadata.NewState(nil, 0), leader: true, term: 1}
+}
 
 func (f *fakeStore) Snapshot() metadata.Snapshot {
 	f.mu.Lock()
