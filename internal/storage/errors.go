@@ -21,6 +21,8 @@ var (
 	// ErrCorruptLog reports corruption in data below the recovery point (data that was fsynced and
 	// is trusted); the log is not opened so newer acknowledged data is never deleted to "repair" it.
 	ErrCorruptLog = errors.New("storage: corrupt log below recovery point")
+	// ErrOffsetMismatch reports a replicated batch whose base offset is not the log end offset.
+	ErrOffsetMismatch = errors.New("storage: offset mismatch")
 	// ErrClosed reports use of a closed log, segment or index.
 	ErrClosed = errors.New("storage: closed")
 	// ErrIndexFull reports an index with no room for another entry.

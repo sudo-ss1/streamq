@@ -400,6 +400,59 @@ func (s *segment) loadState() (truncated bool, err error) {
 	return false, nil
 }
 
+// truncateTo cuts the segment before the batch containing offset (the start of the first batch
+// whose last offset is >= offset), fsyncs, truncates both indexes and recomputes the in-memory
+// state. It returns the segment's new next offset. Caller holds Log.mu.
+func (s *segment) truncateTo(offset int64) (int64, error) {
+	end := s.size.Load()
+	_, pos := s.index.lookup(offset)
+	cut, next := end, s.nextOffset.Load()
+	for p := int64(pos); p < end; {
+		bi, err := s.readBatchInfo(p, end)
+		if err != nil {
+			return 0, err
+		}
+		if bi.lastOffset >= offset {
+			cut, next = p, bi.baseOffset
+			break
+		}
+		p += bi.size
+	}
+	if cut == end {
+		return next, nil
+	}
+	if err := s.log.Truncate(cut); err != nil {
+		return 0, fmt.Errorf("truncate segment file: %w", err)
+	}
+	if err := s.log.Sync(); err != nil {
+		return 0, fmt.Errorf("sync segment file: %w", err)
+	}
+	s.index.truncateTo(next)
+	s.timeIndex.truncateTo(next)
+	// Recompute derived state from the remaining batch headers.
+	s.maxTimestamp.Store(-1)
+	s.offsetOfMaxTs, s.rollingBaseTs = s.baseOffset, -1
+	for p := int64(0); p < cut; {
+		bi, err := s.readBatchInfo(p, cut)
+		if err != nil {
+			return 0, err
+		}
+		if p == 0 {
+			s.rollingBaseTs = bi.maxTimestamp
+		}
+		if bi.maxTimestamp > s.maxTimestamp.Load() {
+			s.maxTimestamp.Store(bi.maxTimestamp)
+			s.offsetOfMaxTs = bi.baseOffset
+		}
+		p += bi.size
+	}
+	_, lastIndexPos := s.index.lookup(math.MaxInt64)
+	s.bytesSinceIndex = int(cut - int64(lastIndexPos))
+	s.size.Store(cut)
+	s.nextOffset.Store(next)
+	return next, nil
+}
+
 // onRoll seals the segment when it stops being active: it records the final max timestamp in the
 // time index, trims both indexes and fsyncs all three files.
 func (s *segment) onRoll() error {

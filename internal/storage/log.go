@@ -136,6 +136,26 @@ func (l *Log) Append(ctx context.Context, b record.Batch, leaderEpoch int32) (Ap
 		return AppendInfo{}, fmt.Errorf("%w: maxTimestamp %d", ErrInvalidTimestamp, batch.MaxTimestamp())
 	}
 
+	return l.appendValidated(batch, true, leaderEpoch)
+}
+
+// AppendAsFollower appends a batch replicated from the leader, keeping its offsets and leader
+// epoch. Its base offset must equal the LEO (ErrOffsetMismatch). The batch is validated (CRC,
+// canonical form) but max.message.bytes is not applied: the leader already accepted it.
+func (l *Log) AppendAsFollower(ctx context.Context, b record.Batch) (AppendInfo, error) {
+	if err := ctx.Err(); err != nil {
+		return AppendInfo{}, err
+	}
+	batch, err := record.Validate(b, MaxSegmentBytes)
+	if err != nil {
+		return AppendInfo{}, fmt.Errorf("%w: %w", ErrCorruptBatch, err)
+	}
+	return l.appendValidated(batch, false, 0)
+}
+
+// appendValidated appends a validated batch. As leader it stamps the base offset (LEO) and
+// leaderEpoch; as follower it requires the batch's base offset to equal the LEO.
+func (l *Log) appendValidated(batch record.Batch, leader bool, leaderEpoch int32) (AppendInfo, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.closed.Load() {
@@ -144,15 +164,21 @@ func (l *Log) Append(ctx context.Context, b record.Batch, leaderEpoch int32) (Ap
 	if l.failed.Load() {
 		return AppendInfo{}, ErrLogFailed
 	}
+	if !leader && batch.BaseOffset() != l.leo.Load() {
+		return AppendInfo{}, fmt.Errorf("%w: batch at %d, log end at %d", ErrOffsetMismatch, batch.BaseOffset(), l.leo.Load())
+	}
 	now := l.clock.Now()
 	seg := l.active()
+	var err error
 	if seg.needsRoll(batch, now) {
 		if seg, err = l.roll(now); err != nil {
 			return AppendInfo{}, l.fail(err)
 		}
 	}
-	batch.SetBaseOffset(l.leo.Load())
-	batch.SetLeaderEpoch(leaderEpoch)
+	if leader {
+		batch.SetBaseOffset(l.leo.Load())
+		batch.SetLeaderEpoch(leaderEpoch)
+	}
 	if err := seg.append(batch); err != nil {
 		return AppendInfo{}, l.fail(err)
 	}
@@ -165,6 +191,104 @@ func (l *Log) Append(ctx context.Context, b record.Batch, leaderEpoch int32) (Ap
 		l.lastFlushMs.Store(now.UnixMilli())
 	}
 	return AppendInfo{FirstOffset: batch.BaseOffset(), LastOffset: batch.LastOffset(), MaxTimestamp: batch.MaxTimestamp()}, nil
+}
+
+// TruncateTo removes every record at or after offset (SPEC §4.4 follower truncation). Records are
+// removed batch-wise: if offset falls inside a batch, the whole batch goes and the new LEO is that
+// batch's base offset. Segments wholly at or after the cut are deleted immediately (DECISIONS
+// D39: only followers truncate and followers serve no consumer reads). It returns the new LEO.
+// offset >= LEO is a no-op; offset < log start offset is ErrOffsetOutOfRange.
+func (l *Log) TruncateTo(ctx context.Context, offset int64) (int64, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.closed.Load() {
+		return 0, ErrClosed
+	}
+	if l.failed.Load() {
+		return 0, ErrLogFailed
+	}
+	leo := l.leo.Load()
+	if offset >= leo {
+		return leo, nil
+	}
+	if offset < l.logStartOffset.Load() {
+		return 0, fmt.Errorf("%w: truncate to %d below log start %d", ErrOffsetOutOfRange, offset, l.logStartOffset.Load())
+	}
+	segs := l.loadSegments()
+	i := sort.Search(len(segs), func(i int) bool { return segs[i].baseOffset > offset }) - 1
+	if i > 0 && segs[i].baseOffset == offset {
+		i-- // the cut is exactly at a segment boundary: keep the previous segment whole
+	}
+	keep := make([]*segment, i+1)
+	copy(keep, segs[:i+1])
+	removed := segs[i+1:]
+	// Lower the recovery point first: no flush may claim the data being removed.
+	for {
+		rp := l.recoveryPoint.Load()
+		if rp <= offset || l.recoveryPoint.CompareAndSwap(rp, offset) {
+			break
+		}
+	}
+	// Delete newest-first, making each deletion durable before the next, so a crash can never
+	// leave a gap between surviving segments (plan R7); then cut the containing segment.
+	l.segments.Store(&keep)
+	for j := len(removed) - 1; j >= 0; j-- {
+		if err := removed[j].deleteFiles(); err != nil {
+			return 0, l.fail(fmt.Errorf("delete truncated segment %d: %w", removed[j].baseOffset, err))
+		}
+		if err := syncDir(l.dir); err != nil {
+			return 0, l.fail(err)
+		}
+	}
+	newLEO, err := keep[i].truncateTo(offset)
+	if err != nil {
+		return 0, l.fail(fmt.Errorf("truncate segment %d: %w", keep[i].baseOffset, err))
+	}
+	l.leo.Store(newLEO)
+	if rp := l.recoveryPoint.Load(); rp > newLEO {
+		l.recoveryPoint.Store(newLEO)
+	}
+	l.logger.Info("truncated log", slog.Int64("offset", offset), slog.Int64("log_end_offset", newLEO))
+	return newLEO, nil
+}
+
+// TruncateFullyAndStartAt deletes every segment and restarts the log empty at offset (a follower
+// whose log is entirely below the leader's log start, SPEC §4.4).
+func (l *Log) TruncateFullyAndStartAt(ctx context.Context, offset int64) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.closed.Load() {
+		return ErrClosed
+	}
+	seg, err := createSegment(l.dir, offset, l.cfg, l.clock.Now())
+	if err != nil {
+		return l.fail(err)
+	}
+	old := l.loadSegments()
+	fresh := []*segment{seg}
+	l.logStartOffset.Store(offset)
+	l.segments.Store(&fresh)
+	l.leo.Store(offset)
+	l.recoveryPoint.Store(offset)
+	var errs []error
+	for _, s := range old {
+		if s.baseOffset != offset {
+			errs = append(errs, s.deleteFiles())
+		} else {
+			errs = append(errs, s.close()) // createSegment already replaced its files
+		}
+	}
+	errs = append(errs, syncDir(l.dir))
+	if err := errors.Join(errs...); err != nil {
+		return l.fail(fmt.Errorf("truncate fully: %w", err))
+	}
+	return nil
 }
 
 // roll seals the active segment and publishes a new one starting at the LEO. Caller holds mu.
