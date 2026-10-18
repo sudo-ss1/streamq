@@ -230,14 +230,16 @@ func (b *Broker) truncateFollower(ctx context.Context, p *partition.Partition, l
 // before any further append (plan R7, R20).
 func (b *Broker) truncate(ctx context.Context, p *partition.Partition, epoch int32, target, leaderLogStart int64) error {
 	before := p.Log().LogEndOffset()
+	// A failed truncation may already have cut the log; the retry may then see no change, so the
+	// checkpoint is forced before anything else (errCheckpointPending).
 	if target < p.Log().LogStartOffset() && leaderLogStart >= 0 {
 		if err := p.TruncateFullyAndStartAt(ctx, epoch, leaderLogStart); err != nil {
-			return err
+			return fmt.Errorf("%w: %w", errCheckpointPending, err)
 		}
 	} else {
 		leo, err := p.TruncateTo(ctx, epoch, min(max(target, p.Log().LogStartOffset()), before))
 		if err != nil {
-			return err
+			return fmt.Errorf("%w: %w", errCheckpointPending, err)
 		}
 		if leo == before {
 			return nil // log unchanged: nothing to checkpoint
@@ -270,7 +272,7 @@ func (b *Broker) fetchOnce(ctx context.Context, p *partition.Partition, leader, 
 		if leo < res.LogStartOffset {
 			// Entirely below the leader's log start (retention ran there): start over at it.
 			if err := p.TruncateFullyAndStartAt(ctx, epoch, res.LogStartOffset); err != nil {
-				return err
+				return fmt.Errorf("%w: %w", errCheckpointPending, err)
 			}
 			return b.checkpointAfterTruncation(ctx)
 		}
@@ -337,8 +339,9 @@ func (b *Broker) runISR(ctx context.Context) error {
 	}
 }
 
-// syncLogStarts drops epoch-cache entries below each partition's log start after retention. It
-// holds applyMu so it never writes the checkpoint of a partition being deleted (plan R8).
+// syncLogStarts drops epoch-cache entries below each partition's log start after retention and
+// maintains producer state. It holds applyMu so it never writes the checkpoint or snapshots of a
+// partition being deleted (plan R8).
 func (b *Broker) syncLogStarts(ctx context.Context) {
 	b.applyMu.Lock()
 	defer b.applyMu.Unlock()
@@ -348,11 +351,13 @@ func (b *Broker) syncLogStarts(ctx context.Context) {
 		parts = append(parts, p)
 	}
 	b.mu.RUnlock()
+	now := b.clock.Now()
 	for _, p := range parts {
 		if err := p.SyncLogStart(ctx); err != nil && ctx.Err() == nil {
 			b.logger.Warn("epoch cache log-start sync failed", slog.String("topic", p.TopicPartition().Topic),
 				slog.Int("partition", int(p.TopicPartition().Partition)), slog.Any("error", err))
 		}
+		p.MaintainProducers(ctx, now) // rebuild retries, expiration, snapshot pruning (M7)
 	}
 }
 

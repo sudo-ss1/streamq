@@ -187,3 +187,43 @@ func (c *ReplicaClient) AlterISR(ctx context.Context, tp storage.TopicPartition,
 		return sentinelFor(resp.GetErrorCode(), resp.GetErrorMessage())
 	}
 }
+
+// AllocateProducerIDs implements StreamQInternalServiceServer: the controller reserves a block of
+// producer IDs for the calling broker (SPEC §6, D51).
+func (s *InternalServer) AllocateProducerIDs(ctx context.Context, req *streamqv1.AllocateProducerIDsRequest) (*streamqv1.AllocateProducerIDsResponse, error) {
+	first, err := s.ctrl.AllocateProducerIDs(ctx, req.GetBrokerId(), req.GetBrokerEpoch())
+	resp := &streamqv1.AllocateProducerIDsResponse{ControllerId: s.store.LeaderID()}
+	if err != nil {
+		resp.ErrorCode, resp.ErrorMessage = s.code(err), err.Error()
+		return resp, nil
+	}
+	resp.FirstId, resp.Count = first, metadata.ProducerIDBlockSize
+	return resp, nil
+}
+
+// IDBlockSource returns a broker.IDBlockSource that reserves producer-ID blocks from the
+// controller for broker self, sending its current registration epoch.
+func (c *ReplicaClient) IDBlockSource(self int32, epoch func() int64) broker.IDBlockSource {
+	return func(ctx context.Context) (int64, error) {
+		ctrl := c.store.Snapshot().ControllerID
+		if ctrl < 0 {
+			return 0, fmt.Errorf("allocate producer ids: %w", metadata.ErrNotController)
+		}
+		cl, err := c.client(ctrl)
+		if err != nil {
+			return 0, fmt.Errorf("allocate producer ids: %w: %w", metadata.ErrNotController, err)
+		}
+		resp, err := cl.AllocateProducerIDs(ctx, &streamqv1.AllocateProducerIDsRequest{BrokerId: self, BrokerEpoch: epoch()})
+		if err != nil {
+			return 0, fmt.Errorf("allocate producer ids: %w: %w", raftstore.ErrUnknownOutcome, err)
+		}
+		if resp.GetErrorCode() == streamqv1.ErrorCode_ERROR_CODE_STALE_BROKER_EPOCH {
+			// The broker is re-registering; NOT_CONTROLLER makes clients retry.
+			return 0, fmt.Errorf("allocate producer ids: %s: %w", resp.GetErrorMessage(), metadata.ErrNotController)
+		}
+		if err := sentinelFor(resp.GetErrorCode(), resp.GetErrorMessage()); err != nil {
+			return 0, err
+		}
+		return resp.GetFirstId(), nil
+	}
+}

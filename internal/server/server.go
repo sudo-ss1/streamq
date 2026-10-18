@@ -21,6 +21,7 @@ import (
 	"github.com/sudo-ss1/streamq/internal/metadata"
 	"github.com/sudo-ss1/streamq/internal/metadata/raftstore"
 	"github.com/sudo-ss1/streamq/internal/partition"
+	"github.com/sudo-ss1/streamq/internal/producerstate"
 	"github.com/sudo-ss1/streamq/internal/storage"
 )
 
@@ -35,6 +36,7 @@ type Server struct {
 	streamqv1.UnimplementedStreamQServiceServer
 
 	broker   *broker.Broker
+	pids     *broker.ProducerIDs
 	groups   *group.Coordinator
 	store    metadata.Store
 	defaults config.TopicDefaults
@@ -43,10 +45,10 @@ type Server struct {
 }
 
 // New returns a Server.
-func New(b *broker.Broker, groups *group.Coordinator, store metadata.Store, defaults config.TopicDefaults,
+func New(b *broker.Broker, pids *broker.ProducerIDs, groups *group.Coordinator, store metadata.Store, defaults config.TopicDefaults,
 	clock broker.Clock, logger *slog.Logger,
 ) *Server {
-	return &Server{broker: b, groups: groups, store: store, defaults: defaults, clock: clock, logger: logger}
+	return &Server{broker: b, pids: pids, groups: groups, store: store, defaults: defaults, clock: clock, logger: logger}
 }
 
 // errorCode maps an error to its API ErrorCode. Unexpected errors map to UNKNOWN and are logged.
@@ -87,8 +89,12 @@ func errorCode(err error) streamqv1.ErrorCode {
 		return streamqv1.ErrorCode_ERROR_CODE_OFFSET_OUT_OF_RANGE
 	case errors.Is(err, storage.ErrMessageTooLarge):
 		return streamqv1.ErrorCode_ERROR_CODE_MESSAGE_TOO_LARGE
-	case errors.Is(err, storage.ErrCorruptBatch):
+	case errors.Is(err, storage.ErrCorruptBatch), errors.Is(err, producerstate.ErrInvalidProducerBatch):
 		return streamqv1.ErrorCode_ERROR_CODE_CORRUPT_MESSAGE
+	case errors.Is(err, producerstate.ErrOutOfOrderSequence):
+		return streamqv1.ErrorCode_ERROR_CODE_OUT_OF_ORDER_SEQUENCE
+	case errors.Is(err, producerstate.ErrUnknownProducerID):
+		return streamqv1.ErrorCode_ERROR_CODE_UNKNOWN_PRODUCER_ID
 	case errors.Is(err, storage.ErrInvalidTimestamp):
 		return streamqv1.ErrorCode_ERROR_CODE_INVALID_TIMESTAMP
 	case errors.Is(err, metadata.ErrNotController):
@@ -261,6 +267,16 @@ func toAcks(a streamqv1.Acks) (partition.Acks, error) {
 	default:
 		return 0, status.Errorf(codes.InvalidArgument, "unknown acks %d", a)
 	}
+}
+
+// InitProducer implements StreamQServiceServer: it hands out a new idempotent producer ID
+// (SPEC §6). The producer epoch is always 0 (SPEC §3.5).
+func (s *Server) InitProducer(ctx context.Context, _ *streamqv1.InitProducerRequest) (*streamqv1.InitProducerResponse, error) {
+	id, err := s.pids.Next(ctx)
+	if err != nil {
+		return &streamqv1.InitProducerResponse{ErrorCode: s.errorCode(err), ErrorMessage: err.Error(), ProducerId: -1}, nil
+	}
+	return &streamqv1.InitProducerResponse{ProducerId: id}, nil
 }
 
 // Produce implements StreamQServiceServer.

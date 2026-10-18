@@ -111,6 +111,8 @@ func StartWithOptions(ctx context.Context, cfg config.Config, logger *slog.Logge
 		TopicDefaults:   cfg.TopicDefaults,
 		FileDeleteDelay: time.Duration(cfg.FileDeleteDelayMs) * time.Millisecond,
 		ReplicaLagMax:   time.Duration(cfg.ReplicaLagMaxMs) * time.Millisecond,
+
+		ProducerIDExpiration: time.Duration(cfg.ProducerIDExpirationMs) * time.Millisecond,
 	}
 	if n.replicas != nil {
 		bcfg.LeaderClient, bcfg.AlterISR = n.replicas, n.replicas.AlterISR
@@ -131,7 +133,12 @@ func StartWithOptions(ctx context.Context, cfg config.Config, logger *slog.Logge
 		InitialRebalanceDelay:   time.Duration(cfg.GroupInitialRebalanceDelayMs) * time.Millisecond,
 	}, n.store, group.SystemClock{}, n.logger)
 	n.grpc = grpc.NewServer(grpc.MaxRecvMsgSize(server.MaxMessageSize), grpc.MaxSendMsgSize(server.MaxMessageSize))
-	streamqv1.RegisterStreamQServiceServer(n.grpc, server.New(n.broker, n.groups, n.store, cfg.TopicDefaults, broker.SystemClock{}, n.logger))
+	idSource := broker.LocalIDBlockSource(n.store, cfg.BrokerID)
+	if n.replicas != nil {
+		idSource = n.replicas.IDBlockSource(cfg.BrokerID, n.epoch.Load)
+	}
+	pids := broker.NewProducerIDs(idSource)
+	streamqv1.RegisterStreamQServiceServer(n.grpc, server.New(n.broker, pids, n.groups, n.store, cfg.TopicDefaults, broker.SystemClock{}, n.logger))
 	go func() { n.serveErr <- n.grpc.Serve(n.lis) }()
 	n.logger.Info("serving", slog.String("addr", n.lis.Addr().String()))
 	return n, nil

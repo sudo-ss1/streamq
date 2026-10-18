@@ -29,6 +29,7 @@ import (
 	"github.com/sudo-ss1/streamq/internal/config"
 	"github.com/sudo-ss1/streamq/internal/metadata"
 	"github.com/sudo-ss1/streamq/internal/partition"
+	"github.com/sudo-ss1/streamq/internal/producerstate"
 	"github.com/sudo-ss1/streamq/internal/storage"
 )
 
@@ -78,6 +79,9 @@ type Config struct {
 	ReplicaFetchMaxBytes int           // default DefaultReplicaFetchMaxBytes
 	ISRCheckInterval     time.Duration // default DefaultISRCheckInterval
 	ISRRequestTimeout    time.Duration // default 5s
+
+	// ProducerIDExpiration is producer_id_expiration_ms (default 7 days, D49).
+	ProducerIDExpiration time.Duration
 }
 
 // topicState is the local view of one topic.
@@ -152,6 +156,9 @@ func Open(ctx context.Context, cfg Config, store metadata.Store, clock Clock, lo
 	}
 	if cfg.ISRRequestTimeout <= 0 {
 		cfg.ISRRequestTimeout = 5 * time.Second
+	}
+	if cfg.ProducerIDExpiration <= 0 {
+		cfg.ProducerIDExpiration = 7 * 24 * time.Hour
 	}
 	logger = logger.With(slog.Int("broker_id", int(cfg.BrokerID)))
 	var b *Broker // the retention limit needs the broker, which needs the manager
@@ -340,7 +347,13 @@ func (b *Broker) openPartition(ctx context.Context, topic, id string, tcfg confi
 	}
 	p := partition.New(tp, id, l, epochs, partition.Config{
 		LocalID: b.cfg.BrokerID, Clock: b.clock, ReplicaLagMax: b.cfg.ReplicaLagMax, IsFenced: b.isFenced,
+		Producers: producerstate.New(l.Dir(), b.cfg.ProducerIDExpiration),
 	}, b.logger)
+	if err := p.RecoverProducers(ctx); err != nil {
+		// Not fatal: idempotent appends are refused until the ISR loop's retry succeeds (M7 R17).
+		b.logger.Warn("producer state recovery failed", slog.String("topic", tp.Topic),
+			slog.Int("partition", int(tp.Partition)), slog.Any("error", err))
+	}
 	b.mu.RLock()
 	hw := b.hwCkpt[tp]
 	b.mu.RUnlock()
@@ -591,6 +604,7 @@ func (b *Broker) Close(ctx context.Context) error {
 		b.applyMu.Unlock()
 		b.cancel()
 		errs := []error{b.group.Wait()}
+		b.snapshotProducers(ctx)
 		errs = append(errs, b.writeHWCheckpoint(ctx), b.mgr.Close(ctx))
 		err = errors.Join(errs...)
 	})
@@ -690,4 +704,25 @@ func NewTopicID() (string, error) {
 		return "", fmt.Errorf("generate topic id: %w", err)
 	}
 	return hex.EncodeToString(b[:]), nil
+}
+
+// snapshotProducers flushes each partition's log and writes a producer snapshot at its LEO, so a
+// clean restart replays nothing (M7 plan R16). Appends are already refused (BeginShutdown), the
+// fetchers and background loops have stopped, and storage is still open.
+func (b *Broker) snapshotProducers(ctx context.Context) {
+	b.mu.RLock()
+	parts := make([]*partition.Partition, 0, len(b.partitions))
+	for _, p := range b.partitions {
+		parts = append(parts, p)
+	}
+	b.mu.RUnlock()
+	for _, p := range parts {
+		if err := p.Log().Flush(ctx); err != nil {
+			continue // the snapshot would claim unflushed data; recovery replays instead
+		}
+		if err := p.SnapshotProducers(ctx); err != nil {
+			b.logger.Warn("producer snapshot on close failed", slog.String("topic", p.TopicPartition().Topic),
+				slog.Int("partition", int(p.TopicPartition().Partition)), slog.Any("error", err))
+		}
+	}
 }
