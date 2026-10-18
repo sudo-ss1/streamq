@@ -556,3 +556,22 @@ logger (contract). This is recorded as an override in `docs/plans/M8.md`.
 - **Pacing:** clients back off 50–200 ms after errors.
 - **Budget:** porcupine runs with a 60 s timeout. A timeout (porcupine `Unknown`) fails the run as
   inconclusive. A single partition keeps the search tractable.
+
+## D59. Accepted: inbound-only isolation can take a cluster down (M9)
+
+The M9 chaos runs found an availability weakness:
+- A broker that can send but not receive (an inbound-only cut) stops getting Raft heartbeats.
+- It then wins pre-vote and the election through its working outbound links and becomes
+  controller.
+- It fences every broker, because their heartbeats can no longer reach it.
+- Partitions go leaderless until the cut heals.
+
+Safety is unaffected: no acked record was lost and every history checked clean. It is accepted
+for this project, because Kafka KRaft has the same exposure (check-quorum is satisfied by the
+outbound round trips).
+
+Possible follow-ups:
+- a controller that steps down (Raft leadership transfer) instead of fencing when it receives
+  no heartbeat from any other broker within the session timeout;
+- broker-side detection of a controller that never acknowledges heartbeats;
+- KIP-966-style eligible leader replicas to shorten the leaderless window after a fence.

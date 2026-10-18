@@ -62,14 +62,25 @@ model to a 3-node in-process cluster with 8 graceful leader and follower restart
   follower stays in the ISR until it is fenced (9 s session timeout) or shrunk (10 s lag), so
   each kill -9 stops acks for about 8–10 s. This matches Kafka's `replica.lag.time.max.ms`
   behaviour; a shorter session timeout trades false fencing for shorter stalls.
-- **Inbound-only isolation of the controller fences every broker (availability).** Each broker
-  sends heartbeats to the controller through the controller's own inbound proxy. Cutting that
-  proxy makes the controller, which keeps Raft leadership because its outbound Raft traffic still
-  works, fence all brokers, itself included. Partitions stay leaderless until the heal. This was
-  seen in the broker logs of implementer run 20261018T221256Z, when the isolated lin leader was
-  also the controller. Recovery after the heal took about 6 s. Kafka's KRaft has the same exposure to asymmetric cuts.
-  A `check-quorum`-style controller step-down, when no broker heartbeat arrives, is a possible
-  later improvement (PROGRESS_LOG).
+- **Inbound-only isolation of any broker causes a cluster-wide outage (availability, D59).**
+  Safety held in all 3 rounds. In the documented run (`20261018T223753Z-inbound-isolation.log`),
+  round 1 isolated broker3, which was **not** the controller (controller 1):
+  - About 2 s after its inbound proxies were cut, broker3 stopped receiving Raft heartbeats.
+  - Its *outbound* links still worked, so it passed pre-vote (`tally=2`) and won the election at
+    term 3. It became controller at 22:42:12.
+  - All broker heartbeats, its own included, reach the controller through the isolated broker's
+    inbound proxy. Ten seconds later it fenced brokers 1, 2 and 3.
+  - Rounds 2 and 3 ended the same way.
+
+  Each round ends with leader −1 and ISR = {one broker}. The cut leader first shrinks the ISR to
+  itself (its followers cannot fetch). Fencing it then leaves no clean leader, and there is no
+  unclean election (compare Kafka's KIP-966 ELR). `lin` was unavailable for 57.9 s across the 3
+  rounds and recovered about 6 s after each heal.
+
+  This is an availability weakness against asymmetric network faults. Kafka KRaft's Raft
+  check-quorum would not catch it either, because the isolated node's outbound requests and
+  their replies succeed. Possible mitigations are recorded as follow-ups in D59 and
+  PROGRESS_LOG.
 - **Full disk:**
   - The broker did not crash (no SIGBUS). It marked the affected logs failed and stayed the
     failing leader of its partitions until the disk was replaced, as D57 describes.
@@ -83,6 +94,12 @@ model to a 3-node in-process cluster with 8 graceful leader and follower restart
   were no leader or ISR changes. About 2,100 bulk records exceeded the 45 s delivery timeout
   before being sent, because of one batch in flight per partition (D48). They were reported as
   failed and none were in the log.
+
+Porcupine reports "Ok (0.0s)" in every row by design. After `Prepare`, every append has a fixed
+offset (acknowledged, or pinned to the final log) and the never-applied unknowns are gone. The
+search is therefore almost deterministic and checks the real-time order of acks and reads
+(monotonic prefixes). Durability and offsets are carried by `VerifyFinal`, so a check that
+finishes in milliseconds is expected.
 
 ## Limitations of this testing
 
