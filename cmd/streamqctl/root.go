@@ -54,7 +54,7 @@ func newRootCmdWithOptions(in io.Reader, out, errOut io.Writer, opts options) *c
 	root.SetErr(errOut)
 	root.PersistentFlags().StringVar(&a.bootstrap, "bootstrap", "localhost:9092", "broker address (host:port)")
 	root.PersistentFlags().DurationVar(&a.timeout, "timeout", 10*time.Second, "timeout for each request")
-	root.AddCommand(a.topicsCmd(), a.produceCmd(), a.consumeCmd())
+	root.AddCommand(a.topicsCmd(), a.produceCmd(), a.consumeCmd(), a.groupsCmd())
 	return root
 }
 
