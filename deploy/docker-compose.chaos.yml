@@ -1,0 +1,45 @@
+# Full-disk override for the chaos runner (test/chaos/cmd/chaos, plan M9 R6/R19/R26/R29).
+# Used ONLY by the full-disk scenario, always together with deploy/docker-compose.yml:
+#
+#   docker compose -p streamq-chaos -f deploy/docker-compose.yml -f <image override> \
+#       -f deploy/docker-compose.chaos.yml up -d toxiproxy broker1 broker2 broker3
+#
+# broker3's data dir (partition logs, checkpoints) is a 64 MiB tmpfs volume owned by the image's
+# nonroot user, so the runner can fill it to ENOSPC from a helper container. Its Raft state lives
+# on a separate named volume mounted inside it, so only partition logs hit ENOSPC and a disk
+# replacement (remove and recreate broker3-logs) keeps the Raft voter (DECISIONS D57).
+
+services:
+  broker1:
+    image: streamq:chaos
+  broker2:
+    image: streamq:chaos
+
+  # One-shot: the Raft volume is created root-owned (its mount point does not exist in the image),
+  # so hand it to the broker's nonroot user (uid/gid 65532) before broker3 starts.
+  broker3-raft-init:
+    image: busybox:1.36
+    command: ["chown", "65532:65532", "/raft"]
+    volumes:
+      - broker3-raft:/raft
+
+  broker3:
+    image: streamq:chaos
+    volumes:
+      - ./broker3.yaml:/etc/streamq/broker.yaml:ro
+      - broker3-logs:/var/lib/streamq
+      - broker3-raft:/var/lib/streamq/raft
+    depends_on:
+      toxiproxy:
+        condition: service_started
+      broker3-raft-init:
+        condition: service_completed_successfully
+
+volumes:
+  broker3-logs:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: "size=64m,uid=65532,gid=65532"
+  broker3-raft:
