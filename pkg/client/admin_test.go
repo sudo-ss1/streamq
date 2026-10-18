@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -135,9 +136,9 @@ func TestAdminCreateTopic(t *testing.T) {
 
 	// NOT_CONTROLLER (no controller reachable during forwarding) is retried until ctx ends.
 	af.amu.Lock()
-	calls := 0
+	var calls atomic.Int32 // incremented on the server's handler goroutine
 	af.onCreate = func(context.Context, *streamqv1.CreateTopicRequest) (*streamqv1.CreateTopicResponse, error) {
-		calls++
+		calls.Add(1)
 		return &streamqv1.CreateTopicResponse{ErrorCode: streamqv1.ErrorCode_ERROR_CODE_NOT_CONTROLLER, ErrorMessage: "detail"}, nil
 	}
 	af.amu.Unlock()
@@ -145,9 +146,7 @@ func TestAdminCreateTopic(t *testing.T) {
 	defer cancel()
 	err = admin.CreateTopic(short, "x", 1, 1, nil)
 	require.Error(t, err, "fails once ctx ends (with NOT_CONTROLLER or the deadline, whichever comes last)")
-	af.amu.Lock()
-	require.Greater(t, calls, 1, "NOT_CONTROLLER is retried")
-	af.amu.Unlock()
+	require.Greater(t, calls.Load(), int32(1), "NOT_CONTROLLER is retried")
 }
 
 func TestAdminCreateTopicAfterTransportError(t *testing.T) {
