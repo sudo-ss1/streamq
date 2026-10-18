@@ -726,3 +726,19 @@ func (b *Broker) snapshotProducers(ctx context.Context) {
 		}
 	}
 }
+
+// LeadsPartitions reports whether this broker leads any local partition (controlled shutdown).
+func (b *Broker) LeadsPartitions() bool {
+	b.mu.RLock()
+	parts := make([]*partition.Partition, 0, len(b.partitions))
+	for _, p := range b.partitions {
+		parts = append(parts, p)
+	}
+	b.mu.RUnlock()
+	for _, p := range parts {
+		if p.IsLeader() {
+			return true
+		}
+	}
+	return false
+}

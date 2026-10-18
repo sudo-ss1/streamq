@@ -1,10 +1,16 @@
 package node
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"log/slog"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -36,4 +42,56 @@ func TestRefusesToMixMetadataModes(t *testing.T) {
 	cfg.Cluster = []config.ClusterMember{{ID: 1, Raft: "127.0.0.1:1", Internal: "127.0.0.1:2", Client: "127.0.0.1:3"}}
 	_, err = Start(context.Background(), cfg, slog.New(slog.DiscardHandler))
 	require.ErrorContains(t, err, "other metadata mode")
+}
+
+// syncBuffer is a goroutine-safe log sink.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) lines() []string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return strings.Split(strings.TrimSpace(b.buf.String()), "\n")
+}
+
+// TestLogsCarryBrokerIDAndMetricsServe (M8 plan R1, R10): every structured log line of a node
+// carries broker_id, and /metrics is served on a pre-bound listener.
+func TestLogsCarryBrokerIDAndMetricsServe(t *testing.T) {
+	ctx := context.Background()
+	cfg := config.Default()
+	cfg.MetricsAddr = ""
+	cfg.DataDir = t.TempDir()
+	cfg.ListenAddr = "127.0.0.1:0"
+	cfg.BrokerID = 7
+	var logs syncBuffer
+	lis, err := (&net.ListenConfig{}).Listen(ctx, "tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	n, err := StartWithOptions(ctx, cfg, slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})), Options{Metrics: lis})
+	require.NoError(t, err)
+	require.Equal(t, lis.Addr().String(), n.MetricsAddr())
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+n.MetricsAddr()+"/metrics", nil)
+	require.NoError(t, err)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	require.NoError(t, n.Close(ctx))
+	lines := logs.lines()
+	require.NotEmpty(t, lines)
+	for _, line := range lines {
+		var rec map[string]any
+		require.NoError(t, json.Unmarshal([]byte(line), &rec), line)
+		require.EqualValues(t, 7, rec["broker_id"], "log line without broker_id: %s", line)
+		require.Equal(t, 1, strings.Count(line, `"broker_id"`), "duplicate broker_id: %s", line)
+	}
 }

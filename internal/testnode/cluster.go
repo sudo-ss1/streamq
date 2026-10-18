@@ -18,6 +18,7 @@ import (
 type Cluster struct {
 	tb      testing.TB
 	configs []config.Config
+	opt     func(id int32, o *node.Options) // per-node options hook (may be nil)
 	mu      sync.Mutex
 	nodes   []*node.Node // nil while stopped
 }
@@ -44,7 +45,14 @@ func bind(tb testing.TB, addr string) net.Listener {
 // controller) and stops them when the test ends. mod may adjust each config.
 func StartCluster(tb testing.TB, n int, mod func(*config.Config)) *Cluster {
 	tb.Helper()
-	c := &Cluster{tb: tb, nodes: make([]*node.Node, n)}
+	return StartClusterWith(tb, n, mod, nil)
+}
+
+// StartClusterWith is StartCluster with a hook that adjusts each node's Options (test hooks such
+// as BeforeBrokerClose); it is applied again on Restart.
+func StartClusterWith(tb testing.TB, n int, mod func(*config.Config), opt func(id int32, o *node.Options)) *Cluster {
+	tb.Helper()
+	c := &Cluster{tb: tb, nodes: make([]*node.Node, n), opt: opt}
 	lis := make([]clusterListeners, n)
 	var members []config.ClusterMember
 	for i := range n {
@@ -78,8 +86,11 @@ func StartCluster(tb testing.TB, n int, mod func(*config.Config)) *Cluster {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			c.nodes[i], errs[i] = node.StartWithOptions(context.Background(), c.configs[i], slog.New(slog.DiscardHandler),
-				node.Options{Client: lis[i].client, Internal: lis[i].internal, Raft: lis[i].raft})
+			opts := node.Options{Client: lis[i].client, Internal: lis[i].internal, Raft: lis[i].raft}
+			if c.opt != nil {
+				c.opt(int32(i+1), &opts)
+			}
+			c.nodes[i], errs[i] = node.StartWithOptions(context.Background(), c.configs[i], slog.New(slog.DiscardHandler), opts)
 		}()
 	}
 	wg.Wait()
@@ -118,6 +129,9 @@ func (c *Cluster) Restart(id int32) {
 	c.tb.Helper()
 	cfg := c.configs[id-1]
 	opts := node.Options{Client: bind(c.tb, cfg.ListenAddr), Internal: bind(c.tb, cfg.InternalAddr), Raft: bind(c.tb, cfg.RaftAddr)}
+	if c.opt != nil {
+		c.opt(id, &opts)
+	}
 	n, err := node.StartWithOptions(context.Background(), cfg, slog.New(slog.DiscardHandler), opts)
 	require.NoError(c.tb, err)
 	c.mu.Lock()

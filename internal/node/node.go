@@ -42,6 +42,11 @@ type Options struct {
 	Raft     net.Listener
 	// Metrics, if set, serves /metrics even when metrics_addr is empty (tests).
 	Metrics net.Listener
+	// BeforeBrokerClose, if set, runs in Close after controlled shutdown and the client server
+	// drain, just before the broker closes (tests observe the cluster at that point).
+	BeforeBrokerClose func()
+	// ControlledShutdown, if set, replaces the controlled-shutdown RPC (tests).
+	ControlledShutdown func(ctx context.Context) error
 }
 
 // Node is a running broker process.
@@ -73,6 +78,10 @@ type Node struct {
 	bgCancel    context.CancelFunc
 	bgContext   context.Context
 	epoch       atomic.Int64 // this broker's registration epoch (cluster mode)
+	opts        Options
+
+	livenessCancel context.CancelFunc // stops only the liveness loop (controlled shutdown step 1)
+	livenessDone   chan struct{}
 
 	closeOnce sync.Once
 	closeErr  error
@@ -86,6 +95,8 @@ func Start(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Node, 
 // StartWithOptions is Start with pre-bound listeners. It returns once the node serves clients;
 // in cluster mode that is after it registered with the controller and caught up on metadata
 // (M5 plan R1), so cluster members must be started concurrently.
+//
+//nolint:contextcheck // the liveness loop runs on the node-lifetime background context, not Start's ctx
 func StartWithOptions(ctx context.Context, cfg config.Config, logger *slog.Logger, opts Options) (n *Node, err error) {
 	if err := os.MkdirAll(cfg.DataDir, 0o750); err != nil {
 		return nil, fmt.Errorf("create data dir: %w", err)
@@ -94,7 +105,7 @@ func StartWithOptions(ctx context.Context, cfg config.Config, logger *slog.Logge
 		return nil, err
 	}
 	n = &Node{cfg: cfg, logger: logger.With(slog.Int("broker_id", int(cfg.BrokerID))), serveErr: make(chan error, 1),
-		metrics: metrics.New()}
+		metrics: metrics.New(), opts: opts}
 	defer func() {
 		if err != nil {
 			n.abort(context.WithoutCancel(ctx)) // cleanup must run even if ctx is already cancelled
@@ -106,7 +117,7 @@ func StartWithOptions(ctx context.Context, cfg config.Config, logger *slog.Logge
 	port := int32(n.lis.Addr().(*net.TCPAddr).Port) //nolint:forcetypeassert // tcp listener
 	if len(cfg.Cluster) == 0 {
 		self := metadata.Broker{ID: cfg.BrokerID, Host: cfg.AdvertisedHost, Port: port}
-		ls, err := local.Open(ctx, cfg.DataDir, self, logger)
+		ls, err := local.Open(ctx, cfg.DataDir, self, logger) // local.Open adds broker_id itself
 		if err != nil {
 			return nil, fmt.Errorf("open metadata: %w", err)
 		}
@@ -136,14 +147,19 @@ func StartWithOptions(ctx context.Context, cfg config.Config, logger *slog.Logge
 		n.broker.SetBrokerEpoch(n.epoch.Load())
 		n.internalAPI.SetBroker(n.broker)
 		// The liveness loop outlives Start's ctx: it runs until Close (background context).
-		n.bg.Go(func() error { return n.liveness(n.bgCtx(), port) }) //nolint:contextcheck // node-lifetime goroutine
+		lctx, lcancel := context.WithCancel(n.bgCtx())
+		n.livenessCancel, n.livenessDone = lcancel, make(chan struct{})
+		n.bg.Go(func() error {
+			defer close(n.livenessDone)
+			return n.liveness(lctx, port)
+		})
 	}
 	n.groups = group.New(group.Config{
 		BrokerID:                cfg.BrokerID,
 		MaxSessionTimeout:       time.Duration(cfg.GroupSessionTimeoutMs) * time.Millisecond,
 		DefaultRebalanceTimeout: time.Duration(cfg.GroupRebalanceTimeoutMs) * time.Millisecond,
 		InitialRebalanceDelay:   time.Duration(cfg.GroupInitialRebalanceDelayMs) * time.Millisecond,
-	}, n.store, group.SystemClock{}, n.logger)
+	}, n.store, group.SystemClock{}, logger) // group.New adds broker_id itself
 	n.grpc = grpc.NewServer(grpc.MaxRecvMsgSize(server.MaxMessageSize), grpc.MaxSendMsgSize(server.MaxMessageSize),
 		grpc.ChainUnaryInterceptor(n.metrics.UnaryServerInterceptor("client")))
 	idSource := broker.LocalIDBlockSource(n.store, cfg.BrokerID)
@@ -357,6 +373,7 @@ func (n *Node) Raft() *raftstore.Store { return n.raft }
 func (n *Node) Close(ctx context.Context) error {
 	n.closeOnce.Do(func() {
 		n.stopMetrics(ctx)
+		n.controlledShutdown(ctx)
 		n.broker.BeginShutdown()
 		n.groups.BeginShutdown()
 		stopped := make(chan struct{})
@@ -378,6 +395,9 @@ func (n *Node) Close(ctx context.Context) error {
 			serveErr = nil
 		}
 		n.groups.Close()
+		if n.opts.BeforeBrokerClose != nil {
+			n.opts.BeforeBrokerClose()
+		}
 		errs := []error{serveErr, n.broker.Close(ctx)}
 		n.stopBackground()
 		errs = append(errs, n.store.Close())
