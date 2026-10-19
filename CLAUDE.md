@@ -190,4 +190,4 @@ make chaos      # chaos scripts against the compose cluster
 - [x] M7 Idempotent producer
 - [x] M8 Observability & ops
 - [x] M9 Correctness & chaos
-- [ ] M10 Benchmarks & docs
+- [x] M10 Benchmarks & docs

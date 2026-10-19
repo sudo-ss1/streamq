@@ -600,3 +600,56 @@ isolation can take the cluster down).
     check;
   - read anomalies carry no broker id;
   - OFFSET_OUT_OF_RANGE below a seen HW is a no-effect read.
+
+## M10 — Benchmarks & docs (2026-10-19)
+
+**Built**
+- `bench/` (implementer package A): `streamq-bench`, implementing the frozen CLI in
+  `bench/USAGE.md`.
+  - In-process 1- or 3-broker clusters with production timeouts, or `-bootstrap` for an external
+    cluster.
+  - Independent Client+Producer pairs, and a shared token bucket for `-rate`.
+  - A log-bucketed histogram with per-producer atomic shards (D61). Latency is measured from the
+    intended send time; there is a bounded drain; throughput counts acks in the window.
+  - Stability checks: the metadata store (leader epoch and partition epoch) or admin describe.
+    Any change, error or timeout makes the run INVALID.
+  - Disk estimate and free-space check, `-cpuprofile`, environment capture, signals and cleanup,
+    and JSON output.
+  - Presets `quick`, `nfr1`, `nfr1-nonidem` and `nfr2`. `make bench` runs the storage
+    microbenchmarks and `quick`.
+- `README.md` and `docs/ARCHITECTURE.md` (implementer package B):
+  - quick start, a Mermaid architecture diagram, guarantees and non-goals;
+  - testing and correctness, a measured results table, and design trade-offs linking DECISIONS;
+  - sequence diagrams for produce with acks=all, failover with KIP-279 truncation, rebalance and
+    controlled shutdown;
+  - the on-disk layout.
+
+**Decisions**: D60 (in-process benchmarks), D61 (histogram), D62 (NFR1 at min.insync 2), D63
+(NFR2 linger 1 ms).
+
+**Process**
+- plan-reviewer: REVISE, then APPROVE (round 2).
+- The contract was committed first (USAGE.md, README skeleton, Makefile).
+- Two implementers ran in parallel, merged with `--no-ff`.
+- code-reviewer: APPROVE with 8 MINORs, all applied.
+
+**Results** (one WSL2 laptop, loopback; README "Benchmarks"):
+- **NFR1:** met, with 84,142 msgs/s for RF 3, acks=all, idempotent. The lowest across runs was
+  60.7k, a profiled run.
+- **NFR2:** met, with p99 3.24 ms at 5k msgs/s, measured from the intended send time.
+- **Idempotence:** no measurable throughput cost; run-to-run variance is about ±15 %.
+- **CPU profile:** dominated by log-write syscalls, copies and client encoding. The deferred M6
+  `store.Snapshot()` cost does not appear above 0.5 %, which closes that item.
+
+**Known limitations**
+- The numbers are optimistic (loopback, a shared host). Max-rate latency is client queueing.
+- The single-broker stability check uses admin describe.
+- A second signal skips data-dir cleanup.
+
+**All milestones M0–M10 are complete.** Open follow-ups are listed under "Known limitations" in
+each milestone entry. The main ones:
+- the D59 inbound-isolation availability weakness;
+- no log-dir failure handling (D57);
+- D21's one-batch-in-flight throughput limit;
+- no producer epoch fencing (D48);
+- the streamqctl router not refreshing on leader moves.

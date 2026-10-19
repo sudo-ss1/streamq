@@ -297,7 +297,10 @@ go run ./bench/cmd/streamq-bench -bootstrap localhost:9092,localhost:9192,localh
 Explicit flags override preset values. Latency is reported as p50/p99/p999/max; with `-rate`
 set it is measured from the token bucket's intended send time, so a stall is not hidden
 (coordinated omission; [D61](docs/DECISIONS.md#d61-log-bucket-latency-histogram-m10)). A run
-during which any partition's leader epoch or ISR changed is reported `INVALID`.
+during which any partition's leader epoch or ISR changed, or that had produce errors or timeouts,
+is reported `INVALID`. In-process clusters with three brokers check the metadata store before and
+after the window. Single-broker and `-bootstrap` runs use admin describe, which only catches a
+change still in place at the end of the run.
 
 Read the numbers with these caveats:
 - They come from one memory-constrained WSL2 laptop, with every broker and the load generator
@@ -316,21 +319,30 @@ Read the numbers with these caveats:
 
 ### Results
 
-These results were measured at commit `b800553`. The setup was in-process brokers over loopback
-on one WSL2 laptop: 13th Gen Intel i5-1345U, 6 cores, 7.8 GiB RAM, ext4, Go 1.27.2,
-`flush_policy: interval`. Every run reported `status OK`: no leader-epoch or ISR change during the
-measurement window, no errors and no timeouts. The JSON files are in `bench/results/`, which is
-gitignored, so rerun the presets to reproduce them.
+These results come from in-process brokers over loopback on one WSL2 laptop: 13th Gen Intel
+i5-1345U, 6 cores, 7.8 GiB RAM, ext4, Go 1.27.2, `flush_policy: interval`. Every run reported
+`status OK`: no leader-epoch or partition-epoch (ISR) change during the window, no produce
+errors and no timeouts. With admin-describe checks (single broker), only a change still in place
+at the end of the run would be caught; see `bench/USAGE.md`. The JSON outputs are in
+`bench/results/`, which is gitignored, so rerun the presets to reproduce them.
 
 | preset | cluster | acks | idempotent | rate | throughput | latency p50 / p99 / p999 | goal |
 |---|---|---|---|---|---|---|---|
-| `nfr1` | 3 brokers, RF 3, min.insync 2 | all | yes | max | **60,694 msgs/s** (59.3 MiB/s) | saturated, see note | NFR1 ≥ 50k msgs/s: **met** |
-| `nfr1-nonidem` | 3 brokers, RF 3, min.insync 2 | all | no | max | **84,073 msgs/s** (82.1 MiB/s) | saturated, see note | — |
+| `nfr1` | 3 brokers, RF 3, min.insync 2 | all | yes | max | **84,142 msgs/s** (82.2 MiB/s) | saturated, see note | NFR1 ≥ 50k msgs/s: **met** |
+| `nfr1-nonidem` | 3 brokers, RF 3, min.insync 2 | all | no | max | 77,135 msgs/s (75.3 MiB/s) | saturated, see note | — |
 | `nfr2` | 1 broker | leader | – | 5,000 msgs/s | 5,000 msgs/s | **1.69 / 3.24 / 3.94 ms** (max 9.9 ms) | NFR2 p99 < 10 ms: **met** |
-| `quick` | 1 broker | leader | – | max | ~162,700 msgs/s (158.9 MiB/s) | saturated | — |
+| `quick` | 1 broker | leader | – | max | 128,256 msgs/s (125.3 MiB/s) | saturated | — |
 
+`nfr1`, `nfr1-nonidem` and `quick` ran at commit `92a9a21`, and `nfr2` at `b800553`; nothing
+on the broker or client path changed between them.
+
+- **Run-to-run variance is large on this machine.** An earlier `nfr1` run with the CPU profiler
+  on gave 60,694 msgs/s, and an earlier unprofiled `nfr1-nonidem` gave 84,073 msgs/s. The two
+  unprofiled same-commit runs above show *no* measurable cost of idempotence: the idempotent run
+  was faster. Treat differences under about 20 % between single runs as noise. NFR1 was met in
+  every run, the lowest being the profiled 60.7k.
 - **Max-rate latency.** At max rate the producers run open-loop and keep each 32 MiB buffer full,
-  so the produce latency (p50 of about 3.5 s in `nfr1`) measures queueing in the client buffer,
+  so the produce latency (p50 of about 2.8 s in `nfr1`) measures queueing in the client buffer,
   not the broker. For latency, read the rate-limited `nfr2` row. It is measured from each
   record's *intended* send time, so stalls are not hidden. Service time from the Produce call was
   p99 2.45 ms; 17,302 of 150,000 sends started late against the schedule.
@@ -338,11 +350,12 @@ gitignored, so rerun the presets to reproduce them.
   per producer, with 6 partitions × 8 producers in `nfr1`. A CPU profile of `nfr1`
   (`-cpuprofile`) puts most time in log writes (syscalls), buffer copies, client record encoding,
   and the replica-fetch/append path. No metadata-snapshot cloning shows up above 0.5 %.
-- **Cost of idempotence.** It cost about 28 % throughput in this pair of runs (60.7k vs 84.1k
-  msgs/s). Likely contributors are the leader's serialized producer-state check per batch and the
-  producer-state snapshot written on each segment roll. This was not isolated further.
-- **Caveats** (D60): loopback and a single laptop make these numbers optimistic compared with a
-  real network. The three brokers share 6 cores and the page cache with the load generator.
+- **Caveats** (D60):
+  - Loopback and a single laptop make these numbers optimistic compared with a real network.
+  - The three brokers share 6 cores and the page cache with the load generator.
+  - Under this load the metadata Raft quorum came close to an election: in the profiled `nfr1`
+    run, one heartbeat had a 664 ms contact gap against a 1000 ms timeout. No partition changed,
+    so the run stayed valid.
 
 ## Design trade-offs
 
